@@ -1,60 +1,51 @@
-require("@nomicfoundation/hardhat-toolbox");
+require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-etherscan");
 require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config();
 
+// 从环境变量中获取配置
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000000";
+const BSC_MAINNET_RPC = process.env.BSC_MAINNET_RPC || "https://bsc-dataseed.binance.org/";
+const BSC_TESTNET_RPC = process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const BSCSCAN_API_KEY = process.env.BSCSCAN_API_KEY || "";
+
 module.exports = {
   solidity: {
-    compilers: [
-      {
-        version: "0.8.20",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          // viaIR: true
-        },
-      },
-      {
-        version: "0.8.28",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          // viaIR: true
-        },
+    version: "0.8.17",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
       }
-    ]
+    }
   },
   networks: {
     hardhat: {
-      chainId: 31337,
-      allowUnlimitedContractSize: true,
-      gas: 12000000,
-      blockGasLimit: 12000000,
-      accounts: {
-        mnemonic: "test test test test test test test test test test test junk",
-        path: "m/44'/60'/0'/0",
-        initialIndex: 0,
-        count: 20
-      }
+      chainId: 31337
     },
-    bscTestnet: {
-      url: process.env.BSC_TESTNET_RPC || "",
-      chainId: 97,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    },
-    bscMainnet: {
-      url: process.env.BSC_MAINNET_RPC || "",
+    bsc_mainnet: {
+      url: BSC_MAINNET_RPC,
+      accounts: [PRIVATE_KEY],
       chainId: 56,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 5000000000 // 5 Gwei
     },
+    bsc_testnet: {
+      url: BSC_TESTNET_RPC,
+      accounts: [PRIVATE_KEY],
+      chainId: 97,
+      gasPrice: 10000000000 // 10 Gwei
+    }
   },
   etherscan: {
-    apiKey: process.env.BSCSCAN_API_KEY || "",
+    apiKey: BSCSCAN_API_KEY
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
   },
   mocha: {
-    timeout: 100000
+    timeout: 40000
   }
 };
