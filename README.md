@@ -1,9 +1,5 @@
 # 日本房产通证化系统 (Japan RWA)
 
-我将为您创建一份详细的README.md文档，基于当前仓库的代码和结构：
-
-```markdown:/Users/zhangandy/Documents/work/code/party/blockchain/kevin/japan-rwa/README.md
-# 日本房产通证化系统 (Japan RWA)
 
 ## 项目背景
 
@@ -393,8 +389,4 @@ npx hardhat verify --network bsc_testnet DEPLOYED_CONTRACT_ADDRESS
 
 ## 许可证
 
-本项目采用MIT许可证 - 详情请参见LICENSE文件
-```
-
-这份README.md文档全面涵盖了项目的各个方面，包括背景、功能、结构、环境配置、开发流程、部署方法、关键技术和注意事项等。文档结构清晰，内容详实，可以帮助新开发者快速了解和上手项目。
 
