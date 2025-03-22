@@ -15,12 +15,16 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     // 房产状态
     enum PropertyStatus { NotRegistered, Pending, Approved, Rejected, Delisted }
     
+    // 运营状态
+    enum OperationalStatus { Active, Redemption, Frozen }
+    
     // 房产信息
     struct Property {
         string propertyId;
         string country;
         string metadataURI;
         PropertyStatus status;
+        OperationalStatus operationalStatus;
         uint256 registrationTime;
         address registeredBy;
     }
@@ -86,6 +90,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
             country: country,
             metadataURI: metadataURI,
             status: PropertyStatus.Pending,
+            operationalStatus: OperationalStatus.Active, // 默认为激活状态
             registrationTime: block.timestamp,
             registeredBy: msg.sender
         });
@@ -169,4 +174,20 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+
+    /**
+     * @dev 设置房产运营状态
+     * @param propertyId 房产ID
+     * @param _status 运营状态
+     */
+    function setOperationalStatus(string memory propertyId, OperationalStatus _status) external onlySuperAdmin {
+        require(properties[propertyId].status != PropertyStatus.NotRegistered, "Property not registered");
+        
+        properties[propertyId].operationalStatus = _status;
+        
+        emit OperationalStatusUpdated(propertyId, _status);
+    }
+
+    // 添加事件
+    event OperationalStatusUpdated(string propertyId, OperationalStatus status);
 }

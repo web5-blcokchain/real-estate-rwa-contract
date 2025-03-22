@@ -17,6 +17,7 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
     
     // 房产信息
     string public propertyId;
+    PropertyRegistry public propertyRegistry;
     
     // 白名单映射
     mapping(address => bool) public whitelist;
@@ -31,6 +32,7 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
     event WhitelistUpdated(address indexed user, bool status);
     event TransferRestrictionUpdated(bool restricted);
     event WhitelistEnabledUpdated(bool enabled);
+    event OperationalStatusUpdated(OperationalStatus status);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -44,13 +46,15 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
         string memory _propertyId,
         string memory _name,
         string memory _symbol,
-        address _admin
+        address _admin,
+        address _propertyRegistry
     ) public initializer {
         __ERC20_init(_name, _symbol);
         __AccessControl_init();
         __UUPSUpgradeable_init();
         
         propertyId = _propertyId;
+        propertyRegistry = PropertyRegistry(_propertyRegistry);
         transferRestricted = true;
         whitelistEnabled = false; // 默认不启用白名单功能
         
@@ -154,9 +158,52 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
     }
     
     /**
+     * @dev 设置运营状态
+     * @param _status 运营状态
+     */
+    function setOperationalStatus(OperationalStatus _status) external onlyRole(SUPER_ADMIN_ROLE) {
+        operationalStatus = _status;
+        emit OperationalStatusUpdated(_status);
+    }
+
+    /**
      * @dev 检查转账限制
      */
     function _checkTransferRestrictions(address from, address to) internal view {
+        // 检查房产注册状态
+        PropertyRegistry.Property memory property = propertyRegistry.getProperty(propertyId);
+        PropertyRegistry.PropertyStatus registrationStatus = property.status;
+        
+        // 检查房产是否已下架
+        if (registrationStatus == PropertyRegistry.PropertyStatus.Delisted) {
+            require(
+                hasRole(SUPER_ADMIN_ROLE, from) || hasRole(SUPER_ADMIN_ROLE, to),
+                "When delisted, only admins can transfer tokens"
+            );
+        }
+        
+        // 检查房产是否已审核通过
+        require(
+            registrationStatus == PropertyRegistry.PropertyStatus.Approved || 
+            hasRole(SUPER_ADMIN_ROLE, from) || 
+            hasRole(SUPER_ADMIN_ROLE, to),
+            "Property not in approved status"
+        );
+        
+        // 检查运营状态
+        if (operationalStatus == OperationalStatus.Frozen) {
+            revert("Transfers frozen: property is in frozen state");
+        }
+        
+        if (operationalStatus == OperationalStatus.Redemption) {
+            // 在赎回状态下，只允许向管理员转账（用于赎回流程）
+            require(
+                hasRole(SUPER_ADMIN_ROLE, to) || hasRole(MINTER_ROLE, to),
+                "During redemption, transfers only allowed to admins"
+            );
+        }
+        
+        // 白名单检查（如果启用）
         if (transferRestricted && whitelistEnabled) {
             require(whitelist[to], "Recipient not whitelisted");
         }
