@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "./PropertyRegistry.sol";
 
 /**
  * @title RealEstateToken
@@ -32,7 +33,7 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
     event WhitelistUpdated(address indexed user, bool status);
     event TransferRestrictionUpdated(bool restricted);
     event WhitelistEnabledUpdated(bool enabled);
-    event OperationalStatusUpdated(OperationalStatus status);
+    // 删除: event OperationalStatusUpdated(OperationalStatus status);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -54,6 +55,8 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
         __UUPSUpgradeable_init();
         
         propertyId = _propertyId;
+        // 建立 RealEstateToken 合约与 PropertyRegistry 合约之间的连接，使 RealEstateToken 能够查询房产的状态信息，从而在转账时实施相应的限制规则
+        // 将传入的地址转换为PropertyRegistry合约实例，用于后续调用PropertyRegistry的函数
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         transferRestricted = true;
         whitelistEnabled = false; // 默认不启用白名单功能
@@ -157,25 +160,38 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
         emit WhitelistEnabledUpdated(_enabled);
     }
     
-    /**
-     * @dev 设置运营状态
-     * @param _status 运营状态
-     */
-    function setOperationalStatus(OperationalStatus _status) external onlyRole(SUPER_ADMIN_ROLE) {
-        operationalStatus = _status;
-        emit OperationalStatusUpdated(_status);
-    }
+    // 删除: 
+    // function setOperationalStatus(OperationalStatus _status) external onlyRole(SUPER_ADMIN_ROLE) {
+    //     operationalStatus = _status;
+    //     emit OperationalStatusUpdated(_status);
+    // }
 
     /**
      * @dev 检查转账限制
      */
+    /**
+     * @dev 检查转账限制
+     */
     function _checkTransferRestrictions(address from, address to) internal view {
-        // 检查房产注册状态
+        // 获取房产信息
         PropertyRegistry.Property memory property = propertyRegistry.getProperty(propertyId);
-        PropertyRegistry.PropertyStatus registrationStatus = property.status;
+        PropertyRegistry.PropertyStatus status = property.status;
         
-        // 检查房产是否已下架
-        if (registrationStatus == PropertyRegistry.PropertyStatus.Delisted) {
+        // 检查房产状态
+        if (status == PropertyRegistry.PropertyStatus.Frozen) {
+            revert("Transfers frozen: property is in frozen state");
+        }
+        
+        if (status == PropertyRegistry.PropertyStatus.Redemption) {
+            // 在赎回状态下，只允许向管理员转账（用于赎回流程）
+            require(
+                hasRole(SUPER_ADMIN_ROLE, to) || hasRole(MINTER_ROLE, to),
+                "During redemption, transfers only allowed to admins"
+            );
+        }
+        
+        if (status == PropertyRegistry.PropertyStatus.Delisted) {
+            // 在下架状态下，可以增加特定的限制
             require(
                 hasRole(SUPER_ADMIN_ROLE, from) || hasRole(SUPER_ADMIN_ROLE, to),
                 "When delisted, only admins can transfer tokens"
@@ -184,24 +200,11 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
         
         // 检查房产是否已审核通过
         require(
-            registrationStatus == PropertyRegistry.PropertyStatus.Approved || 
+            status == PropertyRegistry.PropertyStatus.Approved || 
             hasRole(SUPER_ADMIN_ROLE, from) || 
             hasRole(SUPER_ADMIN_ROLE, to),
             "Property not in approved status"
         );
-        
-        // 检查运营状态
-        if (operationalStatus == OperationalStatus.Frozen) {
-            revert("Transfers frozen: property is in frozen state");
-        }
-        
-        if (operationalStatus == OperationalStatus.Redemption) {
-            // 在赎回状态下，只允许向管理员转账（用于赎回流程）
-            require(
-                hasRole(SUPER_ADMIN_ROLE, to) || hasRole(MINTER_ROLE, to),
-                "During redemption, transfers only allowed to admins"
-            );
-        }
         
         // 白名单检查（如果启用）
         if (transferRestricted && whitelistEnabled) {
