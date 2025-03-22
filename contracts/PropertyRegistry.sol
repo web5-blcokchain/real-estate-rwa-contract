@@ -290,4 +290,32 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     function propertyExists(string memory propertyId) public view returns (bool) {
         return properties[propertyId].status != PropertyStatus.NotRegistered;
     }
+
+    /**
+     * @dev 分页获取房产ID
+     * @param offset 起始位置
+     * @param limit 每页数量
+     * @return 房产ID数组
+     */
+    function getPropertyIdsPaginated(uint256 offset, uint256 limit) external view returns (string[] memory) {
+        uint256 totalCount = allPropertyIds.length;
+        
+        if (offset >= totalCount) {
+            return new string[](0);
+        }
+        
+        uint256 endIndex = offset + limit;
+        if (endIndex > totalCount) {
+            endIndex = totalCount;
+        }
+        
+        uint256 resultLength = endIndex - offset;
+        string[] memory result = new string[](resultLength);
+        
+        for (uint256 i = 0; i < resultLength; i++) {
+            result[i] = allPropertyIds[offset + i];
+        }
+        
+        return result;
+    }
 }
