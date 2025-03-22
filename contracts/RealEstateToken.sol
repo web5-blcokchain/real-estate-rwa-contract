@@ -216,4 +216,18 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(SUPER_ADMIN_ROLE) {}
+    
+    /**
+     * @dev 批量转账
+     * @param recipients 接收者地址数组
+     * @param amounts 代币数量数组
+     */
+    function batchTransfer(address[] calldata recipients, uint256[] calldata amounts) external {
+        require(recipients.length == amounts.length, "Array lengths must match");
+        
+        for (uint256 i = 0; i < recipients.length; i++) {
+            _checkTransferRestrictions(msg.sender, recipients[i]);
+            _transfer(msg.sender, recipients[i], amounts[i]);
+        }
+    }
 }
