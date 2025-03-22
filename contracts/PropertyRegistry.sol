@@ -2,52 +2,40 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./RoleManager.sol";
 
 /**
  * @title PropertyRegistry
- * @dev 管理房产资产的注册和审核（可升级版本）
+ * @dev 管理房产注册和审核（可升级版本）
  */
-contract PropertyRegistry is Initializable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract PropertyRegistry is Initializable, UUPSUpgradeable {
     RoleManager public roleManager;
-
+    
     // 房产状态
-    enum PropertyStatus { 
-        NotRegistered,    // 未注册
-        Pending,          // 待审核
-        Approved,         // 已批准
-        Tokenized,        // 已通证化
-        Rejected,         // 已拒绝
-        Delisted          // 已下架
-    }
-
-    // 精简后的房产信息（只保留关键信息）
+    enum PropertyStatus { NotRegistered, Pending, Approved, Rejected, Delisted }
+    
+    // 房产信息
     struct Property {
-        string propertyId;            // 房产ID
-        string country;               // 所属国家
-        uint256 registrationTime;     // 注册时间
-        address propertyManager;      // 房产管理员
-        PropertyStatus status;        // 状态
-        address tokenAddress;         // 代币地址
-        string metadataURI;           // 元数据URI（指向中心化数据库）
+        string propertyId;
+        string country;
+        string metadataURI;
+        PropertyStatus status;
+        uint256 registrationTime;
+        address registeredBy;
     }
-
+    
     // 房产映射
     mapping(string => Property) public properties;
     
-    // 房产ID列表
-    string[] public propertyIds;
-
+    // 所有房产ID数组
+    string[] public allPropertyIds;
+    
     // 事件
-    event PropertyRegistered(string propertyId, address propertyManager, string metadataURI);
-    event PropertyApproved(string propertyId, address approver);
-    event PropertyRejected(string propertyId, address rejector);
-    event PropertyTokenized(string propertyId, address tokenAddress);
-    event PropertyDelisted(string propertyId);
-    event MetadataUpdated(string propertyId, string metadataURI);
+    event PropertyRegistered(string propertyId, string country, string metadataURI, address registeredBy);
+    event PropertyApproved(string propertyId, address approvedBy);
+    event PropertyRejected(string propertyId, address rejectedBy);
+    event PropertyDelisted(string propertyId, address delistedBy);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -56,11 +44,8 @@ contract PropertyRegistry is Initializable, AccessControlUpgradeable, Reentrancy
 
     /**
      * @dev 初始化函数（替代构造函数）
-     * @param _roleManager 角色管理合约地址
      */
     function initialize(address _roleManager) public initializer {
-        __AccessControl_init();
-        __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
@@ -83,64 +68,42 @@ contract PropertyRegistry is Initializable, AccessControlUpgradeable, Reentrancy
     }
 
     /**
-     * @dev 修饰器：只有特定房产的管理员可以调用
-     */
-    modifier onlyPropertyOwner(string memory propertyId) {
-        require(properties[propertyId].propertyManager == msg.sender || 
-                roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender), 
-                "Not property owner or super admin");
-        _;
-    }
-
-    /**
-     * @dev 注册新房产（精简版）
+     * @dev 注册新房产
      * @param propertyId 房产ID
-     * @param country 所属国家
+     * @param country 国家
      * @param metadataURI 元数据URI
      */
     function registerProperty(
         string memory propertyId,
         string memory country,
         string memory metadataURI
-    ) external onlyPropertyManager nonReentrant {
+    ) external onlyPropertyManager {
         require(bytes(propertyId).length > 0, "Property ID cannot be empty");
         require(properties[propertyId].status == PropertyStatus.NotRegistered, "Property already registered");
         
         properties[propertyId] = Property({
             propertyId: propertyId,
             country: country,
-            registrationTime: block.timestamp,
-            propertyManager: msg.sender,
+            metadataURI: metadataURI,
             status: PropertyStatus.Pending,
-            tokenAddress: address(0),
-            metadataURI: metadataURI
+            registrationTime: block.timestamp,
+            registeredBy: msg.sender
         });
         
-        propertyIds.push(propertyId);
-        emit PropertyRegistered(propertyId, msg.sender, metadataURI);
-    }
-
-    /**
-     * @dev 更新房产元数据
-     * @param propertyId 房产ID
-     * @param metadataURI 新的元数据URI
-     */
-    function updateMetadata(string memory propertyId, string memory metadataURI) external onlyPropertyOwner(propertyId) {
-        require(properties[propertyId].status != PropertyStatus.NotRegistered, "Property not registered");
-        require(properties[propertyId].status != PropertyStatus.Delisted, "Property delisted");
+        allPropertyIds.push(propertyId);
         
-        properties[propertyId].metadataURI = metadataURI;
-        emit MetadataUpdated(propertyId, metadataURI);
+        emit PropertyRegistered(propertyId, country, metadataURI, msg.sender);
     }
 
     /**
-     * @dev 批准房产
+     * @dev 审核房产
      * @param propertyId 房产ID
      */
     function approveProperty(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status == PropertyStatus.Pending, "Property not pending");
+        require(properties[propertyId].status == PropertyStatus.Pending, "Property not in pending status");
         
         properties[propertyId].status = PropertyStatus.Approved;
+        
         emit PropertyApproved(propertyId, msg.sender);
     }
 
@@ -149,25 +112,11 @@ contract PropertyRegistry is Initializable, AccessControlUpgradeable, Reentrancy
      * @param propertyId 房产ID
      */
     function rejectProperty(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status == PropertyStatus.Pending, "Property not pending");
+        require(properties[propertyId].status == PropertyStatus.Pending, "Property not in pending status");
         
         properties[propertyId].status = PropertyStatus.Rejected;
+        
         emit PropertyRejected(propertyId, msg.sender);
-    }
-
-    /**
-     * @dev 设置房产已通证化
-     * @param propertyId 房产ID
-     * @param tokenAddress 代币地址
-     */
-    function setPropertyTokenized(string memory propertyId, address tokenAddress) external onlySuperAdmin {
-        require(properties[propertyId].status == PropertyStatus.Approved, "Property not approved");
-        require(tokenAddress != address(0), "Invalid token address");
-        
-        properties[propertyId].status = PropertyStatus.Tokenized;
-        properties[propertyId].tokenAddress = tokenAddress;
-        
-        emit PropertyTokenized(propertyId, tokenAddress);
     }
 
     /**
@@ -175,36 +124,45 @@ contract PropertyRegistry is Initializable, AccessControlUpgradeable, Reentrancy
      * @param propertyId 房产ID
      */
     function delistProperty(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status != PropertyStatus.NotRegistered, "Property not registered");
-        require(properties[propertyId].status != PropertyStatus.Delisted, "Property already delisted");
+        require(properties[propertyId].status == PropertyStatus.Approved, "Property not in approved status");
         
         properties[propertyId].status = PropertyStatus.Delisted;
-        emit PropertyDelisted(propertyId);
+        
+        emit PropertyDelisted(propertyId, msg.sender);
     }
 
     /**
-     * @dev 获取房产数量
-     * @return 房产数量
+     * @dev 检查房产是否已审核
+     * @param propertyId 房产ID
+     * @return 是否已审核
+     */
+    function isPropertyApproved(string memory propertyId) public view returns (bool) {
+        return properties[propertyId].status == PropertyStatus.Approved;
+    }
+
+    /**
+     * @dev 获取房产信息
+     * @param propertyId 房产ID
+     * @return 房产信息
+     */
+    function getProperty(string memory propertyId) external view returns (Property memory) {
+        return properties[propertyId];
+    }
+
+    /**
+     * @dev 获取所有房产ID
+     * @return 房产ID数组
+     */
+    function getAllPropertyIds() external view returns (string[] memory) {
+        return allPropertyIds;
+    }
+
+    /**
+     * @dev 获取房产总数
+     * @return 房产总数
      */
     function getPropertyCount() external view returns (uint256) {
-        return propertyIds.length;
-    }
-
-    /**
-     * @dev 获取房产详情
-     * @param propertyId 房产ID
-     * @return 国家, 状态, 代币地址, 元数据URI
-     */
-    function getPropertyDetails(string memory propertyId) external view returns (
-        string memory, PropertyStatus, address, string memory
-    ) {
-        Property storage prop = properties[propertyId];
-        return (
-            prop.country,
-            prop.status,
-            prop.tokenAddress,
-            prop.metadataURI
-        );
+        return allPropertyIds.length;
     }
 
     /**

@@ -7,31 +7,28 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./RoleManager.sol";
 import "./PropertyRegistry.sol";
 import "./RealEstateToken.sol";
-import "./KYCManager.sol";
 import "./FeeManager.sol";
 
 /**
  * @title TokenFactory
- * @dev 创建房产代币的工厂合约（可升级版本）
+ * @dev 创建和管理房产代币（可升级版本）
  */
 contract TokenFactory is Initializable, UUPSUpgradeable {
     RoleManager public roleManager;
     PropertyRegistry public propertyRegistry;
-    KYCManager public kycManager;
     FeeManager public feeManager;
     
-    // 代币映射
-    mapping(string => address) public propertyTokens;
-    
-    // 代币列表
-    address[] public tokenList;
-    
-    // 代币实现合约
+    // 代币实现合约地址
     address public tokenImplementation;
     
+    // 房产ID到代币地址的映射
+    mapping(string => address) public propertyTokens;
+    
+    // 所有代币地址数组
+    address[] public allTokens;
+    
     // 事件
-    event TokenCreated(string propertyId, address tokenAddress, string name, string symbol);
-    event TokenImplementationUpdated(address oldImplementation, address newImplementation);
+    event TokenCreated(string propertyId, address tokenAddress, string name, string symbol, uint256 totalSupply);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -44,14 +41,12 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     function initialize(
         address _roleManager,
         address _propertyRegistry,
-        address _kycManager,
         address _feeManager
     ) public initializer {
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
         propertyRegistry = PropertyRegistry(_propertyRegistry);
-        kycManager = KYCManager(_kycManager);
         feeManager = FeeManager(_feeManager);
         
         // 部署代币实现合约
@@ -67,79 +62,62 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @dev 更新代币实现合约
-     * @param _newImplementation 新的实现合约地址
-     */
-    function updateTokenImplementation(address _newImplementation) external onlySuperAdmin {
-        require(_newImplementation != address(0), "Invalid implementation address");
-        address oldImplementation = tokenImplementation;
-        tokenImplementation = _newImplementation;
-        emit TokenImplementationUpdated(oldImplementation, _newImplementation);
-    }
-
-    /**
-     * @dev 创建房产代币
+     * @dev 创建新的房产代币
      * @param propertyId 房产ID
      * @param name 代币名称
      * @param symbol 代币符号
-     * @param totalSupply 总供应量
-     * @return 代币地址
+     * @param totalSupply 代币总供应量
+     * @return tokenAddress 代币合约地址
      */
     function createToken(
         string memory propertyId,
         string memory name,
         string memory symbol,
         uint256 totalSupply
-    ) external onlySuperAdmin returns (address) {
-        require(propertyTokens[propertyId] == address(0), "Token already exists for property");
+    ) external onlySuperAdmin returns (address tokenAddress) {
+        // 检查房产是否已审核
+        require(propertyRegistry.isPropertyApproved(propertyId), "Property not approved");
         
-        // 获取房产信息
-        (string memory country, PropertyRegistry.PropertyStatus status, , string memory metadataURI) = 
-            propertyRegistry.getPropertyDetails(propertyId);
-        
-        require(status == PropertyRegistry.PropertyStatus.Approved, "Property not approved");
-        
-        // 获取房产评估价值（从元数据中获取，这里简化为固定值）
-        uint256 appraisalValue = totalSupply; // 简化处理，实际应从元数据中获取
+        // 检查是否已经为该房产创建了代币
+        require(propertyTokens[propertyId] == address(0), "Token already exists for this property");
         
         // 创建代理合约
-        ERC1967Proxy tokenProxy = new ERC1967Proxy(
-            tokenImplementation,
-            abi.encodeWithSelector(
-                RealEstateToken(address(0)).initialize.selector,
-                propertyId,
-                country,
-                appraisalValue,
-                totalSupply,
-                name,
-                symbol,
-                metadataURI,
-                address(roleManager),
-                address(kycManager),
-                address(feeManager)
-            )
+        bytes memory initData = abi.encodeWithSelector(
+            RealEstateToken(address(0)).initialize.selector,
+            propertyId,
+            name,
+            symbol,
+            msg.sender
         );
         
-        address tokenAddress = address(tokenProxy);
+        ERC1967Proxy proxy = new ERC1967Proxy(tokenImplementation, initData);
+        tokenAddress = address(proxy);
         
-        // 更新映射
+        // 更新映射和数组
         propertyTokens[propertyId] = tokenAddress;
-        tokenList.push(tokenAddress);
+        allTokens.push(tokenAddress);
         
-        // 更新房产状态为已通证化
-        propertyRegistry.setPropertyTokenized(propertyId, tokenAddress);
+        // 铸造代币
+        RealEstateToken token = RealEstateToken(tokenAddress);
+        token.mint(msg.sender, totalSupply);
         
-        emit TokenCreated(propertyId, tokenAddress, name, symbol);
-        
-        return tokenAddress;
+        emit TokenCreated(propertyId, tokenAddress, name, symbol, totalSupply);
     }
 
     /**
-     * @dev 获取代币数量
-     * @return 代币数量
+     * @dev 获取所有代币地址
+     * @return 代币地址数组
+     */
+    function getAllTokens() external view returns (address[] memory) {
+        return allTokens;
+    }
+
+    /**
+     * @dev 获取代币总数
+     * @return 代币总数
      */
     function getTokenCount() external view returns (uint256) {
-        return tokenList.length;
+        return allTokens.length;
     }
 
     /**
@@ -147,10 +125,10 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
      * @param propertyId 房产ID
      * @return 代币地址
      */
-    function getPropertyToken(string memory propertyId) external view returns (address) {
+    function getTokenAddress(string memory propertyId) external view returns (address) {
         return propertyTokens[propertyId];
     }
-    
+
     /**
      * @dev 授权升级合约的实现
      */

@@ -6,7 +6,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./RoleManager.sol";
 import "./FeeManager.sol";
-import "./KYCManager.sol";
 import "./PropertyRegistry.sol";
 import "./TokenFactory.sol";
 import "./RedemptionManager.sol";
@@ -18,21 +17,19 @@ import "./Marketplace.sol";
  * @dev 房产通证化系统主合约（可升级版本）
  */
 contract RealEstateSystem is Initializable, UUPSUpgradeable {
+    // 系统状态
+    bool public systemActive;
+    
     // 系统合约
     RoleManager public roleManager;
     FeeManager public feeManager;
-    KYCManager public kycManager;
     PropertyRegistry public propertyRegistry;
     TokenFactory public tokenFactory;
     RedemptionManager public redemptionManager;
     RentDistributor public rentDistributor;
     Marketplace public marketplace;
     
-    // 系统状态
-    bool public systemActive;
-    
     // 事件
-    event SystemDeployed(address deployer);
     event SystemStatusChanged(bool active);
     event ContractUpgraded(string contractName, address newImplementation);
 
@@ -46,6 +43,8 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
      */
     function initialize() public initializer {
         __UUPSUpgradeable_init();
+        
+        systemActive = true;
         
         // 部署角色管理合约
         RoleManager roleManagerImpl = new RoleManager();
@@ -63,14 +62,6 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         );
         feeManager = FeeManager(address(feeManagerProxy));
         
-        // 部署KYC管理合约
-        KYCManager kycManagerImpl = new KYCManager();
-        ERC1967Proxy kycManagerProxy = new ERC1967Proxy(
-            address(kycManagerImpl),
-            abi.encodeWithSelector(KYCManager(address(0)).initialize.selector, address(roleManager))
-        );
-        kycManager = KYCManager(address(kycManagerProxy));
-        
         // 部署房产注册合约
         PropertyRegistry propertyRegistryImpl = new PropertyRegistry();
         ERC1967Proxy propertyRegistryProxy = new ERC1967Proxy(
@@ -87,7 +78,6 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
                 TokenFactory(address(0)).initialize.selector,
                 address(roleManager),
                 address(propertyRegistry),
-                address(kycManager),
                 address(feeManager)
             )
         );
@@ -124,15 +114,13 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
             abi.encodeWithSelector(
                 Marketplace(address(0)).initialize.selector,
                 address(roleManager),
-                address(feeManager),
-                address(kycManager)
+                address(feeManager)
             )
         );
         marketplace = Marketplace(address(marketplaceProxy));
         
-        systemActive = true;
-        
-        emit SystemDeployed(msg.sender);
+        // 授予当前部署者超级管理员角色
+        roleManager.grantRole(roleManager.SUPER_ADMIN(), msg.sender);
     }
 
     /**
@@ -144,16 +132,16 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @dev 修饰器：系统必须激活
+     * @dev 修饰器：系统必须处于活动状态
      */
     modifier whenSystemActive() {
-        require(systemActive, "System not active");
+        require(systemActive, "System is not active");
         _;
     }
 
     /**
      * @dev 设置系统状态
-     * @param _active 是否激活
+     * @param _active 是否活动
      */
     function setSystemStatus(bool _active) external onlySuperAdmin {
         systemActive = _active;
@@ -161,7 +149,23 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @dev 升级系统合约
+     * @dev 获取系统合约地址
+     * @return 合约地址数组
+     */
+    function getSystemContracts() external view returns (address[] memory) {
+        address[] memory contracts = new address[](7);
+        contracts[0] = address(roleManager);
+        contracts[1] = address(feeManager);
+        contracts[2] = address(propertyRegistry);
+        contracts[3] = address(tokenFactory);
+        contracts[4] = address(redemptionManager);
+        contracts[5] = address(rentDistributor);
+        contracts[6] = address(marketplace);
+        return contracts;
+    }
+
+    /**
+     * @dev 升级合约实现
      * @param contractName 合约名称
      * @param newImplementation 新实现地址
      */
@@ -171,21 +175,19 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         bytes32 nameHash = keccak256(abi.encodePacked(contractName));
         
         if (nameHash == keccak256(abi.encodePacked("RoleManager"))) {
-            UUPSUpgradeable(address(roleManager)).upgradeTo(newImplementation);
+            roleManager.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("FeeManager"))) {
-            UUPSUpgradeable(address(feeManager)).upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("KYCManager"))) {
-            UUPSUpgradeable(address(kycManager)).upgradeTo(newImplementation);
+            feeManager.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("PropertyRegistry"))) {
-            UUPSUpgradeable(address(propertyRegistry)).upgradeTo(newImplementation);
+            propertyRegistry.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("TokenFactory"))) {
-            UUPSUpgradeable(address(tokenFactory)).upgradeTo(newImplementation);
+            tokenFactory.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("RedemptionManager"))) {
-            UUPSUpgradeable(address(redemptionManager)).upgradeTo(newImplementation);
+            redemptionManager.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("RentDistributor"))) {
-            UUPSUpgradeable(address(rentDistributor)).upgradeTo(newImplementation);
+            rentDistributor.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("Marketplace"))) {
-            UUPSUpgradeable(address(marketplace)).upgradeTo(newImplementation);
+            marketplace.upgradeTo(newImplementation);
         } else {
             revert("Unknown contract name");
         }
@@ -193,25 +195,6 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         emit ContractUpgraded(contractName, newImplementation);
     }
 
-    /**
-     * @dev 获取系统合约地址
-     * @return 所有系统合约地址
-     */
-    function getSystemContracts() external view returns (
-        address, address, address, address, address, address, address, address
-    ) {
-        return (
-            address(roleManager),
-            address(feeManager),
-            address(kycManager),
-            address(propertyRegistry),
-            address(tokenFactory),
-            address(redemptionManager),
-            address(rentDistributor),
-            address(marketplace)
-        );
-    }
-    
     /**
      * @dev 授权升级合约的实现
      */
