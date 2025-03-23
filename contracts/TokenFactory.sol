@@ -71,10 +71,11 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
      * @return 新创建的代币地址
      */
     function createToken(
-        string memory propertyId,
-        string memory name,
-        string memory symbol
-    ) external onlySuperAdmin returns (address) {
+        string memory _name,
+        string memory _symbol,
+        string memory _propertyId,
+        uint256 _initialSupply
+    ) external onlyPropertyManager returns (address) {
         // 检查房产是否已审核
         require(propertyRegistry.isPropertyApproved(propertyId), "Property not approved");
         
@@ -115,6 +116,9 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         emit TokenCreated(propertyId, tokenAddress, name, symbol);
         
         return tokenAddress;
+        
+        // 授予RentDistributor快照角色
+        token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
     }
     
     /**

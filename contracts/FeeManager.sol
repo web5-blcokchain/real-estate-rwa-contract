@@ -121,4 +121,22 @@ contract FeeManager is AccessControl {
     function withdrawETH() external onlyFeeCollector {
         payable(feeCollector).transfer(address(this).balance);
     }
+
+    /**
+     * @dev 计算平台费用
+     * @param amount 金额
+     * @return 平台费用金额
+     */
+    function calculatePlatformFee(uint256 amount) public view returns (uint256) {
+        return calculateFee(amount, platformFee);
+    }
+    
+    /**
+     * @dev 计算维护费用
+     * @param amount 金额
+     * @return 维护费用金额
+     */
+    function calculateMaintenanceFee(uint256 amount) public view returns (uint256) {
+        return calculateFee(amount, maintenanceFee);
+    }
 }

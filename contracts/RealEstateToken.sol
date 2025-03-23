@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -12,7 +13,7 @@ import "./PropertyRegistry.sol";
  * @title RealEstateToken
  * @dev 房产代币，代表对特定房产的所有权份额
  */
-contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgradeable, PausableUpgradeable, UUPSUpgradeable {
+contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgradeable, AccessControlUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     // 角色定义
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -56,17 +57,17 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
         address _propertyRegistry
     ) public initializer {
         __ERC20_init(_name, _symbol);
+        __ERC20Snapshot_init();
         __AccessControl_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
         
         propertyId = _propertyId;
-        // 建立 RealEstateToken 合约与 PropertyRegistry 合约之间的连接，使 RealEstateToken 能够查询房产的状态信息，从而在转账时实施相应的限制规则
         // 将传入的地址转换为PropertyRegistry合约实例，用于后续调用PropertyRegistry的函数
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         transferRestricted = true;
         whitelistEnabled = false; // 默认不启用白名单功能
-        maxSupply = 1000000 * 10**decimals(); // 默认设置为100万代币
+        maxSupply = 1000000000 * 10**decimals(); // 默认设置为10亿代币
         
         _setupRole(DEFAULT_ADMIN_ROLE, _admin);
         _setupRole(SUPER_ADMIN_ROLE, _admin);
@@ -263,5 +264,24 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, AccessControlUpgrad
             _checkTransferRestrictions(msg.sender, recipients[i]);
             _transfer(msg.sender, recipients[i], amounts[i]);
         }
+    }
+    
+    /**
+     * @dev 创建快照
+     * @return 快照ID
+     */
+    function snapshot() external onlyRole(SNAPSHOT_ROLE) returns (uint256) {
+        return _snapshot();
+    }
+    
+    /**
+     * @dev 重写 _beforeTokenTransfer 以支持快照功能
+     */
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable, PausableUpgradeable) {
+        super._beforeTokenTransfer(from, to, amount);
     }
 }

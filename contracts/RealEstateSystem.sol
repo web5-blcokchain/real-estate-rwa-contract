@@ -11,6 +11,7 @@ import "./TokenFactory.sol";
 import "./RedemptionManager.sol";
 import "./RentDistributor.sol";
 import "./Marketplace.sol";
+import "./TokenHolderQuery.sol";
 
 /**
  * @title RealEstateSystem
@@ -28,6 +29,7 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     RedemptionManager public redemptionManager;
     RentDistributor public rentDistributor;
     Marketplace public marketplace;
+    TokenHolderQuery public tokenHolderQuery;
     
     // 事件
     event SystemStatusChanged(bool active);
@@ -121,6 +123,17 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         
         // 授予当前部署者超级管理员角色
         roleManager.grantRole(roleManager.SUPER_ADMIN(), msg.sender);
+        
+        // 部署TokenHolderQuery
+        TokenHolderQuery tokenHolderQueryImpl = new TokenHolderQuery();
+        ERC1967Proxy tokenHolderQueryProxy = new ERC1967Proxy(
+            address(tokenHolderQueryImpl),
+            abi.encodeWithSelector(
+                TokenHolderQuery(address(0)).initialize.selector,
+                address(roleManager)
+            )
+        );
+        tokenHolderQuery = TokenHolderQuery(address(tokenHolderQueryProxy));
     }
 
     /**
@@ -153,14 +166,15 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
      * @return 合约地址数组
      */
     function getSystemContracts() external view returns (address[] memory) {
-        address[] memory contracts = new address[](7);
+        address[] memory contracts = new address[](8); // 增加一个
         contracts[0] = address(roleManager);
         contracts[1] = address(feeManager);
-        contracts[2] = address(propertyRegistry);
-        contracts[3] = address(tokenFactory);
-        contracts[4] = address(redemptionManager);
-        contracts[5] = address(rentDistributor);
-        contracts[6] = address(marketplace);
+        contracts[2] = address(kycManager);
+        contracts[3] = address(propertyRegistry);
+        contracts[4] = address(tokenFactory);
+        contracts[5] = address(redemptionManager);
+        contracts[6] = address(rentDistributor);
+        contracts[7] = address(tokenHolderQuery); // 添加新合约
         return contracts;
     }
 
@@ -188,13 +202,15 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
             rentDistributor.upgradeTo(newImplementation);
         } else if (nameHash == keccak256(abi.encodePacked("Marketplace"))) {
             marketplace.upgradeTo(newImplementation);
+        } else if (nameHash == keccak256(abi.encodePacked("TokenHolderQuery"))) {
+            tokenHolderQuery.upgradeTo(newImplementation);
         } else {
             revert("Unknown contract name");
         }
         
         emit ContractUpgraded(contractName, newImplementation);
     }
-
+    
     /**
      * @dev 授权升级合约的实现
      */
