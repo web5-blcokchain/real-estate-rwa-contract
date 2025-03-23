@@ -73,6 +73,8 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         propertyRegistry = PropertyRegistry(address(propertyRegistryProxy));
         
         // 部署代币工厂合约
+        // 移除第一次部署的 TokenFactory 代码
+        /*
         TokenFactory tokenFactoryImpl = new TokenFactory();
         ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
             address(tokenFactoryImpl),
@@ -80,10 +82,11 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
                 TokenFactory(address(0)).initialize.selector,
                 address(roleManager),
                 address(propertyRegistry),
-                address(feeManager)
+                address(feeManager) // 这里应该是 tokenImplementation
             )
         );
         tokenFactory = TokenFactory(address(tokenFactoryProxy));
+        */
         
         // 部署赎回管理合约
         RedemptionManager redemptionManagerImpl = new RedemptionManager();
@@ -98,16 +101,29 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         redemptionManager = RedemptionManager(address(redemptionManagerProxy));
         
         // 部署租金分配合约
+        // 保留第二次部署的代码，但调整部署顺序
+        // 先部署 RentDistributor
         RentDistributor rentDistributorImpl = new RentDistributor();
         ERC1967Proxy rentDistributorProxy = new ERC1967Proxy(
             address(rentDistributorImpl),
-            abi.encodeWithSelector(
-                RentDistributor(address(0)).initialize.selector,
-                address(roleManager),
-                address(feeManager)
-            )
+            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, address(roleManager), address(feeManager))
         );
         rentDistributor = RentDistributor(address(rentDistributorProxy));
+        
+        // 再部署 TokenFactory
+        RealEstateToken tokenImpl = new RealEstateToken();
+        TokenFactory tokenFactoryImpl = new TokenFactory();
+        ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
+            address(tokenFactoryImpl),
+            abi.encodeWithSelector(
+                TokenFactory(address(0)).initialize.selector, 
+                address(roleManager), 
+                address(propertyRegistry), 
+                address(tokenImpl),
+                address(rentDistributor)
+            )
+        );
+        tokenFactory = TokenFactory(address(tokenFactoryProxy));
         
         // 部署市场合约
         Marketplace marketplaceImpl = new Marketplace();
@@ -166,15 +182,14 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
      * @return 合约地址数组
      */
     function getSystemContracts() external view returns (address[] memory) {
-        address[] memory contracts = new address[](8); // 增加一个
+        address[] memory contracts = new address[](7);
         contracts[0] = address(roleManager);
         contracts[1] = address(feeManager);
-        contracts[2] = address(kycManager);
-        contracts[3] = address(propertyRegistry);
-        contracts[4] = address(tokenFactory);
-        contracts[5] = address(redemptionManager);
-        contracts[6] = address(rentDistributor);
-        contracts[7] = address(tokenHolderQuery); // 添加新合约
+        contracts[2] = address(propertyRegistry);
+        contracts[3] = address(tokenFactory);
+        contracts[4] = address(redemptionManager);
+        contracts[5] = address(rentDistributor);
+        contracts[6] = address(marketplace);
         return contracts;
     }
 

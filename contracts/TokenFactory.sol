@@ -129,7 +129,12 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         allTokens.push(tokenAddress);
         
         // 授予RentDistributor快照角色
+        // 铸造初始供应量
         RealEstateToken token = RealEstateToken(tokenAddress);
+        if (_initialSupply > 0) {
+            token.mint(msg.sender, _initialSupply);
+        }
+        
         token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
         
         emit TokenCreated(_propertyId, tokenAddress, _name, _symbol);

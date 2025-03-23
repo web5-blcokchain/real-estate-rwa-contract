@@ -19,6 +19,7 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgrad
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE"); // 添加快照角色
     
     // 房产信息
     string public propertyId;
@@ -271,13 +272,15 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgrad
      * @dev 创建快照
      * @return 快照ID
      */
+    // 添加 SNAPSHOT_ROLE 常量
+    bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE");
+    
+    // 添加 snapshot 函数
     function snapshot() external onlyRole(SNAPSHOT_ROLE) returns (uint256) {
         return _snapshot();
     }
     
-    /**
-     * @dev 重写 _beforeTokenTransfer 以支持快照功能
-     */
+    // 重写 _beforeTokenTransfer 函数
     function _beforeTokenTransfer(
         address from,
         address to,

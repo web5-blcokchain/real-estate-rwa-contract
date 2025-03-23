@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+// 修改导入
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./RoleManager.sol";
 
 /**
  * @title FeeManager
  * @dev 管理系统中的各种费用
  */
-contract FeeManager is AccessControl {
+contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     RoleManager public roleManager;
 
     // 费用类型
@@ -25,11 +28,19 @@ contract FeeManager is AccessControl {
     event FeeCollectorUpdated(address oldCollector, address newCollector);
     event FeeCollected(string feeType, uint256 amount, address from);
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
-     * @dev 构造函数
+     * @dev 初始化函数（替代构造函数）
      * @param _roleManager 角色管理合约地址
      */
-    constructor(address _roleManager) {
+    function initialize(address _roleManager) public initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+        
         roleManager = RoleManager(_roleManager);
         feeCollector = msg.sender;
     }
@@ -139,4 +150,9 @@ contract FeeManager is AccessControl {
     function calculateMaintenanceFee(uint256 amount) public view returns (uint256) {
         return calculateFee(amount, maintenanceFee);
     }
+    
+    /**
+     * @dev 授权升级合约的实现
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
 }

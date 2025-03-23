@@ -13,6 +13,7 @@ contract RoleManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable
     // 角色常量
     bytes32 public constant SUPER_ADMIN = keccak256("SUPER_ADMIN");
     bytes32 public constant PROPERTY_MANAGER = keccak256("PROPERTY_MANAGER");
+    bytes32 public constant FEE_COLLECTOR = keccak256("FEE_COLLECTOR"); // 添加费用收集者角色
     
     // 事件
     event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);

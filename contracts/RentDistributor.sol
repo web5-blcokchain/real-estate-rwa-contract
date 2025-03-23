@@ -29,17 +29,14 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         uint256 netAmount;
         bool isProcessed;
     }
-
-    // 租金分配映射
-    mapping(uint256 => RentDistribution) public rentDistributions;
     
-    // 用户已领取的租金
-    mapping(uint256 => mapping(address => bool)) public hasClaimed;
-    
-    // 分配计数
+    // 添加分配ID计数器
     uint256 public distributionCount;
     
-    // 支持的稳定币列表
+     // 分配映射：分配ID => 分配信息
+    mapping(uint256 => RentDistribution) public rentDistributions;
+    
+    // 添加支持的稳定币映射
     mapping(address => bool) public supportedStablecoins;
     
     // 事件
@@ -83,20 +80,18 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         _;
     }
 
-    /**
-     * @dev 添加支持的稳定币
-     * @param _stablecoin 稳定币地址
-     */
+    
+    
+    // 已领取映射：分配ID => 用户地址 => 是否已领取
+    mapping(uint256 => mapping(address => bool)) public hasClaimed;
+    
+    // 添加管理稳定币的函数
     function addSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
         require(_stablecoin != address(0), "Invalid stablecoin address");
         supportedStablecoins[_stablecoin] = true;
         emit StablecoinStatusUpdated(_stablecoin, true);
     }
 
-    /**
-     * @dev 移除支持的稳定币
-     * @param _stablecoin 稳定币地址
-     */
     function removeSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
         supportedStablecoins[_stablecoin] = false;
         emit StablecoinStatusUpdated(_stablecoin, false);
