@@ -13,6 +13,7 @@ import "./PropertyRegistry.sol";
  * @title RealEstateToken
  * @dev 房产代币，代表对特定房产的所有权份额
  */
+// 在合约定义中添加ERC20SnapshotUpgradeable
 contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgradeable, AccessControlUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     // 角色定义
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
