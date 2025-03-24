@@ -101,6 +101,10 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         version = 1;
         
+        // 请求PropertyRegistry授权此合约为授权合约
+        // 注意：这需要admin权限，通常部署脚本会处理
+        // 如果部署脚本没有处理，则需要在部署后手动调用PropertyRegistry的addAuthorizedContract函数
+        
         emit RedemptionManagerInitialized(msg.sender, _roleManager, _feeManager, _propertyRegistry, version);
     }
 
@@ -150,7 +154,10 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         uint256 tokenAmount,
         address stablecoinAddress
     ) external nonReentrant returns (uint256) {
-        // 检查房产状态
+        // 检查propertyId有效性
+        require(propertyId > 0, "Property ID must be greater than zero");
+        
+        // 检查房产状态 - 注意PropertyRegistry同时支持string和uint256参数的getPropertyStatus
         PropertyRegistry.PropertyStatus propertyStatus = propertyRegistry.getPropertyStatus(propertyId);
         if (propertyStatus != PropertyRegistry.PropertyStatus.Approved) {
             revert InvalidPropertyStatus(propertyId);
@@ -197,7 +204,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         // 更新房产请求映射
         propertyRequests[propertyId].push(requestId);
         
-        // 通知房产合约有赎回请求
+        // 通知房产合约有赎回请求 - 使用参数中传入的propertyId，确保状态一致性
         propertyRegistry.setPropertyStatus(propertyId, PropertyRegistry.PropertyStatus.Redemption);
         
         emit RedemptionRequested(requestId, msg.sender, propertyId, tokenAddress, tokenAmount);

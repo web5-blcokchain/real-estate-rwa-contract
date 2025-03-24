@@ -83,8 +83,18 @@ contract RealEstateToken is
         __Pausable_init();
         __UUPSUpgradeable_init();
         
+        // 验证propertyId不为空
+        require(bytes(_propertyId).length > 0, "Property ID cannot be empty");
+        
+        // 验证PropertyRegistry合约地址有效
+        require(_propertyRegistry != address(0), "PropertyRegistry address cannot be zero");
+        PropertyRegistry registry = PropertyRegistry(_propertyRegistry);
+        
+        // 可选：检查propertyId是否存在并已批准 (取消注释如需启用)
+        // require(registry.isPropertyApproved(_propertyId), "Property not approved");
+        
         propertyId = _propertyId;
-        propertyRegistry = PropertyRegistry(_propertyRegistry);
+        propertyRegistry = registry;
         transferRestricted = true;
         whitelistEnabled = false; // 默认不启用白名单功能
         maxSupply = 1000000000 * 10**decimals(); // 默认设置为10亿代币
@@ -188,25 +198,47 @@ contract RealEstateToken is
     /**
      * @dev 批量添加地址到白名单
      * @param _users 用户地址数组
+     * @return addedCount 实际添加的数量
      */
-    function batchAddToWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
+    function batchAddToWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) returns (uint256 addedCount) {
+        addedCount = 0;
         for (uint256 i = 0; i < _users.length; i++) {
             require(_users[i] != address(0), "Invalid address");
-            whitelist[_users[i]] = true;
+            // 只有当地址不在白名单中时才添加，避免重复操作
+            if (!whitelist[_users[i]]) {
+                whitelist[_users[i]] = true;
+                addedCount++;
+            }
         }
-        emit WhitelistBatchUpdated(_users.length, true);
+        
+        if (addedCount > 0) {
+            emit WhitelistBatchUpdated(addedCount, true);
+        }
+        
+        return addedCount;
     }
     
     /**
      * @dev 批量从白名单中移除地址
      * @param _users 用户地址数组
+     * @return removedCount 实际移除的数量
      */
-    function batchRemoveFromWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
+    function batchRemoveFromWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) returns (uint256 removedCount) {
+        removedCount = 0;
         for (uint256 i = 0; i < _users.length; i++) {
             require(_users[i] != address(0), "Invalid address");
-            whitelist[_users[i]] = false;
+            // 只有当地址在白名单中时才移除，避免重复操作
+            if (whitelist[_users[i]]) {
+                whitelist[_users[i]] = false;
+                removedCount++;
+            }
         }
-        emit WhitelistBatchUpdated(_users.length, false);
+        
+        if (removedCount > 0) {
+            emit WhitelistBatchUpdated(removedCount, false);
+        }
+        
+        return removedCount;
     }
     
     /**
@@ -248,7 +280,7 @@ contract RealEstateToken is
             return;
         }
         
-        // 获取房产状态
+        // 获取房产状态，使用PropertyRegistry而不是接口
         PropertyRegistry.PropertyStatus status = propertyRegistry.getPropertyStatus(propertyId);
         
         // 检查房产状态
@@ -296,10 +328,18 @@ contract RealEstateToken is
         returns (uint256 successCount, uint256 failureCount) 
     {
         require(recipients.length == amounts.length, "Array lengths must match");
+        require(recipients.length > 0, "Empty recipients array");
         
         // 初始化成功和失败计数器
         successCount = 0;
         failureCount = 0;
+        
+        // 预检查总金额，确保发送者余额充足
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalAmount += amounts[i];
+        }
+        require(balanceOf(msg.sender) >= totalAmount, "Insufficient total balance");
         
         // 创建事件数组存储失败的转账信息
         address[] memory failedRecipients = new address[](recipients.length);
@@ -316,6 +356,9 @@ contract RealEstateToken is
             );
         }
         
+        // 预先检查白名单状态，避免在循环中重复检查
+        bool needsWhitelist = transferRestricted && whitelistEnabled;
+        
         // 执行批量转账
         for (uint256 i = 0; i < recipients.length; i++) {
             // 检查接收者地址是否有效
@@ -328,7 +371,7 @@ contract RealEstateToken is
             }
             
             // 检查接收者是否符合白名单条件
-            if (transferRestricted && whitelistEnabled && !whitelist[recipients[i]]) {
+            if (needsWhitelist && !whitelist[recipients[i]]) {
                 failedRecipients[failureCount] = recipients[i];
                 failedAmounts[failureCount] = amounts[i];
                 failReasons[failureCount] = "Recipient not whitelisted";
@@ -336,15 +379,7 @@ contract RealEstateToken is
                 continue;
             }
             
-            // 检查发送者余额是否足够
-            if (balanceOf(sender) < amounts[i]) {
-                failedRecipients[failureCount] = recipients[i];
-                failedAmounts[failureCount] = amounts[i];
-                failReasons[failureCount] = "Insufficient balance";
-                failureCount++;
-                continue;
-            }
-            
+            // 执行转账
             try this.transfer(recipients[i], amounts[i]) returns (bool success) {
                 if (success) {
                     successCount++;
@@ -366,6 +401,9 @@ contract RealEstateToken is
                 failureCount++;
             }
         }
+        
+        // 验证总和是否一致
+        require(successCount + failureCount == recipients.length, "Transfer count mismatch");
         
         // 触发批量转账结果事件
         emit BatchTransferCompleted(sender, successCount, failureCount);

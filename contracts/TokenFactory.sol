@@ -32,6 +32,9 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     // 代币映射：房产ID => 代币地址
     mapping(string => address) public tokens;
     
+    // 添加逆向映射：代币地址 => 房产ID，方便查询
+    mapping(address => string) public tokenToProperty;
+    
     // 所有代币地址数组
     address[] public allTokens;
     
@@ -91,6 +94,9 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory _propertyId,
         uint256 _initialSupply
     ) internal returns (address) {  // 内部函数
+        // 检查propertyId非空
+        require(bytes(_propertyId).length > 0, "Property ID cannot be empty");
+        
         // 检查房产是否已审核
         require(propertyRegistry.isPropertyApproved(_propertyId), "Property not approved");
         
@@ -116,6 +122,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         
         // 保存代币地址
         tokens[_propertyId] = tokenAddress;
+        tokenToProperty[tokenAddress] = _propertyId; // 添加反向映射
         allTokens.push(tokenAddress);
         
         // 设置代币权限和初始供应量
@@ -124,10 +131,9 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         // 统一授权逻辑：确保rent distributor有SNAPSHOT_ROLE
         token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
         
-        // 为PropertyRegistry创建特定的角色，而不是默认管理员角色
-        // 创建PROPERTY_STATUS_CHECKER角色
-        bytes32 PROPERTY_STATUS_CHECKER_ROLE = keccak256("PROPERTY_STATUS_CHECKER_ROLE");
-        token.grantRole(PROPERTY_STATUS_CHECKER_ROLE, address(propertyRegistry));
+        // 确保propertyRegistry有必要的权限以检查房产状态
+        // 注意：RealEstateToken合约使用DEFAULT_ADMIN_ROLE而非PROPERTY_STATUS_CHECKER_ROLE
+        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(propertyRegistry));
         
         // 只有在指定初始供应量时才铸造
         if (_initialSupply > 0) {
@@ -152,7 +158,14 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory _symbol,
         string memory _propertyId,
         uint256 _initialSupply
-    ) external onlySuperAdmin returns (address) {
+    ) external returns (address) {
+        // 检查调用者是否有权限 - 允许SUPER_ADMIN或PROPERTY_MANAGER
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            roleManager.hasRole(roleManager.PROPERTY_MANAGER(), msg.sender),
+            "Caller is not authorized to create tokens"
+        );
+        
         return createToken(_name, _symbol, _propertyId, _initialSupply);
     }
     
@@ -211,7 +224,14 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string[] memory names,
         string[] memory symbols,
         uint256[] memory initialSupplies
-    ) external onlySuperAdmin returns (address[] memory) {
+    ) external returns (address[] memory) {
+        // 检查调用者是否有权限 - 允许SUPER_ADMIN或PROPERTY_MANAGER
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            roleManager.hasRole(roleManager.PROPERTY_MANAGER(), msg.sender),
+            "Caller is not authorized to create tokens"
+        );
+        
         require(propertyIds.length == names.length && 
                 names.length == symbols.length && 
                 symbols.length == initialSupplies.length, 
@@ -224,5 +244,16 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         }
         
         return newTokens;
+    }
+    
+    /**
+     * @dev 根据代币地址获取房产ID
+     * @param tokenAddress 代币地址
+     * @return 房产ID
+     */
+    function getPropertyIdFromToken(address tokenAddress) external view returns (string memory) {
+        string memory propId = tokenToProperty[tokenAddress];
+        require(bytes(propId).length > 0, "Token not found");
+        return propId;
     }
 }

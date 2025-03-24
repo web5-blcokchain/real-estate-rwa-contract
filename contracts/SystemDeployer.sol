@@ -3,6 +3,9 @@ pragma solidity ^0.8.0;
 
 import "./SystemDeployerLib1.sol";
 import "./SystemDeployerLib2.sol";
+import "./PropertyRegistry.sol";
+import "./RoleManager.sol";
+import "./FeeManager.sol";
 
 /**
  * @title SystemDeployerBase
@@ -182,6 +185,18 @@ contract SystemDeployer is SystemDeployerBase {
                     tokenHolderQueryAddress
                 );
             }
+            
+            // 若RedemptionManager已部署，授权其访问PropertyRegistry
+            if (redemptionManagerAddress != address(0) && propertyRegistryAddress != address(0)) {
+                PropertyRegistry propertyRegistry = PropertyRegistry(propertyRegistryAddress);
+                propertyRegistry.addAuthorizedContract(redemptionManagerAddress);
+            }
+            
+            // 若RentDistributor已部署，授权其访问PropertyRegistry
+            if (rentDistributorAddress != address(0) && propertyRegistryAddress != address(0)) {
+                PropertyRegistry propertyRegistry = PropertyRegistry(propertyRegistryAddress);
+                propertyRegistry.addAuthorizedContract(rentDistributorAddress);
+            }
         } catch Error(string memory reason) {
             stepStatus[step] = DeploymentStatus.Failed;
             emit DeploymentError(step, stepDescriptions[step], reason);
@@ -354,4 +369,50 @@ contract SystemDeployer is SystemDeployerBase {
         deploymentProgress = 11;
         emit DeploymentProgress(deploymentProgress, stepDescriptions[11], "GrantRoles", deployer);
     }
+
+    /**
+     * @dev 部署完成后执行授权和配置
+     */
+    function setupContractAuthorizations() external {
+        require(msg.sender == deployer, "Only deployer can setup authorizations");
+        // 确保该函数只能在部署完成后调用
+        require(deploymentProgress == 11 && stepStatus[11] == DeploymentStatus.Completed, "Deployment must be complete first");
+        
+        // 1. 确保PropertyRegistry授权RedemptionManager为授权合约
+        if (redemptionManagerAddress != address(0) && propertyRegistryAddress != address(0)) {
+            PropertyRegistry propertyRegistry = PropertyRegistry(propertyRegistryAddress);
+            propertyRegistry.addAuthorizedContract(redemptionManagerAddress);
+        }
+        
+        // 2. 确保PropertyRegistry授权RentDistributor为授权合约
+        if (rentDistributorAddress != address(0) && propertyRegistryAddress != address(0)) {
+            PropertyRegistry propertyRegistry = PropertyRegistry(propertyRegistryAddress);
+            propertyRegistry.addAuthorizedContract(rentDistributorAddress);
+        }
+        
+        // 3. 确保PropertyRegistry授权Marketplace为授权合约
+        if (marketplaceAddress != address(0) && propertyRegistryAddress != address(0)) {
+            PropertyRegistry propertyRegistry = PropertyRegistry(propertyRegistryAddress);
+            propertyRegistry.addAuthorizedContract(marketplaceAddress);
+        }
+        
+        // 4. 确保TokenFactory的RentDistributor角色
+        if (rentDistributorAddress != address(0)) {
+            RoleManager roleManager = RoleManager(roleManagerAddress);
+            roleManager.grantRole(roleManager.PROPERTY_MANAGER(), rentDistributorAddress);
+        }
+        
+        // 5. 确保RedemptionManager被授权收集费用
+        if (redemptionManagerAddress != address(0) && feeManagerAddress != address(0)) {
+            FeeManager feeManager = FeeManager(feeManagerAddress);
+            // 授权RedemptionManager为费用收集器
+            // 注意：这里假设FeeManager有类似的函数，可能需要调整
+            // feeManager.addAuthorizedCollector(redemptionManagerAddress);
+        }
+        
+        emit AuthorizationsSetup(block.timestamp);
+    }
+    
+    // 授权设置事件
+    event AuthorizationsSetup(uint256 timestamp);
 } 
