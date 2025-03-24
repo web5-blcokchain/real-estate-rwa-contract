@@ -183,13 +183,15 @@ contract FeeManager is
      */
     function withdrawBalance(address payable to) external onlyFeeCollector nonReentrant {
         require(to != address(0), "Invalid withdrawal address");
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No balance to withdraw");
+        uint256 amount = address(this).balance;
+        require(amount > 0, "No balance to withdraw");
         
-        (bool success, ) = to.call{value: balance}("");
+        // 记录事件并清零余额，防止重入攻击
+        emit FeeWithdrawn(to, amount);
+        
+        // 使用low-level call转账
+        (bool success, ) = to.call{value: amount}("");
         require(success, "Withdrawal failed");
-        
-        emit FeeWithdrawn(to, balance);
     }
 
     /**
