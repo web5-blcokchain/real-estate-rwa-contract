@@ -81,68 +81,86 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     }
     
     /**
-     * @dev 创建新的房产代币
-     * @param _name 代币名称
-     * @param _symbol 代币符号
-     * @param _propertyId 房产ID
-     * @param _initialSupply 初始供应量
-     * @return 新创建的代币地址
+     * @dev 部署代理合约的内部辅助函数
+     * @param logicAddress 实现合约地址
+     * @param data 初始化数据
+     * @return 代理合约地址
+     */
+    function _deployProxy(address logicAddress, bytes memory data) internal returns (address) {
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            logicAddress,
+            address(roleManager),  // 使用角色管理器作为管理员
+            data
+        );
+        return address(proxy);
+    }
+    
+    /**
+     * @dev 根据房产信息创建新代币（内部函数）
+     * @param propertyId 房产ID
+     * @param tokenName 代币名称
+     * @param tokenSymbol 代币简称
+     * @param initialSupply 初始供应量
+     * @param maxSupply 最大供应量
+     * @return 代币合约地址
      */
     function createToken(
-        string memory _name,
-        string memory _symbol,
-        string memory _propertyId,
-        uint256 _initialSupply
-    ) internal returns (address) {  // 内部函数
-        // 检查propertyId非空
-        require(bytes(_propertyId).length > 0, "Property ID cannot be empty");
+        string memory propertyId,
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint256 initialSupply,
+        uint256 maxSupply
+    ) internal returns (address) {
+        require(propertyRegistry.propertyExists(propertyId), "Property does not exist");
+        require(propertyRegistry.isPropertyApproved(propertyId), "Property not approved");
+        require(tokens[propertyId] == address(0), "Token already created for this property");
         
-        // 检查房产是否已审核
-        require(propertyRegistry.isPropertyApproved(_propertyId), "Property not approved");
-        
-        // 检查该房产是否已经创建了代币
-        require(tokens[_propertyId] == address(0), "Token already exists for this property");
-        
-        bytes memory initData = abi.encodeWithSelector(
-            RealEstateToken(address(0)).initialize.selector,
-            _propertyId,
-            _name,
-            _symbol,
-            msg.sender,
-            address(propertyRegistry)
-        );
-        
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+        // 创建代理合约
+        address tokenProxy = _deployProxy(
             tokenImplementation,
-            address(roleManager),  // 使用角色管理器作为管理员
-            initData
+            abi.encodeWithSelector(
+                RealEstateToken(address(0)).initialize.selector,
+                propertyId,
+                tokenName,
+                tokenSymbol,
+                msg.sender,
+                address(propertyRegistry)
+            )
         );
         
-        address tokenAddress = address(proxy);
+        // 记录对应关系
+        tokens[propertyId] = tokenProxy;
+        tokenToProperty[tokenProxy] = propertyId;
+        allTokens.push(tokenProxy);
         
-        // 保存代币地址
-        tokens[_propertyId] = tokenAddress;
-        tokenToProperty[tokenAddress] = _propertyId; // 添加反向映射
-        allTokens.push(tokenAddress);
-        
-        // 设置代币权限和初始供应量
-        RealEstateToken token = RealEstateToken(tokenAddress);
-        
-        // 统一授权逻辑：确保rent distributor有SNAPSHOT_ROLE
-        token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
-        
-        // 确保propertyRegistry有必要的权限以检查房产状态
-        // 注意：RealEstateToken合约使用DEFAULT_ADMIN_ROLE而非PROPERTY_STATUS_CHECKER_ROLE
-        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(propertyRegistry));
-        
-        // 只有在指定初始供应量时才铸造
-        if (_initialSupply > 0) {
-            token.mint(msg.sender, _initialSupply);
+        // 向PropertyRegistry注册代币地址
+        try PropertyRegistry(address(propertyRegistry)).registerTokenForProperty(propertyId, tokenProxy) {
+            // 注册成功
+        } catch {
+            // 注册失败，但不影响代币创建
+            // 可以考虑记录错误日志
         }
         
-        emit TokenCreated(_propertyId, tokenAddress, _name, _symbol);
+        // 如果初始供应量大于0，铸造代币
+        if (initialSupply > 0) {
+            RealEstateToken(tokenProxy).mint(msg.sender, initialSupply);
+        }
         
-        return tokenAddress;
+        // 设置最大供应量（如果需要）
+        if (maxSupply > 0 && maxSupply != 1000000000 * 10**18) { // 检查是否和默认值不同
+            RealEstateToken(tokenProxy).setMaxSupply(maxSupply);
+        }
+        
+        // 为租金分发器授予权限
+        if (address(rentDistributor) != address(0)) {
+            RealEstateToken(tokenProxy).grantRole(
+                RealEstateToken(tokenProxy).SNAPSHOT_ROLE(),
+                address(rentDistributor)
+            );
+        }
+        
+        emit TokenCreated(propertyId, tokenProxy, tokenName, tokenSymbol);
+        return tokenProxy;
     }
     
     /**
@@ -166,7 +184,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
             "Caller is not authorized to create tokens"
         );
         
-        return createToken(_name, _symbol, _propertyId, _initialSupply);
+        return createTokenPublic(_propertyId, _name, _symbol, _initialSupply, 0);
     }
     
     /**
@@ -240,7 +258,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         address[] memory newTokens = new address[](propertyIds.length);
         
         for (uint256 i = 0; i < propertyIds.length; i++) {
-            newTokens[i] = createToken(names[i], symbols[i], propertyIds[i], initialSupplies[i]);
+            newTokens[i] = createToken(propertyIds[i], names[i], symbols[i], initialSupplies[i], 0);
         }
         
         return newTokens;
@@ -255,5 +273,24 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory propId = tokenToProperty[tokenAddress];
         require(bytes(propId).length > 0, "Token not found");
         return propId;
+    }
+    
+    /**
+     * @dev 根据房产信息创建新代币（公共接口）
+     * @param propertyId 房产ID
+     * @param tokenName 代币名称
+     * @param tokenSymbol 代币简称
+     * @param initialSupply 初始供应量
+     * @param maxSupply 最大供应量
+     * @return 代币合约地址
+     */
+    function createTokenPublic(
+        string memory propertyId,
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint256 initialSupply,
+        uint256 maxSupply
+    ) external onlySuperAdmin returns (address) {
+        return createToken(propertyId, tokenName, tokenSymbol, initialSupply, maxSupply);
     }
 }

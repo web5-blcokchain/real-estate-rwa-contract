@@ -5,6 +5,11 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./RoleManager.sol";
 
+// 前置声明RealEstateToken接口以避免循环引用
+interface IRealEstateToken {
+    function notifyPropertyStatusChange(PropertyRegistry.PropertyStatus newStatus) external;
+}
+
 /**
  * @title PropertyRegistry
  * @dev 管理房产注册信息
@@ -49,6 +54,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     // 授权合约列表
     mapping(address => bool) public authorizedContracts;
     
+    // 添加房产ID到代币地址的映射，与TokenFactory中的数据保持一致
+    mapping(string => address) public propertyTokens;
+    
     // 事件
     event PropertyRegistered(string indexed propertyId, string country, string metadataURI);
     event PropertyApproved(string indexed propertyId, address approver);
@@ -59,6 +67,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     event PropertyRegistryInitialized(address deployer, address roleManager, uint256 version, uint256 chainId);
     event PropertyStatusTransition(string indexed propertyId, PropertyStatus oldStatus, PropertyStatus newStatus, address indexed changer);
     event AuthorizedContractUpdated(address indexed contractAddress, bool isAuthorized);
+    event TokenRegistered(string indexed propertyId, address tokenAddress);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -570,6 +579,18 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         // 更新状态
         properties[propertyId].status = newStatus;
         
+        // 如果该房产已关联代币，通知代币合约状态变更
+        address tokenAddress = propertyTokens[propertyId];
+        if (tokenAddress != address(0)) {
+            // 尝试调用代币合约的通知函数
+            try IRealEstateToken(tokenAddress).notifyPropertyStatusChange(newStatus) {
+                // 调用成功
+            } catch {
+                // 调用失败，但不影响状态更新主流程
+                // 可以考虑记录错误日志
+            }
+        }
+        
         // 记录日志
         emit PropertyStatusUpdated(propertyId, newStatus);
         emit PropertyStatusTransition(propertyId, oldStatus, newStatus, msg.sender);
@@ -605,8 +626,31 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         // 更新状态
         properties[propertyIdStr].status = newStatus;
         
+        // 如果该房产已关联代币，通知代币合约状态变更
+        address tokenAddress = propertyTokens[propertyIdStr];
+        if (tokenAddress != address(0)) {
+            // 尝试调用代币合约的通知函数
+            try IRealEstateToken(tokenAddress).notifyPropertyStatusChange(newStatus) {
+                // 调用成功
+            } catch {
+                // 调用失败，但不影响状态更新主流程
+                // 可以考虑记录错误日志
+            }
+        }
+        
         // 记录日志
         emit PropertyStatusUpdated(propertyIdStr, newStatus);
         emit PropertyStatusTransition(propertyIdStr, oldStatus, newStatus, msg.sender);
+    }
+
+    // 新增函数，由TokenFactory调用来注册代币地址
+    function registerTokenForProperty(string memory propertyId, address tokenAddress) external {
+        // 只允许授权合约调用
+        require(isAuthorizedContract(msg.sender), "Only authorized contracts can register tokens");
+        require(properties[propertyId].exists, "Property does not exist");
+        require(propertyTokens[propertyId] == address(0), "Token already registered for property");
+        
+        propertyTokens[propertyId] = tokenAddress;
+        emit TokenRegistered(propertyId, tokenAddress);
     }
 }

@@ -61,6 +61,8 @@ contract RealEstateToken is
         string[] reasons, 
         uint256 failureCount
     );
+    event TokenFrozen(string propertyId);
+    event TokenUnfrozen(string propertyId);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -439,5 +441,27 @@ contract RealEstateToken is
      */
     function availableSupply() external view returns (uint256 availableSupply) {
         return maxSupply - totalSupply();
+    }
+    
+    // 创建一个监听函数，让PropertyRegistry可以通知此合约状态变更
+    function notifyPropertyStatusChange(PropertyRegistry.PropertyStatus newStatus) external {
+        // 只接受来自PropertyRegistry的调用
+        require(msg.sender == address(propertyRegistry), "Only PropertyRegistry can notify");
+        
+        // 根据新状态更新代币行为
+        if (newStatus == PropertyRegistry.PropertyStatus.Frozen) {
+            _pause(); // 冻结状态时暂停代币
+            emit TokenFrozen(propertyId);
+        } else if (newStatus == PropertyRegistry.PropertyStatus.Approved) {
+            // 如果之前被暂停，现在恢复
+            if (paused()) {
+                _unpause();
+                emit TokenUnfrozen(propertyId);
+            }
+        } else if (newStatus == PropertyRegistry.PropertyStatus.Delisted) {
+            // 下架状态时只允许管理员转账
+            transferRestricted = true;
+            emit TransferRestrictionUpdated(true);
+        }
     }
 }

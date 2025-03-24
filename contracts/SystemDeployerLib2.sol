@@ -50,6 +50,7 @@ library SystemDeployerLib2 {
      */
     function deployStep7_RedemptionManager(
         address roleManagerAddress,
+        address feeManagerAddress,
         address propertyRegistryAddress
     ) external returns (address) {
         RedemptionManager impl = new RedemptionManager();
@@ -58,6 +59,7 @@ library SystemDeployerLib2 {
             abi.encodeWithSelector(
                 RedemptionManager(address(0)).initialize.selector,
                 roleManagerAddress,
+                feeManagerAddress,
                 propertyRegistryAddress
             )
         );

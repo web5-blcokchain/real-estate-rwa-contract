@@ -6,6 +6,10 @@ import "./SystemDeployerLib2.sol";
 import "./PropertyRegistry.sol";
 import "./RoleManager.sol";
 import "./FeeManager.sol";
+import "./RealEstateSystem.sol";
+import "./Marketplace.sol";
+import "./RedemptionManager.sol";
+import "./RentDistributor.sol";
 
 /**
  * @title SystemDeployerBase
@@ -316,6 +320,7 @@ contract SystemDeployer is SystemDeployerBase {
     function _deployStep7_RedemptionManager() private {
         redemptionManagerAddress = SystemDeployerLib2.deployStep7_RedemptionManager(
             roleManagerAddress,
+            feeManagerAddress,
             propertyRegistryAddress
         );
         deploymentProgress = 7;
@@ -415,4 +420,94 @@ contract SystemDeployer is SystemDeployerBase {
     
     // 授权设置事件
     event AuthorizationsSetup(uint256 timestamp);
+
+    /**
+     * @dev 全局系统紧急暂停
+     */
+    function emergencyPauseSystem() external {
+        require(msg.sender == deployer, "Only deployer can pause system");
+        
+        try RealEstateSystem(systemAddress).pause() {
+            emit SystemComponentPaused("RealEstateSystem");
+        } catch {
+            // 继续执行即使某个合约暂停失败
+        }
+        
+        // 尝试暂停市场合约
+        if (marketplaceAddress != address(0)) {
+            try Marketplace(marketplaceAddress).pause() {
+                emit SystemComponentPaused("Marketplace");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        // 尝试暂停赎回管理器
+        if (redemptionManagerAddress != address(0)) {
+            try RedemptionManager(redemptionManagerAddress).pause() {
+                emit SystemComponentPaused("RedemptionManager");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        // 尝试暂停租金分发器
+        if (rentDistributorAddress != address(0)) {
+            try RentDistributor(rentDistributorAddress).pause() {
+                emit SystemComponentPaused("RentDistributor");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        emit SystemEmergencyPaused(block.timestamp);
+    }
+    
+    /**
+     * @dev 全局系统恢复
+     */
+    function emergencyUnpauseSystem() external {
+        require(msg.sender == deployer, "Only deployer can unpause system");
+        
+        try RealEstateSystem(systemAddress).unpause() {
+            emit SystemComponentUnpaused("RealEstateSystem");
+        } catch {
+            // 继续执行即使某个合约恢复失败
+        }
+        
+        // 尝试恢复市场合约
+        if (marketplaceAddress != address(0)) {
+            try Marketplace(marketplaceAddress).unpause() {
+                emit SystemComponentUnpaused("Marketplace");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        // 尝试恢复赎回管理器
+        if (redemptionManagerAddress != address(0)) {
+            try RedemptionManager(redemptionManagerAddress).unpause() {
+                emit SystemComponentUnpaused("RedemptionManager");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        // 尝试恢复租金分发器
+        if (rentDistributorAddress != address(0)) {
+            try RentDistributor(rentDistributorAddress).unpause() {
+                emit SystemComponentUnpaused("RentDistributor");
+            } catch {
+                // 继续执行
+            }
+        }
+        
+        emit SystemEmergencyUnpaused(block.timestamp);
+    }
+    
+    // 系统紧急暂停事件
+    event SystemEmergencyPaused(uint256 timestamp);
+    event SystemEmergencyUnpaused(uint256 timestamp);
+    event SystemComponentPaused(string component);
+    event SystemComponentUnpaused(string component);
 } 

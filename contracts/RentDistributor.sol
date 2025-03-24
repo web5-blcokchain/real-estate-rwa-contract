@@ -60,6 +60,9 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     // 添加多重签名清算控制
     address public clearanceMultisig;
     
+    // 未领取的总租金金额
+    uint256 public unclaimedAmount;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -390,48 +393,26 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
 
     /**
      * @dev 清算未领取的租金
-     * @param distributionId 分配ID
-     * @param recipient 接收者地址
-     * @notice 只有在分配完成后一定时间（例如6个月）后才能调用
      */
-    function liquidateUnclaimedRent(uint256 distributionId, address recipient) external nonReentrant {
-        // 检查调用者是超级管理员或已授权的多重签名合约
-        require(
-            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
-            (clearanceMultisig != address(0) && msg.sender == clearanceMultisig),
-            "Caller is not authorized to liquidate"
-        );
-        
-        require(recipient != address(0), "Invalid recipient address");
-        RentDistribution storage distribution = rentDistributions[distributionId];
-        require(distribution.isProcessed, "Distribution not processed");
-        
-        // 使用创建快照的时间（即分配处理的时间）作为计算基准
-        // 要求至少6个月的清算期限
-        uint256 liquidationPeriod = 180 days;
-        require(block.timestamp >= distribution.approvalTime + liquidationPeriod, 
-                "Liquidation period not reached");
-        
-        // 计算未领取的金额
-        uint256 unclaimedAmount = distribution.netAmount - distribution.totalClaimed;
+    function liquidateUnclaimedRent() external onlySuperAdmin nonReentrant {
         require(unclaimedAmount > 0, "No unclaimed rent");
         
-        // 记录原始金额用于事件记录
-        uint256 amountToLiquidate = unclaimedAmount;
+        // 保存当前未认领的金额
+        uint256 amount = unclaimedAmount;
         
-        // 重置未领取金额，防止重入
-        distribution.netAmount = distribution.totalClaimed;
+        // 先重置状态变量，防止重入攻击
+        unclaimedAmount = 0;
         
-        // 先触发事件
-        emit UnclaimedRentLiquidated(distributionId, recipient, amountToLiquidate);
+        // 触发事件
+        emit UnclaimedRentLiquidated(msg.sender, amount);
         
-        // 最后转账未领取的租金
-        IERC20 stablecoin = IERC20(distribution.stablecoinAddress);
-        require(stablecoin.transfer(recipient, amountToLiquidate), "Transfer failed");
+        // 最后执行转账操作
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
     }
     
-    // 添加新事件
-    event UnclaimedRentLiquidated(uint256 indexed distributionId, address indexed recipient, uint256 amount);
+    // 未领取租金清算事件
+    event UnclaimedRentLiquidated(address indexed recipient, uint256 amount);
 
     /**
      * @dev 授权升级合约的实现
