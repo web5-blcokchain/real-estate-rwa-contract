@@ -82,6 +82,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     event RedemptionFeeCollected(uint256 requestId, uint256 feeAmount, address feeToken);
     event VersionUpdated(uint256 oldVersion, uint256 newVersion);
     event RedemptionManagerInitialized(address deployer, address roleManager, address feeManager, address propertyRegistry, uint256 version);
+    event RedemptionPeriodUpdated(uint256 oldPeriod, uint256 newPeriod);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -340,6 +341,29 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         // 确保请求者至少能收到10%的金额
         require(requesterAmount >= (stablecoinAmount / 10), "Fee too high, requester amount too low");
         
+        // 首先更新请求信息
+        request.status = RedemptionStatus.Completed;
+        request.completionTime = block.timestamp;
+        
+        // 检查是否有其他待处理或已批准的赎回请求
+        bool hasActiveRedemptions = false;
+        uint256[] memory propRequests = propertyRequests[request.propertyId];
+        for (uint256 i = 0; i < propRequests.length; i++) {
+            RedemptionStatus status = redemptionRequests[propRequests[i]].status;
+            if (status == RedemptionStatus.Pending || status == RedemptionStatus.Approved) {
+                hasActiveRedemptions = true;
+                break;
+            }
+        }
+        
+        // 如果没有其他活跃的赎回请求，恢复房产状态
+        if (!hasActiveRedemptions) {
+            propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
+        }
+        
+        // 先触发事件
+        emit RedemptionCompleted(requestId, msg.sender);
+        
         // 转移稳定币给请求者
         bool success = stablecoin.transferFrom(msg.sender, request.requester, requesterAmount);
         if (!success) {
@@ -363,28 +387,6 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         // 销毁代币
         RealEstateToken token = RealEstateToken(request.tokenAddress);
         token.burn(request.tokenAmount);
-        
-        // 更新请求信息
-        request.status = RedemptionStatus.Completed;
-        request.completionTime = block.timestamp;
-        
-        // 检查是否有其他待处理或已批准的赎回请求
-        bool hasActiveRedemptions = false;
-        uint256[] memory propRequests = propertyRequests[request.propertyId];
-        for (uint256 i = 0; i < propRequests.length; i++) {
-            RedemptionStatus status = redemptionRequests[propRequests[i]].status;
-            if (status == RedemptionStatus.Pending || status == RedemptionStatus.Approved) {
-                hasActiveRedemptions = true;
-                break;
-            }
-        }
-        
-        // 如果没有其他活跃的赎回请求，恢复房产状态
-        if (!hasActiveRedemptions) {
-            propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
-        }
-        
-        emit RedemptionCompleted(requestId, msg.sender);
     }
 
     /**
@@ -404,15 +406,8 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
             revert NotRequestOwner(requestId, msg.sender);
         }
         
-        // 更新请求信息
+        // 首先更新请求信息
         request.status = RedemptionStatus.Cancelled;
-        
-        // 返还代币给请求者
-        IERC20 token = IERC20(request.tokenAddress);
-        bool success = token.transfer(request.requester, request.tokenAmount);
-        if (!success) {
-            revert TransferFailed();
-        }
         
         // 检查是否有其他待处理的赎回请求
         bool hasPendingRedemptions = false;
@@ -429,17 +424,17 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
             propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
         }
         
+        // 先触发事件
         emit RedemptionCancelled(requestId, msg.sender);
+        
+        // 最后返还代币给请求者
+        IERC20 token = IERC20(request.tokenAddress);
+        bool success = token.transfer(request.requester, request.tokenAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
     }
 
-    /**
-     * @dev 设置赎回期限
-     * @param _period 期限（秒）
-     */
-    function setRedemptionPeriod(uint256 _period) external onlySuperAdmin {
-        redemptionPeriod = _period;
-    }
-    
     /**
      * @dev 授权升级合约的实现
      */
@@ -448,5 +443,15 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         uint256 oldVersion = version;
         version += 1;
         emit VersionUpdated(oldVersion, version);
+    }
+
+    /**
+     * @dev 设置赎回期限
+     * @param _period 期限（秒）
+     */
+    function setRedemptionPeriod(uint256 _period) external onlySuperAdmin {
+        uint256 oldPeriod = redemptionPeriod;
+        redemptionPeriod = _period;
+        emit RedemptionPeriodUpdated(oldPeriod, _period);
     }
 }

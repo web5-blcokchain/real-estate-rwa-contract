@@ -27,6 +27,7 @@ contract RealEstateToken is
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE");
+    bytes32 public constant PROPERTY_STATUS_CHECKER_ROLE = keccak256("PROPERTY_STATUS_CHECKER_ROLE");
     
     // 房产信息
     string public propertyId;
@@ -52,6 +53,14 @@ contract RealEstateToken is
     event MaxSupplyUpdated(uint256 indexed oldMaxSupply, uint256 indexed newMaxSupply);
     event TokenInitialized(string propertyId, address admin, uint256 version);
     event VersionUpdated(uint256 oldVersion, uint256 newVersion);
+    event BatchTransferCompleted(address indexed sender, uint256 successCount, uint256 failureCount);
+    event BatchTransferFailures(
+        address indexed sender, 
+        address[] recipients, 
+        uint256[] amounts, 
+        string[] reasons, 
+        uint256 failureCount
+    );
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -278,9 +287,24 @@ contract RealEstateToken is
      * @dev 批量转账
      * @param recipients 接收者地址数组
      * @param amounts 代币数量数组
+     * @return successCount 成功转账数量
+     * @return failureCount 失败转账数量
      */
-    function batchTransfer(address[] calldata recipients, uint256[] calldata amounts) external whenNotPaused {
+    function batchTransfer(address[] memory recipients, uint256[] memory amounts) 
+        external 
+        whenNotPaused 
+        returns (uint256 successCount, uint256 failureCount) 
+    {
         require(recipients.length == amounts.length, "Array lengths must match");
+        
+        // 初始化成功和失败计数器
+        successCount = 0;
+        failureCount = 0;
+        
+        // 创建事件数组存储失败的转账信息
+        address[] memory failedRecipients = new address[](recipients.length);
+        uint256[] memory failedAmounts = new uint256[](recipients.length);
+        string[] memory failReasons = new string[](recipients.length);
         
         // 只检查一次转账发起者是否符合条件
         address sender = msg.sender;
@@ -294,12 +318,64 @@ contract RealEstateToken is
         
         // 执行批量转账
         for (uint256 i = 0; i < recipients.length; i++) {
-            // 检查接收者是否符合白名单条件
-            if (transferRestricted && whitelistEnabled) {
-                require(whitelist[recipients[i]], "Recipient not whitelisted");
+            // 检查接收者地址是否有效
+            if (recipients[i] == address(0)) {
+                failedRecipients[failureCount] = recipients[i];
+                failedAmounts[failureCount] = amounts[i];
+                failReasons[failureCount] = "Recipient is zero address";
+                failureCount++;
+                continue;
             }
-            _transfer(sender, recipients[i], amounts[i]);
+            
+            // 检查接收者是否符合白名单条件
+            if (transferRestricted && whitelistEnabled && !whitelist[recipients[i]]) {
+                failedRecipients[failureCount] = recipients[i];
+                failedAmounts[failureCount] = amounts[i];
+                failReasons[failureCount] = "Recipient not whitelisted";
+                failureCount++;
+                continue;
+            }
+            
+            // 检查发送者余额是否足够
+            if (balanceOf(sender) < amounts[i]) {
+                failedRecipients[failureCount] = recipients[i];
+                failedAmounts[failureCount] = amounts[i];
+                failReasons[failureCount] = "Insufficient balance";
+                failureCount++;
+                continue;
+            }
+            
+            try this.transfer(recipients[i], amounts[i]) returns (bool success) {
+                if (success) {
+                    successCount++;
+                } else {
+                    failedRecipients[failureCount] = recipients[i];
+                    failedAmounts[failureCount] = amounts[i];
+                    failReasons[failureCount] = "Transfer failed";
+                    failureCount++;
+                }
+            } catch Error(string memory reason) {
+                failedRecipients[failureCount] = recipients[i];
+                failedAmounts[failureCount] = amounts[i];
+                failReasons[failureCount] = reason;
+                failureCount++;
+            } catch {
+                failedRecipients[failureCount] = recipients[i];
+                failedAmounts[failureCount] = amounts[i];
+                failReasons[failureCount] = "Unknown error";
+                failureCount++;
+            }
         }
+        
+        // 触发批量转账结果事件
+        emit BatchTransferCompleted(sender, successCount, failureCount);
+        
+        // 记录详细的失败信息
+        if (failureCount > 0) {
+            emit BatchTransferFailures(sender, failedRecipients, failedAmounts, failReasons, failureCount);
+        }
+        
+        return (successCount, failureCount);
     }
     
     /**

@@ -137,24 +137,35 @@ contract SystemDeployer is SystemDeployerBase {
         if(msg.sender != deployer) {
             revert OnlyDeployer();
         }
+        
+        // 允许重试失败的步骤
         if(step <= deploymentProgress && stepStatus[step] == DeploymentStatus.Completed) {
             revert StepAlreadyDeployed(step);
         }
+        
         if(step > 11) {
             revert InvalidStepNumber(step);
         }
-        if(step != deploymentProgress + 1 && deploymentProgress > 0) {
+        
+        // 确保步骤序列正确，但允许重试失败的步骤
+        if(step > deploymentProgress + 1 && stepStatus[step-1] != DeploymentStatus.Completed) {
             revert StepsMustBeSequential(step, deploymentProgress);
         }
         
-        // 检查前一步是否失败
-        if(step > 1 && stepStatus[step-1] == DeploymentStatus.Failed) {
-            revert PreviousStepFailed(step-1);
+        // 重试失败的步骤时，检查前置步骤是否完成
+        if(step <= deploymentProgress && stepStatus[step] == DeploymentStatus.Failed) {
+            // 检查前置步骤
+            if(step > 1 && stepStatus[step-1] != DeploymentStatus.Completed) {
+                revert PreviousStepFailed(step-1);
+            }
         }
-        
+
         try this._executeDeployStep(step) {
+            // 如果是新步骤，更新进度
+            if (step > deploymentProgress) {
+                deploymentProgress = step;
+            }
             stepStatus[step] = DeploymentStatus.Completed;
-            deploymentProgress = step;
             
             // 如果所有步骤都已部署，发出完成事件
             if (step == 11) {
@@ -175,11 +186,34 @@ contract SystemDeployer is SystemDeployerBase {
             stepStatus[step] = DeploymentStatus.Failed;
             emit DeploymentError(step, stepDescriptions[step], reason);
             revert DeploymentFailed(step, reason);
-        } catch (bytes memory) {
+        } catch {
             stepStatus[step] = DeploymentStatus.Failed;
             emit DeploymentError(step, stepDescriptions[step], "Unknown error");
             revert DeploymentFailed(step, "Unknown error");
         }
+    }
+
+    /**
+     * @dev 检查是否可以重试失败的步骤
+     * @param step 要检查的步骤编号
+     * @return 是否可以重试
+     */
+    function canRetryStep(uint8 step) external view returns (bool) {
+        if (step > 11 || step == 0) {
+            return false;
+        }
+        
+        // 只有失败的步骤可以重试，前提是前置步骤已完成
+        if (stepStatus[step] != DeploymentStatus.Failed) {
+            return false;
+        }
+        
+        // 检查前置步骤状态
+        if (step > 1 && stepStatus[step-1] != DeploymentStatus.Completed) {
+            return false;
+        }
+        
+        return true;
     }
     
     /**

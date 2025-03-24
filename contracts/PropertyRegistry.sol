@@ -277,30 +277,70 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      * @param newStatus 新状态
      */
     function _validateStatusTransition(PropertyStatus currentStatus, PropertyStatus newStatus) internal pure {
-        // Frozen状态可以转换为Approved
-        if (currentStatus == PropertyStatus.Frozen && newStatus == PropertyStatus.Approved) {
+        // 相同状态，允许
+        if (currentStatus == newStatus) {
             return;
         }
         
-        // Redemption状态可以转换为Approved
-        if (currentStatus == PropertyStatus.Redemption && newStatus == PropertyStatus.Approved) {
+        // 定义允许的状态转换
+        if (currentStatus == PropertyStatus.Pending) {
+            // 从Pending可以转换到Approved或Rejected
+            require(
+                newStatus == PropertyStatus.Approved ||
+                newStatus == PropertyStatus.Rejected,
+                "Invalid transition from Pending status"
+            );
             return;
         }
         
-        // 通常的状态转换路径
-        if (currentStatus == PropertyStatus.Pending && 
-            (newStatus == PropertyStatus.Approved || newStatus == PropertyStatus.Rejected)) {
+        if (currentStatus == PropertyStatus.Approved) {
+            // 从Approved可以转换到Delisted, Redemption或Frozen
+            require(
+                newStatus == PropertyStatus.Delisted ||
+                newStatus == PropertyStatus.Redemption ||
+                newStatus == PropertyStatus.Frozen,
+                "Invalid transition from Approved status"
+            );
             return;
         }
         
-        if (currentStatus == PropertyStatus.Approved && 
-            (newStatus == PropertyStatus.Delisted || 
-             newStatus == PropertyStatus.Redemption || 
-             newStatus == PropertyStatus.Frozen)) {
+        if (currentStatus == PropertyStatus.Rejected) {
+            // 从Rejected只能转换到Pending (重新申请)
+            require(
+                newStatus == PropertyStatus.Pending,
+                "Invalid transition from Rejected status"
+            );
             return;
         }
         
-        // 拒绝无效的状态转换
+        if (currentStatus == PropertyStatus.Delisted) {
+            // 从Delisted只能重新转换为Approved
+            require(
+                newStatus == PropertyStatus.Approved,
+                "Invalid transition from Delisted status"
+            );
+            return;
+        }
+        
+        if (currentStatus == PropertyStatus.Redemption) {
+            // 从Redemption只能转换回Approved
+            require(
+                newStatus == PropertyStatus.Approved,
+                "Invalid transition from Redemption status"
+            );
+            return;
+        }
+        
+        if (currentStatus == PropertyStatus.Frozen) {
+            // 从Frozen只能转换回Approved
+            require(
+                newStatus == PropertyStatus.Approved,
+                "Invalid transition from Frozen status"
+            );
+            return;
+        }
+        
+        // 如果到这里，说明是未处理的状态转换
         revert("Invalid status transition");
     }
 

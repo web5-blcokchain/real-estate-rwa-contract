@@ -124,8 +124,10 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         // 统一授权逻辑：确保rent distributor有SNAPSHOT_ROLE
         token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
         
-        // 确保propertyRegistry有必要的权限以检查房产状态
-        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(propertyRegistry));
+        // 为PropertyRegistry创建特定的角色，而不是默认管理员角色
+        // 创建PROPERTY_STATUS_CHECKER角色
+        bytes32 PROPERTY_STATUS_CHECKER_ROLE = keccak256("PROPERTY_STATUS_CHECKER_ROLE");
+        token.grantRole(PROPERTY_STATUS_CHECKER_ROLE, address(propertyRegistry));
         
         // 只有在指定初始供应量时才铸造
         if (_initialSupply > 0) {
@@ -159,6 +161,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
      * @param newImplementation 新的实现合约地址
      */
     function updateTokenImplementation(address newImplementation) external onlySuperAdmin {
+        require(newImplementation != address(0), "Implementation cannot be zero address");
         address oldImplementation = tokenImplementation;
         tokenImplementation = newImplementation;
         

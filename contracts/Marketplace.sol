@@ -224,9 +224,6 @@ contract Marketplace is
             revert InvalidOrderStatus(orderId, order.status);
         }
         
-        // 更新订单状态
-        order.status = OrderStatus.Fulfilled;
-        
         // 获取订单详情
         address seller = order.seller;
         address tokenAddress = order.tokenAddress;
@@ -239,11 +236,20 @@ contract Marketplace is
         uint256 tradingFee = (price * feeManager.tradingFee()) / 10000;
         uint256 sellerAmount = price - tradingFee;
         
+        // 验证总额是否准确（防止舍入误差）
+        require(tradingFee + sellerAmount == price, "Fee calculation error");
+        
         // 检查买家的稳定币授权
         uint256 allowance = stablecoin.allowance(msg.sender, address(this));
         if (allowance < price) {
             revert InsufficientTokenAllowance(stablecoinAddress, price, allowance);
         }
+        
+        // 先更新订单状态
+        order.status = OrderStatus.Fulfilled;
+
+        // 触发订单完成事件
+        emit OrderFulfilled(orderId, msg.sender, price);
         
         // 转移稳定币（从买家到卖家和平台）
         bool stablecoinSuccess = stablecoin.transferFrom(msg.sender, seller, sellerAmount);
@@ -271,8 +277,6 @@ contract Marketplace is
         // 记录交易费用
         uint256 feeTypeValue = 1; // FeeManager.FeeType.TRADING 的枚举值
         feeManager.collectFee(tradingFee, FeeManager.FeeType(feeTypeValue), msg.sender);
-        
-        emit OrderFulfilled(orderId, msg.sender, price);
     }
 
     /**
@@ -292,8 +296,11 @@ contract Marketplace is
             revert NotOrderOwner(orderId, msg.sender);
         }
         
-        // 更新订单状态
+        // 先更新订单状态
         order.status = OrderStatus.Cancelled;
+        
+        // 触发取消事件
+        emit OrderCancelled(orderId, msg.sender);
         
         // 返还代币给卖家
         IERC20 token = IERC20(order.tokenAddress);
@@ -301,8 +308,6 @@ contract Marketplace is
         if (!success) {
             revert TransferFailed();
         }
-        
-        emit OrderCancelled(orderId, msg.sender);
     }
 
     /**
@@ -453,9 +458,20 @@ contract Marketplace is
         require(tokenAddress != address(0), "Invalid token address");
         require(amount > 0, "Amount must be greater than zero");
         
+        // 计算该代币在活跃订单中的锁定总量
+        uint256 lockedAmount = 0;
+        for (uint256 i = 1; i <= orderCount; i++) {
+            Order storage order = orders[i];
+            if (order.status == OrderStatus.Active && order.tokenAddress == tokenAddress) {
+                lockedAmount += order.tokenAmount;
+            }
+        }
+        
         IERC20 token = IERC20(tokenAddress);
         uint256 balance = token.balanceOf(address(this));
-        require(balance >= amount, "Insufficient balance");
+        
+        // 确保提取后剩余数量足够支付所有活跃订单
+        require(balance - amount >= lockedAmount, "Cannot withdraw locked tokens");
         
         // 记录事件，然后进行转账
         emit EmergencyWithdraw(msg.sender, tokenAddress, amount);
