@@ -87,12 +87,11 @@ contract Marketplace is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeab
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
     }
-
-    // 第二个函数仍然包含 KYC 相关代码，需要删除
+    
     function initialize(
         address _roleManager,
         address _feeManager,
-        address _kycManager  // 需要移除
+        address _tokenFactory
     ) public initializer {
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
