@@ -54,7 +54,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     uint256 public requestCount;
     
     // 赎回期限（默认30天）
-    uint256 public redemptionPeriod = 30 days;
+    uint256 public redemptionPeriod;
     
     // 支持的稳定币列表
     mapping(address => bool) public supportedStablecoins;
@@ -92,18 +92,23 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     /**
      * @dev 初始化函数（替代构造函数）
      */
-    function initialize(address _roleManager, address _feeManager, address _propertyRegistry) public initializer {
-        __ReentrancyGuard_init();
+    function initialize(
+        address _roleManager,
+        address _feeManager,
+        address _propertyRegistry
+    ) public initializer {
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
         propertyRegistry = PropertyRegistry(_propertyRegistry);
-        version = 1;
         
-        // 请求PropertyRegistry授权此合约为授权合约
-        // 注意：这需要admin权限，通常部署脚本会处理
-        // 如果部署脚本没有处理，则需要在部署后手动调用PropertyRegistry的addAuthorizedContract函数
+        // 设置初始赎回期限为14天
+        redemptionPeriod = 14 days;
+        
+        // 设置初始版本
+        version = 1;
         
         emit RedemptionManagerInitialized(msg.sender, _roleManager, _feeManager, _propertyRegistry, version);
     }

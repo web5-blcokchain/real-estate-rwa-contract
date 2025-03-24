@@ -33,11 +33,13 @@ contract FeeManager is
     }
 
     // 费用类型
-    uint256 public tokenizationFee = 100;     // 通证化费用，万分之一 (0.01%)
-    uint256 public tradingFee = 100;          // 交易费用，万分之一 (0.01%)
-    uint256 public redemptionFee = 100;       // 赎回费用，万分之一 (0.01%)
-    uint256 public maintenanceFee = 100;      // 维护费用，万分之一 (0.01%)
-    uint256 public platformFee = 100;         // 平台费用，万分之一 (0.01%)
+    uint256 public tokenizationFee;
+    uint256 public tradingFee;
+    uint256 public redemptionFee;
+    uint256 public maintenanceFee;
+    
+    // 平台费用
+    uint256 public platformFee;
 
     // 费用上限，确保不超过10%
     uint256 public constant MAX_FEE = 1000;   // 最大为10%
@@ -73,6 +75,13 @@ contract FeeManager is
         
         // 设置初始版本
         version = 1;
+        
+        // 设置默认费用
+        tokenizationFee = 20; // 2%
+        tradingFee = 10;      // 1%
+        redemptionFee = 10;   // 1%
+        maintenanceFee = 5;   // 0.5%
+        platformFee = 50;     // 5%
         
         // 角色将由RoleManager单独授予
         emit FeeManagerInitialized(msg.sender, _roleManager, version);

@@ -1,112 +1,93 @@
-# 日本房产通证化系统文档中心
+# 日本房产资产上链系统
 
-欢迎使用日本房产通证化系统文档中心。本文档集提供了系统的全面说明，包括开发指南、使用手册和技术文档。
+这个项目实现了一套完整的房产资产数字化系统，包括房产注册、代币化、交易市场、租金分发以及赎回管理等功能。
 
-## 文档目录
+## 架构概述
 
-### 核心文档
+系统由以下主要组件构成：
 
-- [技术文档](./docs/技术文档.md) - 系统架构、合约设计和核心功能的技术详解
-- [用户手册](./docs/用户手册.md) - 系统用户操作指南，适用于各类用户角色
-- [开发部署指南](./docs/开发部署指南.md) - 详细的开发、测试和部署流程说明
-- [主网部署指南](./docs/主网部署指南.md) - 主网部署的特殊注意事项和流程
-- [常见问题(FAQ)](./docs/FAQ.md) - 常见问题解答
-- [合约引用修复指南](./docs/修复指南.md) - 修复RealEstateSystem合约引用的详细操作流程
+1. **角色管理 (RoleManager)** - 处理系统中的权限控制
+2. **费用管理 (FeeManager)** - 管理各种交易和操作的费用
+3. **房产注册 (PropertyRegistry)** - 管理房产信息和状态
+4. **代币工厂 (TokenFactory)** - 创建和管理房产代币
+5. **市场 (Marketplace)** - 提供代币交易功能
+6. **租金分发 (RentDistributor)** - 管理租金收入的分发
+7. **赎回管理 (RedemptionManager)** - 处理代币赎回流程
+8. **持有者查询 (TokenHolderQuery)** - 提供代币持有者信息查询
+9. **系统管理 (RealEstateSystem)** - 整合和管理上述所有组件
 
-### 辅助文档
+## 主要功能
 
-- [系统流程图](./docs/系统流程图.md) - 主要业务流程的可视化说明
-- [角色功能表](./docs/角色功能表.md) - 系统角色及其权限说明
+- **房产注册和审批** - 将实物房产信息上链
+- **房产代币化** - 将房产转化为可交易的数字资产
+- **代币交易** - 通过市场合约买卖房产代币
+- **租金分发** - 按持有比例分配租金收入
+- **赎回机制** - 允许代币持有者赎回实物房产
+- **权限控制** - 多角色管理系统访问权限
+- **升级机制** - 支持合约升级和引用修复
 
-## 文档说明
+## 测试覆盖
 
-### 适用读者
+项目包含全面的测试套件，涵盖从部署到终止生命周期的各个阶段：
 
-- **开发者**: 请主要参考[技术文档](./docs/技术文档.md)和[开发部署指南](./docs/开发部署指南.md)
-- **管理员**: 请参考[用户手册](./docs/用户手册.md)的管理员部分和[主网部署指南](./docs/主网部署指南.md)
-- **投资者/用户**: 请参考[用户手册](./docs/用户手册.md)的投资者和租金部分
+1. **E2EFlow.test.js** - 端到端流程测试，涵盖完整业务流程
+2. **RealEstateSystem.test.js** - 系统合约基本功能测试
+3. **RealEstateSystem-init.js** - 初始化流程和参数兼容性测试
+4. **ManualReferenceUpdate.test.js** - 合约引用修复流程测试
+5. **UpgradeScenarios.test.js** - 合约升级场景测试
+6. **TokenInteractions.test.js** - 代币交互和功能测试
 
-### 文档版本
+## 开始使用
 
-当前文档版本: v1.0.0 (2023年3月)
-
-最近更新:
-- 完善了所有文档内容
-- 优化了部署指南
-- 添加了FAQ章节
-- 更新了主网部署相关说明
-
-### 支持和反馈
-
-如有任何问题或建议，请联系系统开发团队。
-
-# 房产通证化系统修复指南
-
-## 系统引用修复
-
-在部署过程中，`RealEstateSystem`合约的组件引用出现了错误。目前已经进行了诊断并提供了解决方案。
-
-### 问题诊断
-
-经过验证，发现`RealEstateSystem`合约中的引用存在以下问题：
-
-1. `PropertyRegistry`地址引用不正确 - 当前值指向了`FeeManager`
-2. `TokenFactory`地址引用不正确 - 当前值指向了`PropertyRegistry`
-3. 多个管理器地址为零地址（未正确设置）
-
-### 修复方案
-
-我们已经创建了脚本来生成新的合约实现并记录当前状态。修复需要手动执行以下步骤：
-
-1. 使用超级管理员权限调用`RealEstateSystem`合约的`upgradeContract`函数
-   ```solidity
-   function upgradeContract(string memory contractName, address newImplementation) external onlySuperAdmin
-   ```
-
-2. 使用以下参数调用:
-   - `contractName`: "RealEstateSystem" 
-   - `newImplementation`: 参见生成的验证文件中的`newImplementation`地址
-
-3. 升级后，调用`initialize`函数重新设置引用:
-   ```solidity
-   function initialize(
-       address _roleManager,
-       address _propertyRegistry,
-       address _tokenFactory,
-       address _rentDistributor,
-       address _marketplace,
-       address _tokenHolderQuery,
-       uint256 _chainId
-   ) public
-   ```
-
-4. 使用验证文件中的正确地址进行初始化
-
-### 运行诊断
-
-要生成最新的诊断信息和修复指南，请运行:
+### 安装依赖
 
 ```bash
-npx hardhat run scripts/manual-fix-reference.js --network <network>
+npm install
 ```
 
-该脚本将:
-1. 部署新的实现合约
-2. 生成详细的验证报告
-3. 提供具体的修复步骤
-
-### 验证修复
-
-修复完成后，可以运行以下命令验证系统状态:
+### 编译合约
 
 ```bash
-npx hardhat run scripts/verify-deployment.js --network <network>
+npx hardhat compile
 ```
 
-## 预防措施
+### 运行测试
 
-为防止未来出现类似问题，我们建议:
+运行所有测试：
 
-1. 在部署后立即运行验证脚本
-2. 确保每次升级后都进行验证
-3. 使用合约测试来验证组件之间的引用关系 
+```bash
+npx hardhat test
+```
+
+运行特定测试：
+
+```bash
+npx hardhat test test/E2EFlow.test.js
+```
+
+### 部署到测试网
+
+```bash
+npx hardhat run scripts/deploy.js --network goerli
+```
+
+## 合约升级和维护
+
+系统使用UUPS（Universal Upgradeable Proxy Standard）模式实现可升级性。所有合约都支持以下维护操作：
+
+1. **版本控制** - 每个合约都有版本号
+2. **功能升级** - 可以升级合约实现
+3. **引用修复** - 可以修复合约间的引用关系
+4. **链ID支持** - 支持跨链部署和识别
+
+## 安全考量
+
+- 所有关键操作都需要适当的角色权限
+- 使用重入锁保护资金相关操作
+- 实现紧急暂停机制
+- 支持白名单功能控制代币转账
+- 支持代币冻结机制响应紧急情况
+
+## 许可证
+
+MIT 
