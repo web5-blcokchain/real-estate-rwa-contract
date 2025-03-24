@@ -57,6 +57,9 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     // 已领取映射：分配ID => 用户地址 => 是否已领取
     mapping(uint256 => mapping(address => bool)) public hasClaimed;
 
+    // 添加多重签名清算控制
+    address public clearanceMultisig;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -377,12 +380,29 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     }
 
     /**
+     * @dev 设置清算多重签名地址
+     * @param _clearanceMultisig 清算多重签名合约地址
+     */
+    function setClearanceMultisig(address _clearanceMultisig) external onlySuperAdmin {
+        require(_clearanceMultisig != address(0), "Invalid multisig address");
+        clearanceMultisig = _clearanceMultisig;
+    }
+
+    /**
      * @dev 清算未领取的租金
      * @param distributionId 分配ID
      * @param recipient 接收者地址
      * @notice 只有在分配完成后一定时间（例如6个月）后才能调用
      */
-    function liquidateUnclaimedRent(uint256 distributionId, address recipient) external onlySuperAdmin nonReentrant {
+    function liquidateUnclaimedRent(uint256 distributionId, address recipient) external nonReentrant {
+        // 检查调用者是超级管理员或已授权的多重签名合约
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            (clearanceMultisig != address(0) && msg.sender == clearanceMultisig),
+            "Caller is not authorized to liquidate"
+        );
+        
+        require(recipient != address(0), "Invalid recipient address");
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(distribution.isProcessed, "Distribution not processed");
         

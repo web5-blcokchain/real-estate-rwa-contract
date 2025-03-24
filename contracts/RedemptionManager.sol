@@ -306,9 +306,27 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
             revert InsufficientStablecoinBalance(stablecoinAddress, stablecoinAmount, allowance);
         }
         
-        // 计算赎回费用
-        uint256 redemptionFee = (stablecoinAmount * feeManager.redemptionFee()) / 10000;
+        // 计算赎回费用（安全计算，防止溢出）
+        uint256 fee = feeManager.redemptionFee();
+        uint256 redemptionFee;
+        
+        // 检查费率是否合理，最大不超过25%
+        if (fee > 2500) {
+            fee = 2500; // 限制最大费率为25%
+        }
+        
+        redemptionFee = (stablecoinAmount * fee) / 10000;
+        
+        // 确保费用不超过总金额的90%，保护用户
+        uint256 maxFee = (stablecoinAmount * 9000) / 10000;
+        if (redemptionFee > maxFee) {
+            redemptionFee = maxFee;
+        }
+        
         uint256 requesterAmount = stablecoinAmount - redemptionFee;
+        
+        // 确保请求者至少能收到10%的金额
+        require(requesterAmount >= (stablecoinAmount / 10), "Fee too high, requester amount too low");
         
         // 转移稳定币给请求者
         bool success = stablecoin.transferFrom(msg.sender, request.requester, requesterAmount);

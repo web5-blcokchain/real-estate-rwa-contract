@@ -360,6 +360,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      * @param newStatus 新状态
      */
     function setPropertyStatus(string memory propertyId, PropertyStatus newStatus) external {
+        // 检查propertyId不为空
+        require(bytes(propertyId).length > 0, "Property ID cannot be empty");
+        
         // 检查调用者是否是超级管理员或有房产管理权限
         require(
             roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
@@ -382,6 +385,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      * @param newStatus 新状态
      */
     function setPropertyStatus(uint256 propertyId, PropertyStatus newStatus) external {
+        // 检查propertyId不为0
+        require(propertyId > 0, "Property ID cannot be zero");
+        
         string memory propertyIdStr = uint256ToString(propertyId);
         // 检查调用者是否是超级管理员或有房产管理权限
         require(

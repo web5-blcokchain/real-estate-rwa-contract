@@ -23,6 +23,9 @@ contract Marketplace is
     // 合约版本，用于追踪升级
     uint256 public version;
     
+    // 暂停状态标志
+    bool public paused;
+    
     // 订单状态
     enum OrderStatus {
         Active,
@@ -71,6 +74,8 @@ contract Marketplace is
     event VersionUpdated(uint256 oldVersion, uint256 newVersion);
     event MarketplaceInitialized(address deployer, address roleManager, address feeManager, uint256 version);
     event TradingFeeCollected(uint256 orderId, uint256 feeAmount, address feeToken);
+    event MarketplacePaused(address indexed admin);
+    event MarketplaceUnpaused(address indexed admin);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -121,8 +126,36 @@ contract Marketplace is
      * @param _stablecoin 稳定币地址
      */
     function removeSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
-        supportedStablecoins[_stablecoin] = false;
-        emit StablecoinStatusUpdated(_stablecoin, false);
+        // 检查稳定币是否已经在支持列表中
+        if (supportedStablecoins[_stablecoin]) {
+            // 从映射中移除
+            supportedStablecoins[_stablecoin] = false;
+            emit StablecoinStatusUpdated(_stablecoin, false);
+        }
+    }
+
+    /**
+     * @dev 修饰器：检查合约是否处于暂停状态
+     */
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+    
+    /**
+     * @dev 暂停合约交易
+     */
+    function pause() external onlySuperAdmin {
+        paused = true;
+        emit MarketplacePaused(msg.sender);
+    }
+    
+    /**
+     * @dev 恢复合约交易
+     */
+    function unpause() external onlySuperAdmin {
+        paused = false;
+        emit MarketplaceUnpaused(msg.sender);
     }
 
     /**
@@ -137,7 +170,7 @@ contract Marketplace is
         uint256 tokenAmount,
         uint256 price,
         address stablecoinAddress
-    ) external nonReentrant returns (uint256) {
+    ) external nonReentrant whenNotPaused returns (uint256) {
         // 参数验证
         if (tokenAddress == address(0) || tokenAmount == 0 || price == 0 || stablecoinAddress == address(0)) {
             revert InvalidOrderParameters();
@@ -182,7 +215,7 @@ contract Marketplace is
      * @dev 完成订单
      * @param orderId 订单ID
      */
-    function fulfillOrder(uint256 orderId) external nonReentrant {
+    function fulfillOrder(uint256 orderId) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
         
         // 检查订单状态
@@ -245,7 +278,7 @@ contract Marketplace is
      * @dev 取消订单
      * @param orderId 订单ID
      */
-    function cancelOrder(uint256 orderId) external nonReentrant {
+    function cancelOrder(uint256 orderId) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
         
         // 检查订单状态
@@ -276,7 +309,7 @@ contract Marketplace is
      * @param orderId 订单ID
      * @param newPrice 新价格
      */
-    function updateOrderPrice(uint256 orderId, uint256 newPrice) external {
+    function updateOrderPrice(uint256 orderId, uint256 newPrice) external whenNotPaused {
         require(newPrice > 0, "Invalid price");
         
         Order storage order = orders[orderId];
