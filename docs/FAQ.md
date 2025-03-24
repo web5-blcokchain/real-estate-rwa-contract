@@ -5,6 +5,7 @@
 ## 目录
 
 - [部署相关问题](#部署相关问题)
+- [角色和权限管理问题](#角色和权限管理问题)
 - [合约开发问题](#合约开发问题)
 - [测试相关问题](#测试相关问题)
 - [系统功能问题](#系统功能问题)
@@ -34,9 +35,46 @@ A: 部署脚本主要使用以下环境变量：
 - `BSCSCAN_API_KEY`: 用于在BSCScan上验证合约
 - 各种费用设置：`TRADING_FEE`, `TOKENIZATION_FEE`, `REDEMPTION_FEE`, `PLATFORM_FEE`, `MAINTENANCE_FEE`等
 
-### Q: 部署过程中的私钥是如何使用的？
+### Q: 关于PRIVATE_KEY环境变量的使用和安全管理？
 
-A: 私钥不直接在部署脚本中使用，而是通过Hardhat配置安全加载。当脚本通过`ethers.getSigners()`获取签名者时，Hardhat使用配置中的私钥创建签名者对象。私钥仅在内存中使用，不会被存储在任何部署日志或记录中。
+A: PRIVATE_KEY环境变量是用于部署合约的钱包私钥，系统提供了多种管理这个私钥的方式：
+
+1. **直接在`.env`文件中设置（最简单但安全性较低）**：
+   - 在项目根目录创建一个`.env`文件并添加：
+     ```
+     PRIVATE_KEY=你的私钥（不带0x前缀）
+     ```
+   - 部署脚本会自动从环境变量中读取这个私钥
+   - 注意：**不要**将包含私钥的`.env`文件提交到版本控制系统中
+
+2. **使用secure-key.js工具加密存储（推荐用于测试网和主网部署）**：
+   - 这种方法不需要在`.env`文件中写入明文私钥
+   - 需要执行以下两个步骤：
+     ```bash
+     # 第一步：生成加密密钥（仅首次使用需要）
+     node scripts/utils/secure-key.js generate
+     
+     # 第二步：设置并加密私钥
+     node scripts/utils/secure-key.js setup
+     ```
+   - 之后部署脚本会自动从加密存储中读取私钥，不再需要在`.env`文件中设置PRIVATE_KEY
+
+3. **部署过程中的优先级**：
+   - 系统会先检查`.env`文件中是否有PRIVATE_KEY
+   - 如果没有找到，则尝试从加密存储中读取
+   - 如果两者都没有，将显示错误并使用默认私钥（仅用于开发，无实际价值）
+
+4. **错误排查**：
+   - 如果遇到"使用默认私钥"的警告，表示系统无法找到有效的私钥
+   - 如果使用了secure-key.js但部署失败，请确认：
+     - `.key`文件存在（加密密钥）
+     - `.encrypted_key`文件存在（加密后的私钥）
+     - 文件权限正确（600，仅所有者可读写）
+
+5. **主网部署最佳实践**：
+   - 使用临时部署私钥，部署后转移权限
+   - 使用secure-key.js工具而非直接在环境变量中设置
+   - 考虑使用专用的部署环境，避免在共享设备上存储密钥
 
 ### Q: 如何解决合约大小超限的问题？
 
@@ -67,6 +105,108 @@ npx hardhat run scripts/verify-deployment.js --network <network_name>
 - 合约间的引用关系正确设置
 - 角色和权限正确分配
 - 核心功能配置正确
+
+## 角色和权限管理问题
+
+### Q: 系统中的角色和权限是如何工作的？
+
+A: 系统基于OpenZeppelin的AccessControl实现了一套完整的权限管理系统：
+
+1. **核心角色**：
+   - `DEFAULT_ADMIN_ROLE`: 基础管理员角色，拥有授予/撤销其他角色的权限
+   - `SUPER_ADMIN`: 系统超级管理员，可以管理所有系统功能
+   - `PROPERTY_MANAGER`: 房产管理员，可以管理房产注册和审核
+   - `FEE_COLLECTOR`: 费用收集者，可以从系统中提取收取的费用
+
+2. **角色分配逻辑**：
+   - 部署者账户初始拥有`DEFAULT_ADMIN_ROLE`
+   - 部署过程中，部署者被授予`SUPER_ADMIN`角色
+   - `SUPER_ADMIN`可以进一步分配其他角色
+
+3. **权限检查流程**：
+   - 合约中的受保护函数使用`onlyRole`修饰器验证调用者是否拥有所需角色
+   - 对关键操作的权限控制确保系统安全
+
+### Q: 常见的RoleManager相关问题有哪些？
+
+A: 以下是一些常见的角色管理问题及其解决方案：
+
+1. **部署者没有DEFAULT_ADMIN_ROLE**：
+   - 症状：部署后无法授予角色，权限验证失败
+   - 原因：RoleManager合约初始化过程中没有正确授予部署者`DEFAULT_ADMIN_ROLE`
+   - 解决方案：
+     - 在本地开发环境中，重置Hardhat节点并重新部署
+     - 确保deploy-unified.js中执行了步骤11（授予角色）
+     - 使用debug-role-manager.js脚本检查权限状态
+
+2. **无法授予SUPER_ADMIN角色**：
+   - 症状：尝试授予SUPER_ADMIN角色时交易失败
+   - 原因：调用者没有DEFAULT_ADMIN_ROLE
+   - 解决方案：
+     - 首先确认调用者已有DEFAULT_ADMIN_ROLE
+     - 使用grant-roles.js脚本执行角色授予
+
+3. **权限检查失败**：
+   - 症状：调用特定函数时出现"caller is not a super admin"等错误
+   - 原因：账户缺少所需角色权限
+   - 解决方案：
+     - 检查RoleManager合约中账户的角色状态
+     - 使用拥有适当权限的账户执行操作
+     - 通过正确的管理员账户授予所需角色
+
+### Q: 如何排查和修复角色权限问题？
+
+A: 系统提供了多个工具脚本来帮助排查和修复角色权限问题：
+
+1. **debug-role-manager.js**：
+   ```bash
+   npx hardhat run scripts/debug-role-manager.js --network <network_name>
+   ```
+   - 检查部署者和关键合约的角色状态
+   - 验证RoleManager是否正确初始化
+   - 提供针对性的解决方案建议
+
+2. **grant-roles.js**：
+   ```bash
+   npx hardhat run scripts/grant-roles.js --network <network_name>
+   ```
+   - 授予部署者所有必要的角色
+   - 为各系统合约分配适当的角色权限
+   - 验证授权结果
+
+3. **fix-role-manager.js**：
+   ```bash
+   npx hardhat run scripts/fix-role-manager.js --network <network_name>
+   ```
+   - 尝试检测并修复RoleManager合约中的权限问题
+   - 必要时部署新的RoleManager实例并更新部署记录
+
+4. **reset-hardhat-node.js**：
+   ```bash
+   npx hardhat run scripts/reset-hardhat-node.js
+   ```
+   - 提供重置本地开发环境的完整指南
+   - 详细说明如何解决权限初始化问题
+
+### Q: 如何避免在部署过程中出现角色权限问题？
+
+A: 遵循以下最佳实践可以减少角色权限问题的发生：
+
+1. **确保正确执行所有部署步骤**：
+   - 不要跳过deploy-unified.js中的步骤11（授予角色）
+   - 或者部署后立即使用grant-roles.js脚本授予角色
+
+2. **部署后验证**：
+   - 部署完成后立即验证角色分配状态
+   - 使用debug-role-manager.js检查关键角色是否正确分配
+
+3. **自动化测试**：
+   - 在测试过程中验证角色授予和权限检查逻辑
+   - 模拟不同角色的操作场景
+
+4. **明确记录角色分配**：
+   - 维护一个明确的角色分配文档
+   - 记录哪些地址拥有哪些角色权限
 
 ## 合约开发问题
 

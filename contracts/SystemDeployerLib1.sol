@@ -58,11 +58,11 @@ library SystemDeployerLib1 {
     /**
      * @dev 部署租金分发合约
      */
-    function deployStep4_RentDistributor(address roleManagerAddress) external returns (address) {
+    function deployStep4_RentDistributor(address roleManagerAddress, address feeManagerAddress) external returns (address) {
         RentDistributor impl = new RentDistributor();
         return _deployProxy(
             address(impl),
-            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, roleManagerAddress)
+            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, roleManagerAddress, feeManagerAddress)
         );
     }
     

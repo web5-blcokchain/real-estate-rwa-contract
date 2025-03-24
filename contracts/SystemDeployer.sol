@@ -189,7 +189,7 @@ contract SystemDeployer is SystemDeployerBase {
      * @dev 部署租金分发合约
      */
     function _deployStep4_RentDistributor() private {
-        rentDistributorAddress = SystemDeployerLib1.deployStep4_RentDistributor(roleManagerAddress);
+        rentDistributorAddress = SystemDeployerLib1.deployStep4_RentDistributor(roleManagerAddress, feeManagerAddress);
         deploymentProgress = 4;
         emit DeploymentProgress(deploymentProgress, "RentDistributor", rentDistributorAddress);
     }
@@ -210,7 +210,8 @@ contract SystemDeployer is SystemDeployerBase {
         tokenFactoryAddress = SystemDeployerLib2.deployStep6_TokenFactory(
             roleManagerAddress,
             propertyRegistryAddress,
-            tokenImplementationAddress
+            tokenImplementationAddress,
+            rentDistributorAddress
         );
         deploymentProgress = 6;
         emit DeploymentProgress(deploymentProgress, "TokenFactory", tokenFactoryAddress);
@@ -244,7 +245,7 @@ contract SystemDeployer is SystemDeployerBase {
      * @dev 部署代币持有者查询合约
      */
     function _deployStep9_TokenHolderQuery() private {
-        tokenHolderQueryAddress = SystemDeployerLib2.deployStep9_TokenHolderQuery();
+        tokenHolderQueryAddress = SystemDeployerLib2.deployStep9_TokenHolderQuery(roleManagerAddress);
         deploymentProgress = 9;
         emit DeploymentProgress(deploymentProgress, "TokenHolderQuery", tokenHolderQueryAddress);
     }

@@ -178,10 +178,32 @@ async function main() {
       deployLogger.info("正在使用本地网络，确保本地节点已启动");
     }
     
+    // 先部署库合约
+    deployLogger.info("部署库合约 SystemDeployerLib1...");
+    const SystemDeployerLib1 = await ethers.getContractFactory("SystemDeployerLib1");
+    const lib1DeployFn = () => SystemDeployerLib1.deploy();
+    const lib1 = await deployWithRetry("SystemDeployerLib1", SystemDeployerLib1, lib1DeployFn);
+    await lib1.deployed();
+    deployLogger.info(`SystemDeployerLib1部署成功: ${lib1.address}`);
+    
+    deployLogger.info("部署库合约 SystemDeployerLib2...");
+    const SystemDeployerLib2 = await ethers.getContractFactory("SystemDeployerLib2");
+    const lib2DeployFn = () => SystemDeployerLib2.deploy();
+    const lib2 = await deployWithRetry("SystemDeployerLib2", SystemDeployerLib2, lib2DeployFn);
+    await lib2.deployed();
+    deployLogger.info(`SystemDeployerLib2部署成功: ${lib2.address}`);
+    
+    // 链接库合约到SystemDeployer
+    deployLogger.info("链接库合约到SystemDeployer...");
+    const SystemDeployer = await ethers.getContractFactory("SystemDeployer", {
+      libraries: {
+        SystemDeployerLib1: lib1.address,
+        SystemDeployerLib2: lib2.address
+      }
+    });
+    
     // 部署SystemDeployer合约
     deployLogger.info("部署 SystemDeployer...");
-    
-    const SystemDeployer = await ethers.getContractFactory("SystemDeployer");
     const deployerContractFn = () => SystemDeployer.deploy();
     const deployer_contract = await deployWithRetry("SystemDeployer", SystemDeployer, deployerContractFn);
     
@@ -194,14 +216,23 @@ async function main() {
     // 逐步部署系统
     deployLogger.info("开始逐步部署系统...");
     
-    // 部署总共11个步骤
-    for (let step = 1; step <= 11; step++) {
+    // 部署总共10个步骤，暂时跳过步骤11
+    for (let step = 1; step <= 10; step++) {
       try {
         await deployStep(deployer_contract, step);
       } catch (error) {
         deployLogger.error(`步骤 ${step} 部署失败: ${error.message}`);
         throw error;
       }
+    }
+    
+    // 执行步骤11
+    deployLogger.info("执行步骤11 (授予角色)...");
+    try {
+      await deployStep(deployer_contract, 11);
+    } catch (error) {
+      deployLogger.error(`步骤11 部署失败: ${error.message}`);
+      deployLogger.warn("角色授予失败，可能需要手动执行 npx hardhat run scripts/grant-roles.js --network localhost");
     }
     
     deployLogger.info("系统部署完成");
