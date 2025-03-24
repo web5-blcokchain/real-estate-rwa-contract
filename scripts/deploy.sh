@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# 备用部署脚本！！！！
 # 加载环境变量
 if [ -f .env ]; then
   export $(cat .env | grep -v '#' | awk '/=/ {print $1}')

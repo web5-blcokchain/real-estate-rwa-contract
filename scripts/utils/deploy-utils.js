@@ -73,7 +73,15 @@ function getEnv(key, defaultValue = "") {
 
 // 获取网络配置
 function getNetworkConfig() {
-  const network = getEnv("DEPLOY_NETWORK", "localhost");
+  // 使用与hardhat.config.js一致的网络名称
+  const network = getEnv("DEPLOY_NETWORK", "hardhat");
+  
+  // 验证网络名称是否有效
+  const validNetworks = ["hardhat", "bsc_mainnet", "bsc_testnet"];
+  if (!validNetworks.includes(network)) {
+    console.warn(`警告: 不支持的网络名称 "${network}"，有效的网络名称: ${validNetworks.join(", ")}`);
+  }
+  
   console.log(`部署网络: ${network}`);
   return network;
 }

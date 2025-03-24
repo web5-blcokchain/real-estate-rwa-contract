@@ -47,6 +47,7 @@ module.exports = {
   
   // 角色地址 - 从.env读取
   roles: {
+    // 确保与deploy-utils.js中的getRoles()函数返回的角色名称一致
     superAdmin: getEnv("SUPER_ADMIN_ADDRESS", ""),
     propertyManager: getEnv("PROPERTY_MANAGER_ADDRESS", ""),
     feeCollector: getEnv("FEE_COLLECTOR_ADDRESS", "")
