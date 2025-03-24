@@ -164,6 +164,25 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     }
     
     /**
+     * @dev 根据房产信息创建新代币（公共接口）
+     * @param propertyId 房产ID
+     * @param tokenName 代币名称
+     * @param tokenSymbol 代币简称
+     * @param initialSupply 初始供应量
+     * @param maxSupply 最大供应量
+     * @return 代币合约地址
+     */
+    function createTokenPublic(
+        string memory propertyId,
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint256 initialSupply,
+        uint256 maxSupply
+    ) external onlySuperAdmin returns (address) {
+        return createToken(propertyId, tokenName, tokenSymbol, initialSupply, maxSupply);
+    }
+    
+    /**
      * @dev 创建单个代币（公共接口）
      * @param _name 代币名称
      * @param _symbol 代币符号
@@ -184,7 +203,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
             "Caller is not authorized to create tokens"
         );
         
-        return createTokenPublic(_propertyId, _name, _symbol, _initialSupply, 0);
+        return createToken(_propertyId, _name, _symbol, _initialSupply, 0);
     }
     
     /**
@@ -273,24 +292,5 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory propId = tokenToProperty[tokenAddress];
         require(bytes(propId).length > 0, "Token not found");
         return propId;
-    }
-    
-    /**
-     * @dev 根据房产信息创建新代币（公共接口）
-     * @param propertyId 房产ID
-     * @param tokenName 代币名称
-     * @param tokenSymbol 代币简称
-     * @param initialSupply 初始供应量
-     * @param maxSupply 最大供应量
-     * @return 代币合约地址
-     */
-    function createTokenPublic(
-        string memory propertyId,
-        string memory tokenName,
-        string memory tokenSymbol,
-        uint256 initialSupply,
-        uint256 maxSupply
-    ) external onlySuperAdmin returns (address) {
-        return createToken(propertyId, tokenName, tokenSymbol, initialSupply, maxSupply);
     }
 }

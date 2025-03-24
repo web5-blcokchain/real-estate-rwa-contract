@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,7 +14,7 @@ import "./FeeManager.sol";
  * @title RentDistributor
  * @dev 管理租金收集和分配（可升级版本）
  */
-contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     RoleManager public roleManager;
     FeeManager public feeManager;
     
@@ -63,6 +64,20 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     // 未领取的总租金金额
     uint256 public unclaimedAmount;
     
+    /**
+     * @dev 存储未领取的稳定币信息
+     */
+    struct UnclaimedStablecoin {
+        address stablecoinAddress;
+        uint256 amount;
+    }
+    
+    // 未领取的稳定币数组
+    UnclaimedStablecoin[] public unclaimedStablecoins;
+    
+    // 未领取稳定币的映射：稳定币地址 => 未领取总额
+    mapping(address => uint256) public unclaimedByStablecoin;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -73,6 +88,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
      */
     function initialize(address _roleManager, address _feeManager) public initializer {
         __ReentrancyGuard_init();
+        __Pausable_init();
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
@@ -130,7 +146,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         address stablecoinAddress, 
         uint256 amount,
         string memory rentalPeriod
-    ) external onlyPropertyManager nonReentrant {
+    ) external onlyPropertyManager nonReentrant whenNotPaused {
         require(bytes(propertyId).length > 0, "Property ID cannot be empty");
         require(tokenAddress != address(0), "Invalid token address");
         require(supportedStablecoins[stablecoinAddress], "Unsupported stablecoin");
@@ -172,7 +188,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
      * @dev 处理租金分配
      * @param distributionId 分配ID
      */
-    function processRentDistribution(uint256 distributionId) external nonReentrant onlyPropertyManager() {
+    function processRentDistribution(uint256 distributionId) external nonReentrant onlyPropertyManager whenNotPaused {
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(!distribution.isProcessed, "Already processed");
         
@@ -242,7 +258,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
      * @dev 领取租金
      * @param distributionId 分配ID
      */
-    function claimRent(uint256 distributionId) external nonReentrant {
+    function claimRent(uint256 distributionId) external nonReentrant whenNotPaused {
         require(distributionId > 0 && distributionId <= distributionCount, "Invalid distribution ID");
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(distribution.isProcessed, "Distribution not processed");
@@ -291,6 +307,158 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     }
 
     /**
+     * @dev 标记过期分配中的未领取租金
+     * @param distributionId 分配ID
+     */
+    function markUnclaimedRent(uint256 distributionId) external onlySuperAdmin nonReentrant {
+        RentDistribution storage distribution = rentDistributions[distributionId];
+        require(distribution.isProcessed, "Distribution not processed");
+        
+        // 使用创建快照的时间（即分配处理的时间）作为计算基准
+        // 要求至少6个月的清算期限
+        uint256 liquidationPeriod = 180 days;
+        require(block.timestamp >= distribution.approvalTime + liquidationPeriod, 
+                "Liquidation period not reached");
+        
+        // 计算未领取的金额
+        uint256 unclaimed = distribution.netAmount - distribution.totalClaimed;
+        require(unclaimed > 0, "No unclaimed amount");
+        
+        // 记录稳定币地址和金额
+        address stablecoinAddress = distribution.stablecoinAddress;
+        
+        // 如果这个稳定币是首次被标记未领取
+        if (unclaimedByStablecoin[stablecoinAddress] == 0) {
+            unclaimedStablecoins.push(UnclaimedStablecoin({
+                stablecoinAddress: stablecoinAddress,
+                amount: unclaimed
+            }));
+        } else {
+            // 更新现有稳定币的未领取金额
+            unclaimedByStablecoin[stablecoinAddress] += unclaimed;
+            
+            // 更新数组中的记录
+            for (uint256 i = 0; i < unclaimedStablecoins.length; i++) {
+                if (unclaimedStablecoins[i].stablecoinAddress == stablecoinAddress) {
+                    unclaimedStablecoins[i].amount += unclaimed;
+                    break;
+                }
+            }
+        }
+        
+        // 更新总的未领取金额
+        unclaimedAmount += unclaimed;
+        
+        // 记录原始金额用于事件记录
+        uint256 amountToLiquidate = unclaimed;
+        
+        // 重置未领取金额，防止重入
+        distribution.netAmount = distribution.totalClaimed;
+        
+        // 触发事件
+        emit DistributionUnclaimedMarked(distributionId, stablecoinAddress, amountToLiquidate);
+    }
+    
+    // 未领取分配标记事件
+    event DistributionUnclaimedMarked(uint256 indexed distributionId, address indexed stablecoin, uint256 amount);
+    
+    /**
+     * @dev 清算指定稳定币的未领取租金
+     * @param stablecoinAddress 稳定币地址
+     */
+    function liquidateUnclaimedStablecoin(address stablecoinAddress) external onlySuperAdmin nonReentrant {
+        require(stablecoinAddress != address(0), "Invalid stablecoin address");
+        require(unclaimedByStablecoin[stablecoinAddress] > 0, "No unclaimed amount for this stablecoin");
+        
+        // 保存当前未认领的金额
+        uint256 amount = unclaimedByStablecoin[stablecoinAddress];
+        
+        // 先重置状态变量，防止重入攻击
+        unclaimedByStablecoin[stablecoinAddress] = 0;
+        unclaimedAmount -= amount;
+        
+        // 更新数组中的记录
+        for (uint256 i = 0; i < unclaimedStablecoins.length; i++) {
+            if (unclaimedStablecoins[i].stablecoinAddress == stablecoinAddress) {
+                // 如果是数组最后一个元素，直接移除
+                if (i < unclaimedStablecoins.length - 1) {
+                    unclaimedStablecoins[i] = unclaimedStablecoins[unclaimedStablecoins.length - 1];
+                }
+                unclaimedStablecoins.pop();
+                break;
+            }
+        }
+        
+        // 触发事件
+        address feeCollectorAddress = address(feeManager.feeCollector());
+        require(feeCollectorAddress != address(0), "Fee collector not set");
+        
+        emit UnclaimedRentLiquidated(feeCollectorAddress, stablecoinAddress, amount);
+        
+        // 最后执行转账操作
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        bool success = stablecoin.transfer(feeCollectorAddress, amount);
+        require(success, "Stablecoin transfer failed");
+    }
+    
+    /**
+     * @dev 批量清算所有未领取的租金
+     */
+    function liquidateAllUnclaimed() external onlySuperAdmin nonReentrant {
+        require(unclaimedStablecoins.length > 0, "No unclaimed stablecoins");
+        
+        address feeCollectorAddress = address(feeManager.feeCollector());
+        require(feeCollectorAddress != address(0), "Fee collector not set");
+        
+        // 记录总未领取金额用于事件
+        uint256 totalAmount = unclaimedAmount;
+        
+        // 遍历所有未领取的稳定币进行清算
+        for (uint256 i = 0; i < unclaimedStablecoins.length; i++) {
+            address stablecoinAddr = unclaimedStablecoins[i].stablecoinAddress;
+            uint256 amount = unclaimedStablecoins[i].amount;
+            
+            if (amount > 0) {
+                // 重置金额
+                unclaimedByStablecoin[stablecoinAddr] = 0;
+                
+                // 触发事件
+                emit UnclaimedRentLiquidated(feeCollectorAddress, stablecoinAddr, amount);
+                
+                // 转账
+                IERC20 stablecoin = IERC20(stablecoinAddr);
+                bool success = stablecoin.transfer(feeCollectorAddress, amount);
+                
+                // 即使单个转账失败也继续处理其他稳定币
+                if (!success) {
+                    emit LiquidationFailed(stablecoinAddr, amount, "Transfer failed");
+                }
+            }
+        }
+        
+        // 清空未领取数组和总额
+        delete unclaimedStablecoins;
+        unclaimedAmount = 0;
+        
+        emit AllUnclaimedLiquidated(feeCollectorAddress, totalAmount);
+    }
+    
+    // 未领取租金清算事件
+    event UnclaimedRentLiquidated(address indexed recipient, address indexed stablecoin, uint256 amount);
+    event AllUnclaimedLiquidated(address indexed recipient, uint256 totalAmount);
+    event LiquidationFailed(address indexed stablecoin, uint256 amount, string reason);
+    
+    /**
+     * @dev 接收ETH的回退函数
+     */
+    receive() external payable {
+        emit ETHReceived(msg.sender, msg.value);
+    }
+    
+    // ETH接收事件
+    event ETHReceived(address indexed sender, uint256 amount);
+
+    /**
      * @dev 获取用户可领取的租金
      * @param distributionId 分配ID
      * @param user 用户地址
@@ -330,7 +498,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
      * @dev 提取维护费用
      * @param distributionId 分配ID
      */
-    function withdrawMaintenanceFee(uint256 distributionId) external onlyPropertyManager nonReentrant {
+    function withdrawMaintenanceFee(uint256 distributionId) external onlyPropertyManager nonReentrant whenNotPaused {
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(distribution.isProcessed, "Distribution not processed");
         require(distribution.maintenanceFee > 0, "No maintenance fee");
@@ -392,29 +560,6 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
     }
 
     /**
-     * @dev 清算未领取的租金
-     */
-    function liquidateUnclaimedRent() external onlySuperAdmin nonReentrant {
-        require(unclaimedAmount > 0, "No unclaimed rent");
-        
-        // 保存当前未认领的金额
-        uint256 amount = unclaimedAmount;
-        
-        // 先重置状态变量，防止重入攻击
-        unclaimedAmount = 0;
-        
-        // 触发事件
-        emit UnclaimedRentLiquidated(msg.sender, amount);
-        
-        // 最后执行转账操作
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Transfer failed");
-    }
-    
-    // 未领取租金清算事件
-    event UnclaimedRentLiquidated(address indexed recipient, uint256 amount);
-
-    /**
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {
@@ -422,5 +567,19 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         uint256 oldVersion = version;
         version += 1;
         emit VersionUpdated(oldVersion, version);
+    }
+
+    /**
+     * @dev 暂停合约功能
+     */
+    function pause() external onlySuperAdmin {
+        _pause();
+    }
+
+    /**
+     * @dev 恢复合约功能
+     */
+    function unpause() external onlySuperAdmin {
+        _unpause();
     }
 }
