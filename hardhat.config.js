@@ -23,7 +23,10 @@ module.exports = {
         enabled: true,
         runs: 1
       },
-      viaIR: true
+      viaIR: true,
+      debug: {
+        revertStrings: "strip"  // 减少 revert 字符串的大小
+      }
     }
   },
   networks: {

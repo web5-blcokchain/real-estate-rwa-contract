@@ -1,23 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "./RoleManager.sol";
-import "./FeeManager.sol";
-import "./PropertyRegistry.sol";
-import "./TokenFactory.sol";
-import "./RedemptionManager.sol";
-import "./RentDistributor.sol";
-import "./Marketplace.sol";
-import "./TokenHolderQuery.sol";
-import "./RealEstateToken.sol";
-import "./RealEstateSystem.sol";
+import "./SystemDeployerLib1.sol";
+import "./SystemDeployerLib2.sol";
 
 /**
- * @title SystemDeployer
- * @dev 负责部署整个房产通证化系统的所有合约
+ * @title SystemDeployerBase
+ * @dev 基础部署器合约，存储状态和基础功能
  */
-contract SystemDeployer {
+contract SystemDeployerBase {
     // 部署后的系统合约地址
     address public systemAddress;
     
@@ -38,6 +29,13 @@ contract SystemDeployer {
     // 部署者地址
     address public deployer;
     
+    // 错误
+    error OnlyDeployer();
+    error StepAlreadyDeployed(uint8 step);
+    error InvalidStepNumber(uint8 step);
+    error StepsMustBeSequential(uint8 step, uint8 currentProgress);
+    error DeploymentFailed(uint8 step, string reason);
+    
     // 事件
     event SystemDeployed(
         address systemAddress,
@@ -52,243 +50,11 @@ contract SystemDeployer {
     );
     
     event DeploymentProgress(uint8 step, string contractName, address contractAddress);
+    event DeploymentError(uint8 step, string reason);
 
     constructor() {
         deploymentProgress = 0;
         deployer = msg.sender;
-    }
-
-    /**
-     * @dev 部署单个步骤
-     * @param step 要部署的步骤编号
-     */
-    function deployStep(uint8 step) external {
-        require(msg.sender == deployer, "Only deployer can call");
-        require(step > deploymentProgress, "Step already deployed");
-        require(step <= 11, "Invalid step number");
-        
-        // 确保步骤按顺序进行
-        require(step == deploymentProgress + 1, "Steps must be sequential");
-        
-        if (step == 1) _deployStep1_RoleManager();
-        else if (step == 2) _deployStep2_FeeManager();
-        else if (step == 3) _deployStep3_PropertyRegistry();
-        else if (step == 4) _deployStep4_RentDistributor();
-        else if (step == 5) _deployStep5_TokenImplementation();
-        else if (step == 6) _deployStep6_TokenFactory();
-        else if (step == 7) _deployStep7_RedemptionManager();
-        else if (step == 8) _deployStep8_Marketplace();
-        else if (step == 9) _deployStep9_TokenHolderQuery();
-        else if (step == 10) _deployStep10_RealEstateSystem();
-        else if (step == 11) _deployStep11_GrantRoles();
-        
-        // 如果所有步骤都已部署，发出完成事件
-        if (step == 11) {
-            emit SystemDeployed(
-                systemAddress,
-                roleManagerAddress,
-                feeManagerAddress,
-                propertyRegistryAddress,
-                tokenFactoryAddress,
-                redemptionManagerAddress,
-                rentDistributorAddress,
-                marketplaceAddress,
-                tokenHolderQueryAddress
-            );
-        }
-    }
-    
-    /**
-     * @dev 部署角色管理合约
-     */
-    function _deployStep1_RoleManager() private {
-        RoleManager roleManagerImpl = new RoleManager();
-        ERC1967Proxy roleManagerProxy = new ERC1967Proxy(
-            address(roleManagerImpl),
-            abi.encodeWithSelector(RoleManager(address(0)).initialize.selector)
-        );
-        roleManagerAddress = address(roleManagerProxy);
-        
-        deploymentProgress = 1;
-        emit DeploymentProgress(deploymentProgress, "RoleManager", roleManagerAddress);
-    }
-    
-    /**
-     * @dev 部署费用管理合约
-     */
-    function _deployStep2_FeeManager() private {
-        FeeManager feeManagerImpl = new FeeManager();
-        ERC1967Proxy feeManagerProxy = new ERC1967Proxy(
-            address(feeManagerImpl),
-            abi.encodeWithSelector(FeeManager(address(0)).initialize.selector, roleManagerAddress)
-        );
-        feeManagerAddress = address(feeManagerProxy);
-        
-        deploymentProgress = 2;
-        emit DeploymentProgress(deploymentProgress, "FeeManager", feeManagerAddress);
-    }
-    
-    /**
-     * @dev 部署房产注册合约
-     */
-    function _deployStep3_PropertyRegistry() private {
-        PropertyRegistry propertyRegistryImpl = new PropertyRegistry();
-        ERC1967Proxy propertyRegistryProxy = new ERC1967Proxy(
-            address(propertyRegistryImpl),
-            abi.encodeWithSelector(PropertyRegistry(address(0)).initialize.selector, roleManagerAddress)
-        );
-        propertyRegistryAddress = address(propertyRegistryProxy);
-        
-        deploymentProgress = 3;
-        emit DeploymentProgress(deploymentProgress, "PropertyRegistry", propertyRegistryAddress);
-    }
-    
-    /**
-     * @dev 部署租金分配合约
-     */
-    function _deployStep4_RentDistributor() private {
-        RentDistributor rentDistributorImpl = new RentDistributor();
-        ERC1967Proxy rentDistributorProxy = new ERC1967Proxy(
-            address(rentDistributorImpl),
-            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, roleManagerAddress, feeManagerAddress)
-        );
-        rentDistributorAddress = address(rentDistributorProxy);
-        
-        deploymentProgress = 4;
-        emit DeploymentProgress(deploymentProgress, "RentDistributor", rentDistributorAddress);
-    }
-    
-    /**
-     * @dev 部署代币实现
-     */
-    function _deployStep5_TokenImplementation() private {
-        RealEstateToken tokenImpl = new RealEstateToken();
-        tokenImplementationAddress = address(tokenImpl);
-        
-        deploymentProgress = 5;
-        emit DeploymentProgress(deploymentProgress, "TokenImplementation", tokenImplementationAddress);
-    }
-    
-    /**
-     * @dev 部署代币工厂合约
-     */
-    function _deployStep6_TokenFactory() private {
-        TokenFactory tokenFactoryImpl = new TokenFactory();
-        ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
-            address(tokenFactoryImpl),
-            abi.encodeWithSelector(
-                TokenFactory(address(0)).initialize.selector, 
-                roleManagerAddress, 
-                propertyRegistryAddress, 
-                tokenImplementationAddress,
-                rentDistributorAddress
-            )
-        );
-        tokenFactoryAddress = address(tokenFactoryProxy);
-        
-        deploymentProgress = 6;
-        emit DeploymentProgress(deploymentProgress, "TokenFactory", tokenFactoryAddress);
-    }
-    
-    /**
-     * @dev 部署赎回管理合约
-     */
-    function _deployStep7_RedemptionManager() private {
-        RedemptionManager redemptionManagerImpl = new RedemptionManager();
-        ERC1967Proxy redemptionManagerProxy = new ERC1967Proxy(
-            address(redemptionManagerImpl),
-            abi.encodeWithSelector(
-                RedemptionManager(address(0)).initialize.selector,
-                roleManagerAddress,
-                feeManagerAddress
-            )
-        );
-        redemptionManagerAddress = address(redemptionManagerProxy);
-        
-        deploymentProgress = 7;
-        emit DeploymentProgress(deploymentProgress, "RedemptionManager", redemptionManagerAddress);
-    }
-    
-    /**
-     * @dev 部署市场合约
-     */
-    function _deployStep8_Marketplace() private {
-        Marketplace marketplaceImpl = new Marketplace();
-        ERC1967Proxy marketplaceProxy = new ERC1967Proxy(
-            address(marketplaceImpl),
-            abi.encodeWithSelector(
-                Marketplace(address(0)).initialize.selector,
-                roleManagerAddress,
-                feeManagerAddress
-            )
-        );
-        marketplaceAddress = address(marketplaceProxy);
-        
-        deploymentProgress = 8;
-        emit DeploymentProgress(deploymentProgress, "Marketplace", marketplaceAddress);
-    }
-    
-    /**
-     * @dev 部署TokenHolderQuery合约
-     */
-    function _deployStep9_TokenHolderQuery() private {
-        TokenHolderQuery tokenHolderQueryImpl = new TokenHolderQuery();
-        ERC1967Proxy tokenHolderQueryProxy = new ERC1967Proxy(
-            address(tokenHolderQueryImpl),
-            abi.encodeWithSelector(
-                TokenHolderQuery(address(0)).initialize.selector,
-                roleManagerAddress
-            )
-        );
-        tokenHolderQueryAddress = address(tokenHolderQueryProxy);
-        
-        deploymentProgress = 9;
-        emit DeploymentProgress(deploymentProgress, "TokenHolderQuery", tokenHolderQueryAddress);
-    }
-    
-    /**
-     * @dev 部署RealEstateSystem合约
-     */
-    function _deployStep10_RealEstateSystem() private {
-        RealEstateSystem systemImpl = new RealEstateSystem();
-        ERC1967Proxy systemProxy = new ERC1967Proxy(
-            address(systemImpl),
-            abi.encodeWithSelector(
-                RealEstateSystem(address(0)).initialize.selector,
-                roleManagerAddress,
-                feeManagerAddress,
-                propertyRegistryAddress,
-                tokenFactoryAddress,
-                redemptionManagerAddress,
-                rentDistributorAddress,
-                marketplaceAddress,
-                tokenHolderQueryAddress
-            )
-        );
-        systemAddress = address(systemProxy);
-        
-        deploymentProgress = 10;
-        emit DeploymentProgress(deploymentProgress, "RealEstateSystem", systemAddress);
-    }
-    
-    /**
-     * @dev 授予角色
-     */
-    function _deployStep11_GrantRoles() private {
-        // 我们需要添加代码来手动设置超级管理员角色
-        
-        // 创建一个具有默认管理员角色的新的RoleManager (因为RoleManager是可升级的代理)
-        RoleManager roleManagerImpl = new RoleManager();
-        // 初始化一个新的实现以获取_setupRole方法
-        roleManagerImpl.initialize();
-        // 使用grantRole为部署者分配SUPER_ADMIN角色
-        roleManagerImpl.grantRole(roleManagerImpl.SUPER_ADMIN(), deployer);
-        
-        // 用这个实现更新代理
-        RoleManager(roleManagerAddress).upgradeTo(address(roleManagerImpl));
-        
-        deploymentProgress = 11;
-        emit DeploymentProgress(deploymentProgress, "GrantRoles", deployer);
     }
     
     /**
@@ -315,5 +81,198 @@ contract SystemDeployer {
      */
     function getDeploymentProgress() external view returns (uint8) {
         return deploymentProgress;
+    }
+    
+    /**
+     * @dev 检查是否完成部署
+     */
+    function isDeploymentComplete() external view returns (bool) {
+        return deploymentProgress == 11;
+    }
+}
+
+/**
+ * @title SystemDeployer
+ * @dev 负责部署整个房产通证化系统的所有合约
+ */
+contract SystemDeployer is SystemDeployerBase {
+    /**
+     * @dev 部署单个步骤
+     * @param step 要部署的步骤编号
+     */
+    function deployStep(uint8 step) external {
+        if(msg.sender != deployer) {
+            revert OnlyDeployer();
+        }
+        if(step <= deploymentProgress) {
+            revert StepAlreadyDeployed(step);
+        }
+        if(step > 11) {
+            revert InvalidStepNumber(step);
+        }
+        if(step != deploymentProgress + 1) {
+            revert StepsMustBeSequential(step, deploymentProgress);
+        }
+        
+        try this._executeDeployStep(step) {
+            // 如果所有步骤都已部署，发出完成事件
+            if (step == 11) {
+                emit SystemDeployed(
+                    systemAddress,
+                    roleManagerAddress,
+                    feeManagerAddress,
+                    propertyRegistryAddress,
+                    tokenFactoryAddress,
+                    redemptionManagerAddress,
+                    rentDistributorAddress,
+                    marketplaceAddress,
+                    tokenHolderQueryAddress
+                );
+            }
+        } catch Error(string memory reason) {
+            emit DeploymentError(step, reason);
+            revert DeploymentFailed(step, reason);
+        } catch (bytes memory) {
+            emit DeploymentError(step, "Unknown error");
+            revert DeploymentFailed(step, "Unknown error");
+        }
+    }
+    
+    /**
+     * @dev 执行部署步骤
+     * @param step 要部署的步骤编号
+     */
+    function _executeDeployStep(uint8 step) external {
+        require(msg.sender == address(this), "Only self-call");
+        
+        if (step == 1) _deployStep1_RoleManager();
+        else if (step == 2) _deployStep2_FeeManager();
+        else if (step == 3) _deployStep3_PropertyRegistry();
+        else if (step == 4) _deployStep4_RentDistributor();
+        else if (step == 5) _deployStep5_TokenImplementation();
+        else if (step == 6) _deployStep6_TokenFactory();
+        else if (step == 7) _deployStep7_RedemptionManager();
+        else if (step == 8) _deployStep8_Marketplace();
+        else if (step == 9) _deployStep9_TokenHolderQuery();
+        else if (step == 10) _deployStep10_RealEstateSystem();
+        else if (step == 11) _deployStep11_GrantRoles();
+    }
+    
+    /**
+     * @dev 部署角色管理合约
+     */
+    function _deployStep1_RoleManager() private {
+        roleManagerAddress = SystemDeployerLib1.deployStep1_RoleManager();
+        deploymentProgress = 1;
+        emit DeploymentProgress(deploymentProgress, "RoleManager", roleManagerAddress);
+    }
+    
+    /**
+     * @dev 部署费用管理合约
+     */
+    function _deployStep2_FeeManager() private {
+        feeManagerAddress = SystemDeployerLib1.deployStep2_FeeManager(roleManagerAddress);
+        deploymentProgress = 2;
+        emit DeploymentProgress(deploymentProgress, "FeeManager", feeManagerAddress);
+    }
+    
+    /**
+     * @dev 部署房产注册合约
+     */
+    function _deployStep3_PropertyRegistry() private {
+        propertyRegistryAddress = SystemDeployerLib1.deployStep3_PropertyRegistry(roleManagerAddress);
+        deploymentProgress = 3;
+        emit DeploymentProgress(deploymentProgress, "PropertyRegistry", propertyRegistryAddress);
+    }
+    
+    /**
+     * @dev 部署租金分发合约
+     */
+    function _deployStep4_RentDistributor() private {
+        rentDistributorAddress = SystemDeployerLib1.deployStep4_RentDistributor(roleManagerAddress);
+        deploymentProgress = 4;
+        emit DeploymentProgress(deploymentProgress, "RentDistributor", rentDistributorAddress);
+    }
+    
+    /**
+     * @dev 部署代币实现合约
+     */
+    function _deployStep5_TokenImplementation() private {
+        tokenImplementationAddress = SystemDeployerLib1.deployStep5_TokenImplementation();
+        deploymentProgress = 5;
+        emit DeploymentProgress(deploymentProgress, "TokenImplementation", tokenImplementationAddress);
+    }
+    
+    /**
+     * @dev 部署代币工厂合约
+     */
+    function _deployStep6_TokenFactory() private {
+        tokenFactoryAddress = SystemDeployerLib2.deployStep6_TokenFactory(
+            roleManagerAddress,
+            propertyRegistryAddress,
+            tokenImplementationAddress
+        );
+        deploymentProgress = 6;
+        emit DeploymentProgress(deploymentProgress, "TokenFactory", tokenFactoryAddress);
+    }
+    
+    /**
+     * @dev 部署赎回管理合约
+     */
+    function _deployStep7_RedemptionManager() private {
+        redemptionManagerAddress = SystemDeployerLib2.deployStep7_RedemptionManager(
+            roleManagerAddress,
+            propertyRegistryAddress
+        );
+        deploymentProgress = 7;
+        emit DeploymentProgress(deploymentProgress, "RedemptionManager", redemptionManagerAddress);
+    }
+    
+    /**
+     * @dev 部署市场合约
+     */
+    function _deployStep8_Marketplace() private {
+        marketplaceAddress = SystemDeployerLib2.deployStep8_Marketplace(
+            roleManagerAddress,
+            feeManagerAddress
+        );
+        deploymentProgress = 8;
+        emit DeploymentProgress(deploymentProgress, "Marketplace", marketplaceAddress);
+    }
+    
+    /**
+     * @dev 部署代币持有者查询合约
+     */
+    function _deployStep9_TokenHolderQuery() private {
+        tokenHolderQueryAddress = SystemDeployerLib2.deployStep9_TokenHolderQuery();
+        deploymentProgress = 9;
+        emit DeploymentProgress(deploymentProgress, "TokenHolderQuery", tokenHolderQueryAddress);
+    }
+    
+    /**
+     * @dev 部署房地产系统合约
+     */
+    function _deployStep10_RealEstateSystem() private {
+        systemAddress = SystemDeployerLib2.deployStep10_RealEstateSystem(
+            roleManagerAddress,
+            feeManagerAddress,
+            propertyRegistryAddress,
+            tokenFactoryAddress,
+            redemptionManagerAddress,
+            rentDistributorAddress,
+            marketplaceAddress,
+            tokenHolderQueryAddress
+        );
+        deploymentProgress = 10;
+        emit DeploymentProgress(deploymentProgress, "RealEstateSystem", systemAddress);
+    }
+    
+    /**
+     * @dev 授予角色
+     */
+    function _deployStep11_GrantRoles() private {
+        SystemDeployerLib2.grantSuperAdminRole(roleManagerAddress, deployer);
+        deploymentProgress = 11;
+        emit DeploymentProgress(deploymentProgress, "GrantRoles", deployer);
     }
 } 
