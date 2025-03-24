@@ -6,10 +6,11 @@ require("dotenv").config();
 const { ethers } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
-const { verifyEnv } = require("./utils/verify-env");
-const { getLogger } = require("./utils/logging");
+const { validateEnv } = require("./utils/validate-env");
+const { logger, getLogger } = require("./utils/logger");
+const config = require("./config/deploy-config");
 
-const logger = getLogger("deploy");
+const deployLogger = getLogger("deploy");
 
 // 最大重试次数
 const MAX_RETRIES = 3;
@@ -19,18 +20,18 @@ const RETRY_INTERVAL = 5000;
 // 部署合约的辅助函数，包含重试逻辑
 async function deployWithRetry(contractName, factory, deployFn, retries = 0) {
   try {
-    console.log(`部署 ${contractName}... 尝试次数: ${retries + 1}`);
+    deployLogger.info(`部署 ${contractName}... 尝试次数: ${retries + 1}`);
     return await deployFn();
   } catch (error) {
     if (retries < MAX_RETRIES) {
-      console.log(`部署 ${contractName} 失败，将在 ${RETRY_INTERVAL/1000} 秒后重试...`);
-      console.log(`错误: ${error.message}`);
+      deployLogger.warn(`部署 ${contractName} 失败，将在 ${RETRY_INTERVAL/1000} 秒后重试...`);
+      deployLogger.warn(`错误: ${error.message}`);
       
       // 等待一段时间后重试
       await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL));
       return deployWithRetry(contractName, factory, deployFn, retries + 1);
     } else {
-      console.error(`部署 ${contractName} 失败，已达到最大重试次数`);
+      deployLogger.error(`部署 ${contractName} 失败，已达到最大重试次数`);
       throw error;
     }
   }
@@ -38,7 +39,7 @@ async function deployWithRetry(contractName, factory, deployFn, retries = 0) {
 
 // 监听部署进度的辅助函数
 async function monitorDeploymentProgress(deployerContract) {
-  console.log("开始监听部署进度...");
+  deployLogger.info("开始监听部署进度...");
   
   // 定义部署步骤名称
   const stepNames = [
@@ -61,12 +62,11 @@ async function monitorDeploymentProgress(deployerContract) {
   
   // 监听事件
   deployerContract.on(filter, (step, contractName, contractAddress) => {
-    console.log(`[${new Date().toISOString()}] 步骤 ${step}/${stepNames.length-1}: ${contractName} 部署完成 (${contractAddress})`);
-    logger.info(`部署进度: ${step}/${stepNames.length-1} - ${contractName} 部署到 ${contractAddress}`);
+    deployLogger.info(`步骤 ${step}/${stepNames.length-1}: ${contractName} 部署完成 (${contractAddress})`);
     
     // 如果是最后一步，停止监听
     if (Number(step) === stepNames.length - 1) {
-      console.log("所有合约部署完成！");
+      deployLogger.info("所有合约部署完成！");
       deployerContract.removeAllListeners();
     }
   });
@@ -121,13 +121,12 @@ function saveDeploymentRecord(contracts, chainId, networkName, deployer) {
     JSON.stringify(deploymentData, null, 2)
   );
   
-  logger.info(`部署记录已保存到: ${deploymentFile}`);
-  console.log(`部署记录已保存到: ${deploymentFile}`);
+  deployLogger.info(`部署记录已保存到: ${deploymentFile}`);
 }
 
 // 逐步部署系统的辅助函数
 async function deployStep(deployer_contract, step) {
-  console.log(`部署步骤 ${step}...`);
+  deployLogger.info(`部署步骤 ${step}...`);
   
   // 估算gas
   const gasEstimate = await deployer_contract.estimateGas.deployStep(step);
@@ -142,17 +141,20 @@ async function deployStep(deployer_contract, step) {
     gasPrice: fastGasPrice
   });
   
-  console.log(`步骤 ${step} 交易已提交: ${tx.hash}`);
+  deployLogger.info(`步骤 ${step} 交易已提交: ${tx.hash}`);
   await tx.wait();
-  console.log(`步骤 ${step} 已完成`);
+  deployLogger.info(`步骤 ${step} 已完成`);
 }
 
 async function main() {
   try {
     // 验证环境变量
-    console.log("验证环境变量...");
-    verifyEnv();
-    console.log("环境变量验证通过");
+    deployLogger.info("验证环境变量...");
+    if (!validateEnv()) {
+      deployLogger.error("环境变量验证失败，中止部署");
+      return;
+    }
+    deployLogger.info("环境变量验证通过");
     
     // 获取网络和部署者信息
     const [deployer] = await ethers.getSigners();
@@ -162,62 +164,50 @@ async function main() {
     const balance = ethers.utils.formatEther(await deployer.getBalance());
     
     // 记录部署信息
-    logger.info(`部署到网络: ${networkName} (chainId: ${chainId})`);
-    logger.info(`部署账户: ${deployer.address}`);
-    logger.info(`账户余额: ${balance}`);
-    logger.info("========================================");
-    logger.info(`开始部署到网络: ${networkName}`);
-    logger.info(`时间: ${new Date().toISOString()}`);
-    logger.info("========================================");
+    deployLogger.deployStart(networkName);
+    deployLogger.info(`部署账户: ${deployer.address}`);
+    deployLogger.info(`账户余额: ${balance}`);
     
     // 检查余额是否足够
     if (parseFloat(balance) < 0.1) {
-      logger.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
-      console.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
+      deployLogger.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
     }
     
     // 启动本地区块链网络
     if (networkName === 'localhost' || networkName === 'hardhat') {
-      console.log("正在使用本地网络，确保本地节点已启动");
+      deployLogger.info("正在使用本地网络，确保本地节点已启动");
     }
     
     // 部署SystemDeployer合约
-    logger.info("部署 SystemDeployer...");
-    console.log("开始部署 SystemDeployer...");
+    deployLogger.info("部署 SystemDeployer...");
     
     const SystemDeployer = await ethers.getContractFactory("SystemDeployer");
     const deployerContractFn = () => SystemDeployer.deploy();
     const deployer_contract = await deployWithRetry("SystemDeployer", SystemDeployer, deployerContractFn);
     
     await deployer_contract.deployed();
-    logger.info(`SystemDeployer部署成功: ${deployer_contract.address}`);
-    console.log(`SystemDeployer部署成功: ${deployer_contract.address}`);
+    deployLogger.info(`SystemDeployer部署成功: ${deployer_contract.address}`);
     
     // 设置部署进度监听
     await monitorDeploymentProgress(deployer_contract);
     
     // 逐步部署系统
-    logger.info("开始逐步部署系统...");
-    console.log("开始逐步部署系统...");
+    deployLogger.info("开始逐步部署系统...");
     
     // 部署总共11个步骤
     for (let step = 1; step <= 11; step++) {
       try {
         await deployStep(deployer_contract, step);
       } catch (error) {
-        console.error(`步骤 ${step} 部署失败: ${error.message}`);
-        logger.error(`步骤 ${step} 部署失败: ${error.message}`);
+        deployLogger.error(`步骤 ${step} 部署失败: ${error.message}`);
         throw error;
       }
     }
     
-    console.log("系统部署完成");
-    logger.info("系统部署完成");
+    deployLogger.info("系统部署完成");
     
     // 获取部署的合约地址
     const contracts = await deployer_contract.getDeployedContracts();
-    logger.info("已部署的合约地址:");
-    
     const contractNames = [
       "RealEstateSystem",
       "RoleManager",
@@ -230,33 +220,34 @@ async function main() {
       "TokenHolderQuery"
     ];
     
+    const contractAddresses = {};
     for (let i = 0; i < contractNames.length; i++) {
-      logger.info(`${contractNames[i]}: ${contracts[i]}`);
-      console.log(`${contractNames[i]}: ${contracts[i]}`);
+      contractAddresses[contractNames[i]] = contracts[i];
+      deployLogger.info(`${contractNames[i]}: ${contracts[i]}`);
     }
     
     // 保存部署记录
     saveDeploymentRecord(contracts, chainId, networkName, deployer.address);
     
-    logger.info("部署完成!");
-    console.log("部署完成!");
+    // 完成部署日志
+    deployLogger.deployComplete(networkName, contractAddresses);
     
     // 停止事件监听
     deployer_contract.removeAllListeners();
     
   } catch (error) {
-    logger.error(`部署失败: ${error.message}`);
-    console.error(`部署过程中出错: ${error.message}`);
+    deployLogger.error(`部署失败: ${error.message}`);
     console.error(error);
+    process.exit(1);
   }
 }
 
-// 如果直接运行此脚本
+// 运行主函数
 if (require.main === module) {
   main()
     .then(() => process.exit(0))
-    .catch((error) => {
-      console.error("部署过程中出错:", error);
+    .catch(error => {
+      console.error(error);
       process.exit(1);
     });
 } else {

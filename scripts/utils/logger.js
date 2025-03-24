@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const config = require("../config/deploy-config");
 
 // 日志级别
 const LOG_LEVELS = {
@@ -24,9 +23,10 @@ const timestamp = new Date().toISOString().split('T')[0];
 const LOG_FILE = path.join(LOG_DIR, `deploy-${timestamp}.log`);
 
 // 写入日志
-function writeLog(level, message) {
+function writeLog(level, category, message) {
   const timestamp = new Date().toISOString();
-  const logMessage = `[${timestamp}] [${level}] ${message}\n`;
+  const categoryPrefix = category ? `[${category}] ` : '';
+  const logMessage = `[${timestamp}] [${level}] ${categoryPrefix}${message}\n`;
   
   // 控制台输出
   if (LOG_LEVELS[level] >= currentLevel) {
@@ -43,32 +43,67 @@ function writeLog(level, message) {
   fs.appendFileSync(LOG_FILE, logMessage);
 }
 
-// 日志接口
+// 创建基本日志记录器
+function createBaseLogger(category = "") {
+  return {
+    debug: (message) => writeLog("DEBUG", category, message),
+    info: (message) => writeLog("INFO", category, message),
+    warn: (message) => writeLog("WARN", category, message),
+    error: (message) => writeLog("ERROR", category, message)
+  };
+}
+
+// 创建部署日志记录器 (与原logging.js兼容)
+function getLogger(name) {
+  const base = createBaseLogger(name);
+  
+  return {
+    ...base,
+    deployStart: (networkName) => {
+      base.info(`========================================`);
+      base.info(`开始部署到网络: ${networkName}`);
+      base.info(`时间: ${new Date().toISOString()}`);
+      base.info(`========================================`);
+    },
+    deployComplete: (networkName, contracts) => {
+      base.info(`========================================`);
+      base.info(`部署到网络 ${networkName} 已完成!`);
+      base.info(`时间: ${new Date().toISOString()}`);
+      Object.entries(contracts).forEach(([name, address]) => {
+        base.info(`${name}: ${address}`);
+      });
+      base.info(`========================================`);
+    }
+  };
+}
+
+// 默认日志对象 (与原logger.js兼容)
 const logger = {
-  debug: (message) => writeLog("DEBUG", message),
-  info: (message) => writeLog("INFO", message),
-  warn: (message) => writeLog("WARN", message),
-  error: (message) => writeLog("ERROR", message),
+  ...createBaseLogger(),
   
   // 记录部署开始
   deployStart: (network) => {
-    writeLog("INFO", `========================================`);
-    writeLog("INFO", `开始部署到网络: ${network}`);
-    writeLog("INFO", `时间: ${new Date().toISOString()}`);
-    writeLog("INFO", `========================================`);
+    writeLog("INFO", null, `========================================`);
+    writeLog("INFO", null, `开始部署到网络: ${network}`);
+    writeLog("INFO", null, `时间: ${new Date().toISOString()}`);
+    writeLog("INFO", null, `========================================`);
   },
   
   // 记录部署完成
   deployComplete: (network, contracts) => {
-    writeLog("INFO", `========================================`);
-    writeLog("INFO", `部署完成 - 网络: ${network}`);
-    writeLog("INFO", `时间: ${new Date().toISOString()}`);
-    writeLog("INFO", `已部署合约:`);
+    writeLog("INFO", null, `========================================`);
+    writeLog("INFO", null, `部署完成 - 网络: ${network}`);
+    writeLog("INFO", null, `时间: ${new Date().toISOString()}`);
+    writeLog("INFO", null, `已部署合约:`);
     Object.entries(contracts).forEach(([name, address]) => {
-      writeLog("INFO", `  ${name}: ${address}`);
+      writeLog("INFO", null, `  ${name}: ${address}`);
     });
-    writeLog("INFO", `========================================`);
+    writeLog("INFO", null, `========================================`);
   }
 };
 
-module.exports = logger;
+module.exports = { 
+  logger, 
+  getLogger,
+  createBaseLogger
+};

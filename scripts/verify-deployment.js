@@ -1,5 +1,7 @@
 const { ethers } = require("hardhat");
 const fs = require("fs");
+const { getLogger } = require("./utils/logger");
+const verifyLogger = getLogger("verify");
 
 // 部署状态文件
 const DEPLOY_STATE_FILE = "deploy-state.json";
@@ -12,211 +14,278 @@ function loadDeployState() {
       return state;
     }
   } catch (error) {
-    console.error("加载部署状态文件失败:", error);
+    verifyLogger.error(`加载部署状态文件失败: ${error.message}`);
   }
   return null;
 }
 
-// 验证RoleManager合约
-async function verifyRoleManager(state) {
-  console.log("\n🔍 验证RoleManager合约...");
+// 加载部署记录
+function loadDeployment(network) {
+  try {
+    const deploymentPath = `./deployments/${network}-latest.json`;
+    if (fs.existsSync(deploymentPath)) {
+      return JSON.parse(fs.readFileSync(deploymentPath));
+    }
+    verifyLogger.warn(`未找到${network}网络的部署记录，尝试使用部署状态文件`);
+    return null;
+  } catch (error) {
+    verifyLogger.error(`加载部署记录失败: ${error.message}`);
+    return null;
+  }
+}
+
+// 获取部署信息（兼容两种部署方式）
+async function getDeploymentInfo() {
+  // 先尝试获取网络名称
+  const network = await ethers.provider.getNetwork();
+  const networkName = network.name !== 'unknown' ? network.name : `chain-${network.chainId}`;
   
-  if (!state.contracts.RoleManager) {
-    console.error("❌ RoleManager合约未部署");
+  // 先尝试从部署记录加载
+  const deployment = loadDeployment(networkName);
+  if (deployment) {
+    return {
+      network: deployment.network,
+      deployer: deployment.deployer,
+      contracts: deployment.contracts,
+      currentStep: deployment.contracts.RealEstateSystem ? 11 : 0,
+      source: "部署记录"
+    };
+  }
+  
+  // 再尝试从部署状态加载
+  const state = loadDeployState();
+  if (state) {
+    return {
+      ...state,
+      source: "部署状态"
+    };
+  }
+  
+  return null;
+}
+
+// 验证RoleManager合约
+async function verifyRoleManager(deployInfo) {
+  verifyLogger.info("验证RoleManager合约...");
+  
+  const roleManagerAddress = deployInfo.contracts.RoleManager?.address || deployInfo.contracts.RoleManager;
+  if (!roleManagerAddress) {
+    verifyLogger.error("RoleManager合约未部署");
     return false;
   }
   
   try {
     const RoleManager = await ethers.getContractFactory("RoleManager");
-    const roleManager = RoleManager.attach(state.contracts.RoleManager.address);
+    const roleManager = RoleManager.attach(roleManagerAddress);
     
     // 验证SUPER_ADMIN角色
     const SUPER_ADMIN = await roleManager.SUPER_ADMIN();
-    const hasRole = await roleManager.hasRole(SUPER_ADMIN, state.deployer);
+    const hasRole = await roleManager.hasRole(SUPER_ADMIN, deployInfo.deployer);
     
     if (hasRole) {
-      console.log("✅ 部署者已被授予SUPER_ADMIN角色");
+      verifyLogger.info("部署者已被授予SUPER_ADMIN角色");
     } else {
-      console.error("❌ 部署者未被授予SUPER_ADMIN角色");
+      verifyLogger.error("部署者未被授予SUPER_ADMIN角色");
       return false;
     }
     
     return true;
   } catch (error) {
-    console.error("❌ RoleManager验证失败:", error.message);
+    verifyLogger.error(`RoleManager验证失败: ${error.message}`);
     return false;
   }
 }
 
 // 验证FeeManager合约
-async function verifyFeeManager(state) {
-  console.log("\n🔍 验证FeeManager合约...");
+async function verifyFeeManager(deployInfo) {
+  verifyLogger.info("验证FeeManager合约...");
   
-  if (!state.contracts.FeeManager) {
-    console.error("❌ FeeManager合约未部署");
+  const feeManagerAddress = deployInfo.contracts.FeeManager?.address || deployInfo.contracts.FeeManager;
+  const roleManagerAddress = deployInfo.contracts.RoleManager?.address || deployInfo.contracts.RoleManager;
+  
+  if (!feeManagerAddress) {
+    verifyLogger.error("FeeManager合约未部署");
     return false;
   }
   
   try {
     const FeeManager = await ethers.getContractFactory("FeeManager");
-    const feeManager = FeeManager.attach(state.contracts.FeeManager.address);
+    const feeManager = FeeManager.attach(feeManagerAddress);
     
     // 验证角色管理器地址
-    const roleManagerAddress = await feeManager.roleManager();
+    const configuredRoleManager = await feeManager.roleManager();
     
-    if (roleManagerAddress === state.contracts.RoleManager.address) {
-      console.log("✅ FeeManager正确引用了RoleManager");
+    if (configuredRoleManager === roleManagerAddress) {
+      verifyLogger.info("FeeManager正确引用了RoleManager");
     } else {
-      console.error("❌ FeeManager引用了错误的RoleManager地址");
+      verifyLogger.error(`FeeManager引用了错误的RoleManager地址: ${configuredRoleManager} 应为 ${roleManagerAddress}`);
       return false;
     }
     
     return true;
   } catch (error) {
-    console.error("❌ FeeManager验证失败:", error.message);
+    verifyLogger.error(`FeeManager验证失败: ${error.message}`);
     return false;
   }
 }
 
 // 验证PropertyRegistry合约
-async function verifyPropertyRegistry(state) {
-  console.log("\n🔍 验证PropertyRegistry合约...");
+async function verifyPropertyRegistry(deployInfo) {
+  verifyLogger.info("验证PropertyRegistry合约...");
   
-  if (!state.contracts.PropertyRegistry) {
-    console.error("❌ PropertyRegistry合约未部署");
+  const propertyRegistryAddress = deployInfo.contracts.PropertyRegistry?.address || deployInfo.contracts.PropertyRegistry;
+  const roleManagerAddress = deployInfo.contracts.RoleManager?.address || deployInfo.contracts.RoleManager;
+  
+  if (!propertyRegistryAddress) {
+    verifyLogger.error("PropertyRegistry合约未部署");
     return false;
   }
   
   try {
     const PropertyRegistry = await ethers.getContractFactory("PropertyRegistry");
-    const propertyRegistry = PropertyRegistry.attach(state.contracts.PropertyRegistry.address);
+    const propertyRegistry = PropertyRegistry.attach(propertyRegistryAddress);
     
     // 验证角色管理器地址
-    const roleManagerAddress = await propertyRegistry.roleManager();
+    const configuredRoleManager = await propertyRegistry.roleManager();
     
-    if (roleManagerAddress === state.contracts.RoleManager.address) {
-      console.log("✅ PropertyRegistry正确引用了RoleManager");
+    if (configuredRoleManager === roleManagerAddress) {
+      verifyLogger.info("PropertyRegistry正确引用了RoleManager");
     } else {
-      console.error("❌ PropertyRegistry引用了错误的RoleManager地址");
+      verifyLogger.error(`PropertyRegistry引用了错误的RoleManager地址: ${configuredRoleManager} 应为 ${roleManagerAddress}`);
       return false;
     }
     
     return true;
   } catch (error) {
-    console.error("❌ PropertyRegistry验证失败:", error.message);
+    verifyLogger.error(`PropertyRegistry验证失败: ${error.message}`);
     return false;
   }
 }
 
 // 验证RealEstateSystem合约
-async function verifyRealEstateSystem(state) {
-  console.log("\n🔍 验证RealEstateSystem合约...");
+async function verifyRealEstateSystem(deployInfo) {
+  verifyLogger.info("验证RealEstateSystem合约...");
   
-  if (!state.contracts.RealEstateSystem) {
-    console.error("❌ RealEstateSystem合约未部署");
+  const systemAddress = deployInfo.contracts.RealEstateSystem?.address || deployInfo.contracts.RealEstateSystem;
+  if (!systemAddress) {
+    verifyLogger.error("RealEstateSystem合约未部署");
     return false;
   }
   
   try {
     const RealEstateSystem = await ethers.getContractFactory("RealEstateSystem");
-    const system = RealEstateSystem.attach(state.contracts.RealEstateSystem.address);
+    const system = RealEstateSystem.attach(systemAddress);
     
     // 验证各个组件地址
-    const roleManagerAddress = await system.roleManager();
-    const feeManagerAddress = await system.feeManager();
-    const propertyRegistryAddress = await system.propertyRegistry();
-    const tokenFactoryAddress = await system.tokenFactory();
+    const configuredRoleManager = await system.roleManager();
+    const configuredFeeManager = await system.feeManager();
+    const configuredPropertyRegistry = await system.propertyRegistry();
+    const configuredTokenFactory = await system.tokenFactory();
+    
+    const roleManagerAddress = deployInfo.contracts.RoleManager?.address || deployInfo.contracts.RoleManager;
+    const feeManagerAddress = deployInfo.contracts.FeeManager?.address || deployInfo.contracts.FeeManager;
+    const propertyRegistryAddress = deployInfo.contracts.PropertyRegistry?.address || deployInfo.contracts.PropertyRegistry;
+    const tokenFactoryAddress = deployInfo.contracts.TokenFactory?.address || deployInfo.contracts.TokenFactory;
     
     let allValid = true;
     
-    if (roleManagerAddress !== state.contracts.RoleManager.address) {
-      console.error("❌ RealEstateSystem引用了错误的RoleManager地址");
+    if (configuredRoleManager !== roleManagerAddress) {
+      verifyLogger.error(`RealEstateSystem引用了错误的RoleManager地址: ${configuredRoleManager} 应为 ${roleManagerAddress}`);
       allValid = false;
     }
     
-    if (feeManagerAddress !== state.contracts.FeeManager.address) {
-      console.error("❌ RealEstateSystem引用了错误的FeeManager地址");
+    if (configuredFeeManager !== feeManagerAddress) {
+      verifyLogger.error(`RealEstateSystem引用了错误的FeeManager地址: ${configuredFeeManager} 应为 ${feeManagerAddress}`);
       allValid = false;
     }
     
-    if (propertyRegistryAddress !== state.contracts.PropertyRegistry.address) {
-      console.error("❌ RealEstateSystem引用了错误的PropertyRegistry地址");
+    if (configuredPropertyRegistry !== propertyRegistryAddress) {
+      verifyLogger.error(`RealEstateSystem引用了错误的PropertyRegistry地址: ${configuredPropertyRegistry} 应为 ${propertyRegistryAddress}`);
       allValid = false;
     }
     
-    if (tokenFactoryAddress !== state.contracts.TokenFactory.address) {
-      console.error("❌ RealEstateSystem引用了错误的TokenFactory地址");
+    if (configuredTokenFactory !== tokenFactoryAddress) {
+      verifyLogger.error(`RealEstateSystem引用了错误的TokenFactory地址: ${configuredTokenFactory} 应为 ${tokenFactoryAddress}`);
       allValid = false;
     }
     
     if (allValid) {
-      console.log("✅ RealEstateSystem正确引用了所有组件");
+      verifyLogger.info("RealEstateSystem正确引用了所有组件");
     }
     
     return allValid;
   } catch (error) {
-    console.error("❌ RealEstateSystem验证失败:", error.message);
+    verifyLogger.error(`RealEstateSystem验证失败: ${error.message}`);
     return false;
   }
 }
 
 // 打印验证摘要
 function printSummary(results) {
-  console.log("\n==========================");
-  console.log("🔍 验证摘要");
-  console.log("==========================");
+  verifyLogger.info("\n==========================");
+  verifyLogger.info("验证摘要");
+  verifyLogger.info("==========================");
   
   let allPassed = true;
   for (const [name, passed] of Object.entries(results)) {
-    console.log(`${passed ? '✅' : '❌'} ${name}`);
-    if (!passed) allPassed = false;
+    const status = passed === true ? '✅ 通过' : 
+                  passed === false ? '❌ 失败' : 
+                  passed === "未部署" ? '⏳ 未部署' : '❓ 未知';
+    verifyLogger.info(`${name}: ${status}`);
+    if (passed === false) allPassed = false;
   }
   
-  console.log("==========================");
-  console.log(`总体结果: ${allPassed ? '✅ 全部通过' : '❌ 有验证项未通过'}`);
-  console.log("==========================\n");
+  verifyLogger.info("==========================");
+  verifyLogger.info(`总体结果: ${allPassed ? '✅ 全部通过' : '❌ 有验证项未通过'}`);
+  verifyLogger.info("==========================\n");
 }
 
 // 主函数
 async function main() {
   try {
-    console.log("🚀 开始验证部署...");
+    verifyLogger.info("开始验证部署...");
     
-    // 加载部署状态
-    const state = loadDeployState();
-    if (!state) {
-      console.error("❌ 无法加载部署状态，请确保先运行部署脚本");
+    // 获取部署信息
+    const deployInfo = await getDeploymentInfo();
+    if (!deployInfo) {
+      verifyLogger.error("无法加载部署信息，请确保先运行部署脚本");
       return;
     }
     
-    console.log(`📊 已部署的网络: ${state.network}`);
-    console.log(`📊 部署者地址: ${state.deployer}`);
-    console.log(`📊 部署步骤: ${state.currentStep} / 11`);
+    verifyLogger.info(`已部署的网络: ${deployInfo.network}`);
+    verifyLogger.info(`部署者地址: ${deployInfo.deployer}`);
+    verifyLogger.info(`数据来源: ${deployInfo.source}`);
     
-    if (state.currentStep < 11) {
-      console.log("⚠️ 警告: 部署尚未完成，某些验证可能会失败");
+    if (deployInfo.currentStep < 10) {
+      verifyLogger.warn("警告: 部署尚未完成，某些验证可能会失败");
     }
     
     // 执行验证
     const results = {
-      "RoleManager": await verifyRoleManager(state),
-      "FeeManager": await verifyFeeManager(state),
-      "PropertyRegistry": await verifyPropertyRegistry(state),
-      "RealEstateSystem": state.currentStep >= 10 ? await verifyRealEstateSystem(state) : "未部署"
+      "RoleManager": await verifyRoleManager(deployInfo),
+      "FeeManager": await verifyFeeManager(deployInfo),
+      "PropertyRegistry": await verifyPropertyRegistry(deployInfo),
+      "RealEstateSystem": deployInfo.currentStep >= 10 ? await verifyRealEstateSystem(deployInfo) : "未部署"
     };
     
     // 打印摘要
     printSummary(results);
     
   } catch (error) {
-    console.error("验证过程中出错:", error);
+    verifyLogger.error(`验证过程中出错: ${error.message}`);
+    console.error(error);
   }
 }
 
-// 运行主函数
-main()
-  .then(() => process.exit(0))
-  .catch(error => {
-    console.error(error);
-    process.exit(1);
-  }); 
+// 如果直接运行此脚本
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error);
+      process.exit(1);
+    });
+} else {
+  // 作为模块导出
+  module.exports = { main };
+} 
