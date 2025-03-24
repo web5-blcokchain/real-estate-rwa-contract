@@ -39,7 +39,7 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
-
+*.log
 # 合约验证
 /flatten
 
