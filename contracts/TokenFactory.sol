@@ -27,7 +27,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
     address public tokenImplementation;
     
     // 租金分配合约
-    RentDistributor public rentDistributor;
+    address public rentDistributorAddress;
     
     // 代币映射：房产ID => 代币地址
     mapping(string => address) public tokens;
@@ -61,7 +61,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         roleManager = RoleManager(_roleManager);
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         tokenImplementation = _tokenImplementation;
-        rentDistributor = RentDistributor(_rentDistributor);
+        rentDistributorAddress = _rentDistributor;
     }
     
     /**
@@ -152,10 +152,10 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         }
         
         // 为租金分发器授予权限
-        if (address(rentDistributor) != address(0)) {
+        if (rentDistributorAddress != address(0)) {
             RealEstateToken(tokenProxy).grantRole(
                 RealEstateToken(tokenProxy).SNAPSHOT_ROLE(),
-                address(rentDistributor)
+                rentDistributorAddress
             );
         }
         

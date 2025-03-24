@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./RoleManager.sol";
 import "./FeeManager.sol";
 import "./PropertyRegistry.sol";
@@ -17,7 +18,7 @@ import "./RealEstateToken.sol";
  * @title RealEstateSystem
  * @dev 房产通证化系统主合约（可升级版本）
  */
-contract RealEstateSystem is Initializable, UUPSUpgradeable {
+contract RealEstateSystem is Initializable, UUPSUpgradeable, PausableUpgradeable {
     // 系统状态
     bool public systemActive;
     
@@ -34,9 +35,29 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     // 合约升级映射
     mapping(bytes32 => address) private _contractNameToAddress;
     
+    // 租金分配合约
+    address public rentDistributorAddress;
+    
+    // 链ID
+    uint256 public chainId;
+    
+    // 版本号
+    uint256 public version;
+    
     // 事件
     event SystemStatusChanged(bool active);
     event ContractUpgraded(string contractName, address newImplementation);
+    event RealEstateSystemInitialized(
+        address systemOwner,
+        address roleManager,
+        address propertyRegistry,
+        address tokenFactory,
+        address marketplace,
+        address redemptionManager,
+        address rentDistributor,
+        uint256 chainId,
+        uint256 version
+    );
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -44,41 +65,47 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @dev 初始化函数 - 使用已部署的合约地址而不是在初始化时部署
+     * @dev 初始化函数（替代构造函数）
      */
     function initialize(
         address _roleManager,
-        address _feeManager,
         address _propertyRegistry,
         address _tokenFactory,
-        address _redemptionManager,
         address _rentDistributor,
         address _marketplace,
-        address _tokenHolderQuery
+        address _tokenHolderQuery,
+        uint256 _chainId
     ) public initializer {
         __UUPSUpgradeable_init();
+        __Pausable_init();
         
         systemActive = true;
-        
-        // 设置合约引用
         roleManager = RoleManager(_roleManager);
-        feeManager = FeeManager(_feeManager);
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         tokenFactory = TokenFactory(_tokenFactory);
-        redemptionManager = RedemptionManager(_redemptionManager);
-        rentDistributor = RentDistributor(_rentDistributor);
-        marketplace = Marketplace(_marketplace);
-        tokenHolderQuery = TokenHolderQuery(_tokenHolderQuery);
+        rentDistributorAddress = _rentDistributor;
+        chainId = _chainId;
+        version = 1;
         
-        // 初始化合约升级映射
+        // 存储合约地址到映射
         _contractNameToAddress[keccak256(abi.encodePacked("RoleManager"))] = _roleManager;
-        _contractNameToAddress[keccak256(abi.encodePacked("FeeManager"))] = _feeManager;
         _contractNameToAddress[keccak256(abi.encodePacked("PropertyRegistry"))] = _propertyRegistry;
         _contractNameToAddress[keccak256(abi.encodePacked("TokenFactory"))] = _tokenFactory;
-        _contractNameToAddress[keccak256(abi.encodePacked("RedemptionManager"))] = _redemptionManager;
         _contractNameToAddress[keccak256(abi.encodePacked("RentDistributor"))] = _rentDistributor;
         _contractNameToAddress[keccak256(abi.encodePacked("Marketplace"))] = _marketplace;
         _contractNameToAddress[keccak256(abi.encodePacked("TokenHolderQuery"))] = _tokenHolderQuery;
+        
+        emit RealEstateSystemInitialized(
+            msg.sender,
+            _roleManager,
+            _propertyRegistry,
+            _tokenFactory,
+            _marketplace,
+            address(0),
+            _rentDistributor,
+            _chainId,
+            version
+        );
     }
 
     /**
@@ -183,4 +210,18 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+
+    /**
+     * @dev 暂停系统功能
+     */
+    function pause() external onlySuperAdmin {
+        _pause();
+    }
+
+    /**
+     * @dev 恢复系统功能
+     */
+    function unpause() external onlySuperAdmin {
+        _unpause();
+    }
 }

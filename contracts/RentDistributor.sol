@@ -449,14 +449,11 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, PausableU
     event LiquidationFailed(address indexed stablecoin, uint256 amount, string reason);
     
     /**
-     * @dev 接收ETH的回退函数
+     * @dev 移除接收ETH的回退函数，改为非payable的fallback
      */
-    receive() external payable {
-        emit ETHReceived(msg.sender, msg.value);
+    fallback() external {
+        revert("Function not supported");
     }
-    
-    // ETH接收事件
-    event ETHReceived(address indexed sender, uint256 amount);
 
     /**
      * @dev 获取用户可领取的租金

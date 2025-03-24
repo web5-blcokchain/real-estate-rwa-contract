@@ -427,36 +427,33 @@ contract SystemDeployer is SystemDeployerBase {
     function emergencyPauseSystem() external {
         require(msg.sender == deployer, "Only deployer can pause system");
         
-        try RealEstateSystem(systemAddress).pause() {
+        // 尝试暂停RealEstateSystem
+        (bool systemSuccess, ) = systemAddress.call(abi.encodeWithSignature("pause()"));
+        if (systemSuccess) {
             emit SystemComponentPaused("RealEstateSystem");
-        } catch {
-            // 继续执行即使某个合约暂停失败
         }
         
         // 尝试暂停市场合约
         if (marketplaceAddress != address(0)) {
-            try Marketplace(marketplaceAddress).pause() {
+            (bool marketSuccess, ) = marketplaceAddress.call(abi.encodeWithSignature("pause()"));
+            if (marketSuccess) {
                 emit SystemComponentPaused("Marketplace");
-            } catch {
-                // 继续执行
             }
         }
         
         // 尝试暂停赎回管理器
         if (redemptionManagerAddress != address(0)) {
-            try RedemptionManager(redemptionManagerAddress).pause() {
+            (bool redemptionSuccess, ) = redemptionManagerAddress.call(abi.encodeWithSignature("pause()"));
+            if (redemptionSuccess) {
                 emit SystemComponentPaused("RedemptionManager");
-            } catch {
-                // 继续执行
             }
         }
         
         // 尝试暂停租金分发器
         if (rentDistributorAddress != address(0)) {
-            try RentDistributor(rentDistributorAddress).pause() {
+            (bool rentSuccess, ) = rentDistributorAddress.call(abi.encodeWithSignature("pause()"));
+            if (rentSuccess) {
                 emit SystemComponentPaused("RentDistributor");
-            } catch {
-                // 继续执行
             }
         }
         
@@ -469,36 +466,33 @@ contract SystemDeployer is SystemDeployerBase {
     function emergencyUnpauseSystem() external {
         require(msg.sender == deployer, "Only deployer can unpause system");
         
-        try RealEstateSystem(systemAddress).unpause() {
+        // 尝试恢复RealEstateSystem
+        (bool systemSuccess, ) = systemAddress.call(abi.encodeWithSignature("unpause()"));
+        if (systemSuccess) {
             emit SystemComponentUnpaused("RealEstateSystem");
-        } catch {
-            // 继续执行即使某个合约恢复失败
         }
         
         // 尝试恢复市场合约
         if (marketplaceAddress != address(0)) {
-            try Marketplace(marketplaceAddress).unpause() {
+            (bool marketSuccess, ) = marketplaceAddress.call(abi.encodeWithSignature("unpause()"));
+            if (marketSuccess) {
                 emit SystemComponentUnpaused("Marketplace");
-            } catch {
-                // 继续执行
             }
         }
         
         // 尝试恢复赎回管理器
         if (redemptionManagerAddress != address(0)) {
-            try RedemptionManager(redemptionManagerAddress).unpause() {
+            (bool redemptionSuccess, ) = redemptionManagerAddress.call(abi.encodeWithSignature("unpause()"));
+            if (redemptionSuccess) {
                 emit SystemComponentUnpaused("RedemptionManager");
-            } catch {
-                // 继续执行
             }
         }
         
         // 尝试恢复租金分发器
         if (rentDistributorAddress != address(0)) {
-            try RentDistributor(rentDistributorAddress).unpause() {
+            (bool rentSuccess, ) = rentDistributorAddress.call(abi.encodeWithSignature("unpause()"));
+            if (rentSuccess) {
                 emit SystemComponentUnpaused("RentDistributor");
-            } catch {
-                // 继续执行
             }
         }
         

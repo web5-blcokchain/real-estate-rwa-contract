@@ -60,10 +60,11 @@ library SystemDeployerLib1 {
      */
     function deployStep4_RentDistributor(address roleManagerAddress, address feeManagerAddress) external returns (address) {
         RentDistributor impl = new RentDistributor();
-        return _deployProxy(
+        address proxyAddress = address(new ERC1967Proxy(
             address(impl),
-            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, roleManagerAddress, feeManagerAddress)
-        );
+            abi.encodeWithSignature("initialize(address,address)", roleManagerAddress, feeManagerAddress)
+        ));
+        return proxyAddress;
     }
     
     /**

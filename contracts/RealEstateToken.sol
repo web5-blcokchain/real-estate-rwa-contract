@@ -437,9 +437,9 @@ contract RealEstateToken is
     
     /**
      * @dev 检查当前可用供应量
-     * @return availableSupply 可用供应量
+     * @return 可用供应量
      */
-    function availableSupply() external view returns (uint256 availableSupply) {
+    function availableSupply() external view returns (uint256) {
         return maxSupply - totalSupply();
     }
     
