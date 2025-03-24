@@ -10,8 +10,8 @@ function validateEnv() {
   // 必需的环境变量
   const requiredVars = [
     "PRIVATE_KEY",
-    "BSC_MAINNET_RPC",
-    "BSC_TESTNET_RPC"
+    "MAINNET_RPC_URL",
+    "TESTNET_RPC_URL"
   ];
   
   // 检查必需的环境变量
@@ -43,7 +43,7 @@ function validateEnv() {
   }
   
   // 验证费用设置
-  const fees = ["TRADING_FEE", "TOKENIZATION_FEE", "REDEMPTION_FEE", "PLATFORM_FEE"];
+  const fees = ["TRADING_FEE", "TOKENIZATION_FEE", "REDEMPTION_FEE", "PLATFORM_FEE", "MAINTENANCE_FEE"];
   for (const fee of fees) {
     const feeValue = parseInt(process.env[fee] || "0");
     if (isNaN(feeValue) || feeValue < 0 || feeValue > 10000) {

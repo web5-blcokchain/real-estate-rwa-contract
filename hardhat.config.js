@@ -2,12 +2,18 @@ require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config();
+const { getPrivateKey } = require("./scripts/utils/secure-key");
 
 // 从环境变量中获取配置
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000000";
-const BSC_MAINNET_RPC = process.env.BSC_MAINNET_RPC || "https://bsc-dataseed.binance.org/";
-const BSC_TESTNET_RPC = process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const PRIVATE_KEY = getPrivateKey() || "0000000000000000000000000000000000000000000000000000000000000000";
+const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || "https://bsc-dataseed.binance.org/";
+const TESTNET_RPC_URL = process.env.TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const BSCSCAN_API_KEY = process.env.BSCSCAN_API_KEY || "";
+
+// 如果没有有效的私钥，输出警告
+if (PRIVATE_KEY === "0000000000000000000000000000000000000000000000000000000000000000") {
+  console.warn("警告: 使用默认私钥，请设置有效的私钥");
+}
 
 module.exports = {
   solidity: {
@@ -24,13 +30,13 @@ module.exports = {
       chainId: 31337
     },
     bsc_mainnet: {
-      url: BSC_MAINNET_RPC,
+      url: MAINNET_RPC_URL,
       accounts: [PRIVATE_KEY],
       chainId: 56,
       gasPrice: 5000000000 // 5 Gwei
     },
     bsc_testnet: {
-      url: BSC_TESTNET_RPC,
+      url: TESTNET_RPC_URL,
       accounts: [PRIVATE_KEY],
       chainId: 97,
       gasPrice: 10000000000 // 10 Gwei

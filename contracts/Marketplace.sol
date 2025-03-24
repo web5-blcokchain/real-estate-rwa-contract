@@ -99,7 +99,6 @@ contract Marketplace is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeab
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
-        kycManager = KYCManager(_kycManager); // 需要移除
     }
 
     /**
