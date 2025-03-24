@@ -42,7 +42,8 @@ module.exports = {
     trading: parseInt(getEnv("TRADING_FEE", "50")),
     tokenization: parseInt(getEnv("TOKENIZATION_FEE", "100")),
     redemption: parseInt(getEnv("REDEMPTION_FEE", "30")),
-    platform: parseInt(getEnv("PLATFORM_FEE", "20"))
+    platform: parseInt(getEnv("PLATFORM_FEE", "20")),
+    maintenance: parseInt(getEnv("MAINTENANCE_FEE", "15"))  // 新增：维护费用
   },
   
   // 角色地址 - 从.env读取
