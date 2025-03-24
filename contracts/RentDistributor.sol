@@ -416,14 +416,18 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         uint256 unclaimedAmount = distribution.netAmount - distribution.totalClaimed;
         require(unclaimedAmount > 0, "No unclaimed rent");
         
+        // 记录原始金额用于事件记录
+        uint256 amountToLiquidate = unclaimedAmount;
+        
         // 重置未领取金额，防止重入
         distribution.netAmount = distribution.totalClaimed;
         
-        // 转账未领取的租金
-        IERC20 stablecoin = IERC20(distribution.stablecoinAddress);
-        require(stablecoin.transfer(recipient, unclaimedAmount), "Transfer failed");
+        // 先触发事件
+        emit UnclaimedRentLiquidated(distributionId, recipient, amountToLiquidate);
         
-        emit UnclaimedRentLiquidated(distributionId, recipient, unclaimedAmount);
+        // 最后转账未领取的租金
+        IERC20 stablecoin = IERC20(distribution.stablecoinAddress);
+        require(stablecoin.transfer(recipient, amountToLiquidate), "Transfer failed");
     }
     
     // 添加新事件

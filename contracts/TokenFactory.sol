@@ -118,13 +118,19 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         tokens[_propertyId] = tokenAddress;
         allTokens.push(tokenAddress);
         
-        // 授予RentDistributor快照角色
+        // 设置代币权限和初始供应量
         RealEstateToken token = RealEstateToken(tokenAddress);
+        
+        // 统一授权逻辑：确保rent distributor有SNAPSHOT_ROLE
+        token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
+        
+        // 确保propertyRegistry有必要的权限以检查房产状态
+        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(propertyRegistry));
+        
+        // 只有在指定初始供应量时才铸造
         if (_initialSupply > 0) {
             token.mint(msg.sender, _initialSupply);
         }
-        
-        token.grantRole(token.SNAPSHOT_ROLE(), address(rentDistributor));
         
         emit TokenCreated(_propertyId, tokenAddress, _name, _symbol);
         

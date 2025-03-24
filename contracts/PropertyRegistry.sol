@@ -43,6 +43,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     // 合约版本，用于追踪升级
     uint256 public version;
     
+    // 当前链ID，用于跨链部署时区分版本
+    uint256 public chainId;
+    
     // 事件
     event PropertyRegistered(string propertyId, string country, string metadataURI, address registeredBy);
     event PropertyApproved(string propertyId, address approvedBy);
@@ -65,6 +68,13 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         
         roleManager = RoleManager(_roleManager);
         version = 1;
+        
+        // 记录当前链ID
+        uint256 id;
+        assembly {
+            id := chainid()
+        }
+        chainId = id;
         
         emit PropertyRegistryInitialized(msg.sender, _roleManager, version);
     }
@@ -206,6 +216,18 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         // 更新版本号
         uint256 oldVersion = version;
         version += 1;
+        
+        // 重新检查链ID，确保即使在硬分叉后也能正确识别
+        uint256 id;
+        assembly {
+            id := chainid()
+        }
+        
+        // 如果链ID发生变化，记录新的链ID
+        if (id != chainId) {
+            chainId = id;
+        }
+        
         emit VersionUpdated(oldVersion, version);
     }
 

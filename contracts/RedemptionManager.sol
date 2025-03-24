@@ -220,6 +220,18 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
             revert InvalidRequestStatus(requestId, request.status);
         }
         
+        // 验证stablecoinAmount的合理性
+        require(stablecoinAmount > 0, "Stablecoin amount must be greater than zero");
+        
+        // 检查stablecoin是否被支持
+        address stablecoinAddress = request.stablecoinAddress;
+        require(supportedStablecoins[stablecoinAddress], "Stablecoin not supported");
+        
+        // 确保总体估值与代币价值合理对应（基本验证）
+        // 实际实现中可能需要更复杂的价值评估逻辑
+        uint256 tokenAmount = request.tokenAmount;
+        require(stablecoinAmount >= tokenAmount / 100, "Stablecoin amount too low");
+        
         // 更新请求信息
         request.status = RedemptionStatus.Approved;
         request.approvalTime = block.timestamp;

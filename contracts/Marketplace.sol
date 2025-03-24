@@ -76,6 +76,7 @@ contract Marketplace is
     event TradingFeeCollected(uint256 orderId, uint256 feeAmount, address feeToken);
     event MarketplacePaused(address indexed admin);
     event MarketplaceUnpaused(address indexed admin);
+    event EmergencyWithdraw(address indexed admin, address indexed token, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -449,7 +450,16 @@ contract Marketplace is
      * @param amount 数量
      */
     function emergencyWithdraw(address tokenAddress, uint256 amount) external onlySuperAdmin nonReentrant {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than zero");
+        
         IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Insufficient balance");
+        
+        // 记录事件，然后进行转账
+        emit EmergencyWithdraw(msg.sender, tokenAddress, amount);
+        
         bool success = token.transfer(msg.sender, amount);
         require(success, "Transfer failed");
     }
