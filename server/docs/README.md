@@ -1,74 +1,78 @@
-# 日本房地产代币化平台文档中心
+# Japanese Real Estate Tokenization Platform Documentation
 
-此文档中心提供了关于日本房地产代币化平台的完整技术和用户文档。包括后端服务、智能合约、部署指南和使用说明等信息。
+This documentation center provides comprehensive technical and user documentation for the Japanese Real Estate Tokenization Platform, including backend services, smart contracts, deployment guides, and usage instructions.
 
-## 项目概述
+## Project Overview
 
-[项目主页](../../README.md) - 系统整体介绍和架构说明
+[Project Homepage](../../README.md) - System introduction and architecture overview
 
-## 后端服务文档
+## Backend Service Documentation
 
-后端服务负责与以太坊智能合约交互，管理房产注册、代币化、赎回和租金分配。详见[后端服务文档](../README.md)。
+The backend service interacts with Ethereum smart contracts to manage property registration, tokenization, redemption, and rent distribution. See [Backend Service Documentation](../README.md) for details.
 
-### 主要特性
+### Key Features
 
-- 房产管理 - 注册、审核、下架房产
-- 代币管理 - 创建代币、白名单管理
-- 赎回管理 - 处理赎回请求
-- 租金管理 - 租金分配和领取
-- 基于角色的操作权限系统
+- Property Management - Registration, approval, delisting
+- Token Management - Token creation, whitelist management
+- Redemption Management - Handling redemption requests
+- Rent Management - Rent distribution and collection
+- Role-based operation permission system
 
-## 系统核心文档
+## System Core Documents
 
-| 文档名称 | 描述 |
+| Document | Description |
 |---------|------|
-| [系统流程图](../../docs/系统流程图.md) | 展示系统各个组件之间的交互流程 |
-| [技术文档](../../docs/技术文档.md) | 详细的技术实现说明文档 |
-| [角色功能表](../../docs/角色功能表.md) | 系统中各角色及其对应的权限功能 |
+| [System Flowchart](../../docs/系统流程图.md) | Displays interaction flow between system components |
+| [Technical Documentation](../../docs/技术文档.md) | Detailed technical implementation documentation |
+| [Role Function Table](../../docs/角色功能表.md) | System roles and their corresponding permissions |
 
-## 用户指南
+## User Guides
 
-| 文档名称 | 描述 |
+| Document | Description |
 |---------|------|
-| [用户手册](../../docs/用户手册.md) | 面向最终用户的使用指南 |
-| [FAQ](../../docs/FAQ.md) | 常见问题解答 |
+| [User Manual](../../docs/用户手册.md) | End-user guide |
+| [FAQ](../../docs/FAQ.md) | Frequently asked questions |
 
-## 部署和维护
+## Deployment and Maintenance
 
-| 文档名称 | 描述 |
+| Document | Description |
 |---------|------|
-| [开发部署指南](../../docs/开发部署指南.md) | 开发环境部署步骤和说明 |
-| [主网部署指南](../../docs/主网部署指南.md) | 生产环境部署流程和注意事项 |
-| [修复指南](../../docs/修复指南.md) | 常见问题的修复方法和系统维护指南 |
+| [Development Deployment Guide](../../docs/开发部署指南.md) | Development environment setup and instructions |
+| [Mainnet Deployment Guide](../../docs/主网部署指南.md) | Production environment deployment process and considerations |
+| [Repair Guide](../../docs/修复指南.md) | Methods for fixing common issues and system maintenance |
 
-## 后端服务架构
+## Backend Service Architecture
 
-后端服务基于Node.js和Express构建，主要组件包括：
+The backend service is built with Node.js and Express, with main components including:
 
-1. **配置管理**：管理环境变量、网络配置和角色权限
-2. **多角色私钥管理**：根据操作类型使用不同的私钥进行签名
-3. **合约服务层**：封装与以太坊智能合约的交互逻辑
-4. **控制器和路由**：处理HTTP请求和定义API端点
-5. **认证和错误处理**：API密钥认证和统一错误处理
+1. **Configuration Management**: Managing environment variables, network configuration, and role permissions
+2. **Multi-role Private Key Management**: Using different private keys for signing based on operation type
+3. **Contract Service Layer**: Encapsulating interaction logic with Ethereum smart contracts
+4. **Controllers and Routes**: Handling HTTP requests and defining API endpoints
+5. **Authentication and Error Handling**: API key authentication and unified error handling
 
-详细的后端架构和目录结构请参考[后端服务文档](../README.md#项目结构)。
+For detailed backend architecture and directory structure, refer to [Backend Service Documentation](../README.md#project-structure).
 
-## 合约与后端交互
+## Contract and Backend Interaction
 
-后端服务通过`ethers.js`库与以太坊智能合约进行交互。在处理特定操作时，系统会根据操作类型（在`config/index.js`的`operationRoles`中定义）自动选择使用对应角色的私钥进行签名。
+The backend service interacts with Ethereum smart contracts using the `ethers.js` library. When handling specific operations, the system automatically selects the corresponding role's private key for signing based on the operation type (defined in `operationRoles` in `config/index.js`).
 
-例如，当处理房产审批操作时，系统会使用管理员(admin)私钥；而处理租金分配时，则会使用财务(finance)私钥。
+For example, when handling property approval operations, the system uses the admin private key; when handling rent distribution, it uses the finance private key.
 
-详细的合约交互流程和角色定义请参考：
-- [角色功能表](../../docs/角色功能表.md)
-- [系统流程图](../../docs/系统流程图.md)
+For detailed contract interaction processes and role definitions, refer to:
+- [Role Function Table](../../docs/角色功能表.md)
+- [System Flowchart](../../docs/系统流程图.md)
 
-## 测试和维护
+## Testing and Maintenance
 
-系统提供了单元测试和集成测试，可通过以下命令运行：
+The system provides unit tests and integration tests, which can be run with:
 
 ```bash
 npm test
 ```
 
-如需进行系统维护或常见问题修复，请参考[修复指南](../../docs/修复指南.md)。 
+For system maintenance or fixing common issues, refer to the [Repair Guide](../../docs/修复指南.md).
+
+## Document Navigation
+
+For Chinese documentation, see [中文文档导航](./文档导航.md). 
