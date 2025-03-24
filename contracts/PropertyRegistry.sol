@@ -344,6 +344,17 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     }
     
     /**
+     * @dev 获取房产状态 (重载函数，支持uint256类型ID)
+     * @param _propertyId 数值型房产ID
+     * @return 房产状态
+     */
+    function getPropertyStatus(uint256 _propertyId) external view returns (PropertyStatus) {
+        string memory propertyIdStr = uint256ToString(_propertyId);
+        require(properties[propertyIdStr].exists, "Property does not exist");
+        return properties[propertyIdStr].status;
+    }
+    
+    /**
      * @dev 设置房产状态（公开接口）
      * @param propertyId 房产ID
      * @param newStatus 新状态
@@ -363,5 +374,56 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         
         properties[propertyId].status = newStatus;
         emit PropertyStatusUpdated(propertyId, newStatus);
+    }
+    
+    /**
+     * @dev 设置房产状态（公开接口，重载版本支持uint256类型ID）
+     * @param propertyId 房产ID (uint256)
+     * @param newStatus 新状态
+     */
+    function setPropertyStatus(uint256 propertyId, PropertyStatus newStatus) external {
+        string memory propertyIdStr = uint256ToString(propertyId);
+        // 检查调用者是否是超级管理员或有房产管理权限
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            roleManager.hasRole(roleManager.PROPERTY_MANAGER(), msg.sender),
+            "Caller is not authorized to set property status"
+        );
+        
+        require(properties[propertyIdStr].exists, "Property does not exist");
+        
+        // 验证状态转换的有效性
+        _validateStatusTransition(properties[propertyIdStr].status, newStatus);
+        
+        properties[propertyIdStr].status = newStatus;
+        emit PropertyStatusUpdated(propertyIdStr, newStatus);
+    }
+    
+    /**
+     * @dev 将uint256转换为string（内部辅助函数）
+     * @param value 要转换的整数值
+     * @return 转换后的字符串
+     */
+    function uint256ToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        
+        uint256 temp = value;
+        uint256 digits;
+        
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        
+        return string(buffer);
     }
 }

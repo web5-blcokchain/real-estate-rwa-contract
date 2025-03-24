@@ -51,6 +51,9 @@ contract Marketplace is
     // 支持的稳定币列表
     mapping(address => bool) public supportedStablecoins;
     
+    // 添加一个数组来存储所有支持的稳定币地址
+    address[] private supportedStablecoinsList;
+    
     // 错误定义
     error InvalidOrderStatus(uint256 orderId, OrderStatus currentStatus);
     error UnsupportedStablecoin(address stablecoin);
@@ -105,8 +108,12 @@ contract Marketplace is
      */
     function addSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
         require(_stablecoin != address(0), "Invalid stablecoin address");
-        supportedStablecoins[_stablecoin] = true;
-        emit StablecoinStatusUpdated(_stablecoin, true);
+        // 只有首次添加时才加入列表
+        if (!supportedStablecoins[_stablecoin]) {
+            supportedStablecoins[_stablecoin] = true;
+            supportedStablecoinsList.push(_stablecoin);
+            emit StablecoinStatusUpdated(_stablecoin, true);
+        }
     }
 
     /**
@@ -228,9 +235,8 @@ contract Marketplace is
         }
         
         // 记录交易费用
-        // 使用数字1表示TRADING枚举类型
-        FeeManager.FeeType feeType = FeeManager.FeeType.TRADING; // 正确使用枚举类型
-        feeManager.collectFee(tradingFee, feeType, msg.sender);
+        uint256 feeTypeValue = 1; // FeeManager.FeeType.TRADING 的枚举值
+        feeManager.collectFee(tradingFee, FeeManager.FeeType(feeTypeValue), msg.sender);
         
         emit OrderFulfilled(orderId, msg.sender, price);
     }
@@ -355,27 +361,39 @@ contract Marketplace is
     
     /**
      * @dev 获取支持的稳定币列表
-     * @param startIndex 起始索引
-     * @param count 数量
+     * @param offset 起始偏移量（分页用）
+     * @param limit 数量限制（分页用）
+     * @return 支持的稳定币地址数组
      */
-    function getSupportedStablecoins(uint256 startIndex, uint256 count) external view returns (address[] memory) {
-        // 计算支持的稳定币总数
-        uint256 totalSupported = 0;
-        for (uint256 i = startIndex; i < startIndex + count; i++) {
-            if (supportedStablecoins[address(uint160(i))]) {
-                totalSupported++;
+    function getSupportedStablecoins(uint256 offset, uint256 limit) external view returns (address[] memory) {
+        // 获取活跃的稳定币总数
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < supportedStablecoinsList.length; i++) {
+            if (supportedStablecoins[supportedStablecoinsList[i]]) {
+                activeCount++;
             }
         }
         
-        // 创建结果数组
-        address[] memory result = new address[](totalSupported);
-        uint256 index = 0;
+        // 处理分页参数
+        if (offset >= activeCount) {
+            return new address[](0);
+        }
+        
+        uint256 resultSize = (activeCount - offset) < limit ? (activeCount - offset) : limit;
+        address[] memory result = new address[](resultSize);
         
         // 填充结果数组
-        for (uint256 i = startIndex; i < startIndex + count; i++) {
-            address stablecoin = address(uint160(i));
+        uint256 current = 0;
+        uint256 added = 0;
+        
+        for (uint256 i = 0; i < supportedStablecoinsList.length && added < resultSize; i++) {
+            address stablecoin = supportedStablecoinsList[i];
             if (supportedStablecoins[stablecoin]) {
-                result[index++] = stablecoin;
+                if (current >= offset) {
+                    result[added] = stablecoin;
+                    added++;
+                }
+                current++;
             }
         }
         

@@ -150,7 +150,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         address stablecoinAddress
     ) external nonReentrant returns (uint256) {
         // 检查房产状态
-        PropertyRegistry.PropertyStatus propertyStatus = propertyRegistry.getPropertyStatus(uint256ToString(propertyId));
+        PropertyRegistry.PropertyStatus propertyStatus = propertyRegistry.getPropertyStatus(propertyId);
         if (propertyStatus != PropertyRegistry.PropertyStatus.Approved) {
             revert InvalidPropertyStatus(propertyId);
         }
@@ -197,7 +197,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         propertyRequests[propertyId].push(requestId);
         
         // 通知房产合约有赎回请求
-        propertyRegistry.setPropertyStatus(uint256ToString(propertyId), PropertyRegistry.PropertyStatus.Redemption);
+        propertyRegistry.setPropertyStatus(propertyId, PropertyRegistry.PropertyStatus.Redemption);
         
         emit RedemptionRequested(requestId, msg.sender, propertyId, tokenAddress, tokenAmount);
         
@@ -271,7 +271,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         
         // 如果没有其他待处理的赎回请求，恢复房产状态
         if (!hasPendingRedemptions) {
-            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+            propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
         }
         
         emit RedemptionRejected(requestId, msg.sender, reason);
@@ -351,7 +351,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         
         // 如果没有其他活跃的赎回请求，恢复房产状态
         if (!hasActiveRedemptions) {
-            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+            propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
         }
         
         emit RedemptionCompleted(requestId, msg.sender);
@@ -396,7 +396,7 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         
         // 如果没有其他待处理的赎回请求，恢复房产状态
         if (!hasPendingRedemptions) {
-            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+            propertyRegistry.setPropertyStatus(request.propertyId, PropertyRegistry.PropertyStatus.Approved);
         }
         
         emit RedemptionCancelled(requestId, msg.sender);
@@ -418,33 +418,5 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         uint256 oldVersion = version;
         version += 1;
         emit VersionUpdated(oldVersion, version);
-    }
-
-    /**
-     * @dev 将uint256转换为string（助手函数）
-     * @param value 要转换的数值
-     * @return 转换后的字符串
-     */
-    function uint256ToString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0";
-        }
-        
-        uint256 temp = value;
-        uint256 digits;
-        
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        
-        return string(buffer);
     }
 }

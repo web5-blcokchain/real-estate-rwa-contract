@@ -33,6 +33,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         bool isProcessed;
         uint256 snapshotId;
         uint256 totalClaimed;
+        uint256 approvalTime;
     }
     
     // 添加分配ID计数器
@@ -154,7 +155,8 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
             netAmount: 0,
             isProcessed: false,
             snapshotId: 0,
-            totalClaimed: 0
+            totalClaimed: 0,
+            approvalTime: block.timestamp
         });
         
         emit RentReceived(distributionCount, propertyId, stablecoinAddress, amount, rentalPeriod);
@@ -196,6 +198,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         distribution.maintenanceFee = maintenanceFeeAmount;
         distribution.netAmount = netAmount;
         distribution.snapshotId = snapshotId;
+        distribution.approvalTime = block.timestamp;
         distribution.isProcessed = true;
         
         emit RentProcessed(distributionId, platformFeeAmount, maintenanceFeeAmount, netAmount);
@@ -365,7 +368,7 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
             dist.tokenAddress,
             dist.stablecoinAddress,
             dist.totalAmount,
-            bytes(dist.rentalPeriod).length > 0 ? block.timestamp : 0,
+            dist.approvalTime,
             dist.platformFee,
             dist.maintenanceFee,
             dist.netAmount,
@@ -383,8 +386,11 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(distribution.isProcessed, "Distribution not processed");
         
-        // 检查分配是否已经超过6个月
-        require(block.timestamp >= distribution.snapshotId + 180 days, "Liquidation period not reached");
+        // 使用创建快照的时间（即分配处理的时间）作为计算基准
+        // 要求至少6个月的清算期限
+        uint256 liquidationPeriod = 180 days;
+        require(block.timestamp >= distribution.approvalTime + liquidationPeriod, 
+                "Liquidation period not reached");
         
         // 计算未领取的金额
         uint256 unclaimedAmount = distribution.netAmount - distribution.totalClaimed;
