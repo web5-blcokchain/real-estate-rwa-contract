@@ -69,28 +69,42 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable, PausableUpgradeable
      */
     function initialize(
         address _roleManager,
+        address _feeManager,
         address _propertyRegistry,
         address _tokenFactory,
+        address _redemptionManager,
         address _rentDistributor,
         address _marketplace,
-        address _tokenHolderQuery,
-        uint256 _chainId
+        address _tokenHolderQuery
     ) public initializer {
         __UUPSUpgradeable_init();
         __Pausable_init();
         
         systemActive = true;
         roleManager = RoleManager(_roleManager);
+        feeManager = FeeManager(_feeManager);
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         tokenFactory = TokenFactory(_tokenFactory);
+        redemptionManager = RedemptionManager(_redemptionManager);
+        rentDistributor = RentDistributor(_rentDistributor);
         rentDistributorAddress = _rentDistributor;
-        chainId = _chainId;
+        marketplace = Marketplace(_marketplace);
+        tokenHolderQuery = TokenHolderQuery(_tokenHolderQuery);
+        
+        // 记录链ID
+        uint256 id;
+        assembly {
+            id := chainid()
+        }
+        chainId = id;
         version = 1;
         
         // 存储合约地址到映射
         _contractNameToAddress[keccak256(abi.encodePacked("RoleManager"))] = _roleManager;
+        _contractNameToAddress[keccak256(abi.encodePacked("FeeManager"))] = _feeManager;
         _contractNameToAddress[keccak256(abi.encodePacked("PropertyRegistry"))] = _propertyRegistry;
         _contractNameToAddress[keccak256(abi.encodePacked("TokenFactory"))] = _tokenFactory;
+        _contractNameToAddress[keccak256(abi.encodePacked("RedemptionManager"))] = _redemptionManager;
         _contractNameToAddress[keccak256(abi.encodePacked("RentDistributor"))] = _rentDistributor;
         _contractNameToAddress[keccak256(abi.encodePacked("Marketplace"))] = _marketplace;
         _contractNameToAddress[keccak256(abi.encodePacked("TokenHolderQuery"))] = _tokenHolderQuery;
@@ -101,9 +115,9 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable, PausableUpgradeable
             _propertyRegistry,
             _tokenFactory,
             _marketplace,
-            address(0),
+            _redemptionManager,
             _rentDistributor,
-            _chainId,
+            chainId,
             version
         );
     }

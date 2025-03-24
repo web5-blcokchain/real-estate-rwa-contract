@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-03-24T20:10:16.938Z",
+  "chainId": 31337,
+  "status": "PENDING",
+  "realEstateSystem": "0xC38aa7Bd880C95684496F342207b15921C0F9700",
+  "currentReferences": {
+    "roleManager": "0x077383f6B364022f55Abc18690e2e7737c70eba1",
+    "feeManager": "0x0000000000000000000000000000000000000000",
+    "propertyRegistry": "0x1480978d3ce94eb5057Abcf681EDa7E49CfA5c9f",
+    "tokenFactory": "0x7Ab1d8dF4Bbd17a83Ae7D8864994158eA50e43d1",
+    "redemptionManager": "0x0000000000000000000000000000000000000000",
+    "rentDistributor": "0x0000000000000000000000000000000000000000",
+    "marketplace": "0x0000000000000000000000000000000000000000",
+    "tokenHolderQuery": "0x0000000000000000000000000000000000000000"
+  },
+  "correctReferences": {
+    "roleManager": "0x077383f6B364022f55Abc18690e2e7737c70eba1",
+    "feeManager": "0x1480978d3ce94eb5057Abcf681EDa7E49CfA5c9f",
+    "propertyRegistry": "0x7Ab1d8dF4Bbd17a83Ae7D8864994158eA50e43d1",
+    "tokenFactory": "0xc11583640CF6F2bBD31Ad73956037Ee083cC13B8",
+    "redemptionManager": "0x3e753eff107D846bD38f96754454c135bC6f2C41",
+    "rentDistributor": "0xFb85a0eE934431AB2dF35C7267576DF23E2291f4",
+    "marketplace": "0x858a4230cD914f6cBD3EA8b242Ee608dFb38A960",
+    "tokenHolderQuery": "0x36235029ea309e027dD162df998F68bE4A2b4CCC"
+  },
+  "referenceStatus": {
+    "roleManager": true,
+    "feeManager": false,
+    "propertyRegistry": false,
+    "tokenFactory": false,
+    "redemptionManager": false,
+    "rentDistributor": false,
+    "marketplace": false,
+    "tokenHolderQuery": false
+  }
+}

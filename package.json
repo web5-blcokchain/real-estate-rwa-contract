@@ -27,11 +27,10 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy:testnet": "hardhat run scripts/deploy-unified.js --network bsc_testnet",
-    "deploy:mainnet": "hardhat run scripts/deploy-unified.js --network bsc_mainnet",
-    "verify:testnet": "hardhat run scripts/verify/verify.js --network bsc_testnet",
-    "verify:mainnet": "hardhat run scripts/verify/verify.js --network bsc_mainnet",
-    "upgrade": "hardhat run scripts/upgrade/upgrade-contract.js --network",
-    "validate-env": "node scripts/utils/validate-env.js"
+    "deploy": "hardhat run scripts/deploy-unified.js --network localhost",
+    "verify-contracts": "hardhat run scripts/verify-deployment.js --network localhost",
+    "fix-references": "hardhat run scripts/manual-fix-reference.js",
+    "verify-fix": "hardhat run scripts/verify-reference-fix.js",
+    "generate-calldata": "hardhat run scripts/create-initialize-calldata.js"
   }
 }
