@@ -15,6 +15,15 @@ import "./RoleManager.sol";
  */
 library SystemDeployerLib2 {
     /**
+     * @dev 创建代理并初始化
+     * @param _logic 实现合约地址
+     * @param _data 初始化数据
+     */
+    function _deployProxy(address _logic, bytes memory _data) private returns (address) {
+        return address(new ERC1967Proxy(_logic, _data));
+    }
+
+    /**
      * @dev 部署代币工厂合约
      */
     function deployStep6_TokenFactory(
@@ -22,9 +31,9 @@ library SystemDeployerLib2 {
         address propertyRegistryAddress,
         address tokenImplementationAddress
     ) external returns (address) {
-        TokenFactory tokenFactoryImpl = new TokenFactory();
-        ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
-            address(tokenFactoryImpl),
+        TokenFactory impl = new TokenFactory();
+        return _deployProxy(
+            address(impl),
             abi.encodeWithSelector(
                 TokenFactory(address(0)).initialize.selector,
                 roleManagerAddress,
@@ -32,7 +41,6 @@ library SystemDeployerLib2 {
                 tokenImplementationAddress
             )
         );
-        return address(tokenFactoryProxy);
     }
     
     /**
@@ -42,16 +50,15 @@ library SystemDeployerLib2 {
         address roleManagerAddress,
         address propertyRegistryAddress
     ) external returns (address) {
-        RedemptionManager redemptionManagerImpl = new RedemptionManager();
-        ERC1967Proxy redemptionManagerProxy = new ERC1967Proxy(
-            address(redemptionManagerImpl),
+        RedemptionManager impl = new RedemptionManager();
+        return _deployProxy(
+            address(impl),
             abi.encodeWithSelector(
                 RedemptionManager(address(0)).initialize.selector,
                 roleManagerAddress,
                 propertyRegistryAddress
             )
         );
-        return address(redemptionManagerProxy);
     }
     
     /**
@@ -61,28 +68,26 @@ library SystemDeployerLib2 {
         address roleManagerAddress,
         address feeManagerAddress
     ) external returns (address) {
-        Marketplace marketplaceImpl = new Marketplace();
-        ERC1967Proxy marketplaceProxy = new ERC1967Proxy(
-            address(marketplaceImpl),
+        Marketplace impl = new Marketplace();
+        return _deployProxy(
+            address(impl),
             abi.encodeWithSelector(
                 Marketplace(address(0)).initialize.selector,
                 roleManagerAddress,
                 feeManagerAddress
             )
         );
-        return address(marketplaceProxy);
     }
     
     /**
      * @dev 部署代币持有者查询合约
      */
     function deployStep9_TokenHolderQuery() external returns (address) {
-        TokenHolderQuery tokenHolderQueryImpl = new TokenHolderQuery();
-        ERC1967Proxy tokenHolderQueryProxy = new ERC1967Proxy(
-            address(tokenHolderQueryImpl),
+        TokenHolderQuery impl = new TokenHolderQuery();
+        return _deployProxy(
+            address(impl),
             abi.encodeWithSelector(TokenHolderQuery(address(0)).initialize.selector)
         );
-        return address(tokenHolderQueryProxy);
     }
     
     /**
@@ -98,9 +103,9 @@ library SystemDeployerLib2 {
         address marketplaceAddress,
         address tokenHolderQueryAddress
     ) external returns (address) {
-        RealEstateSystem systemImpl = new RealEstateSystem();
-        ERC1967Proxy systemProxy = new ERC1967Proxy(
-            address(systemImpl),
+        RealEstateSystem impl = new RealEstateSystem();
+        return _deployProxy(
+            address(impl),
             abi.encodeWithSelector(
                 RealEstateSystem(address(0)).initialize.selector,
                 roleManagerAddress,
@@ -113,7 +118,6 @@ library SystemDeployerLib2 {
                 tokenHolderQueryAddress
             )
         );
-        return address(systemProxy);
     }
     
     /**
