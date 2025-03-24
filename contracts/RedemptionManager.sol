@@ -325,7 +325,8 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
             }
             
             // 记录费用收集
-            feeManager.collectFee(redemptionFee, FeeManager.FeeType.REDEMPTION, request.requester);
+            FeeManager.FeeType feeType = FeeManager.FeeType.REDEMPTION;
+            feeManager.collectFee(redemptionFee, feeType, request.requester);
             emit RedemptionFeeCollected(requestId, redemptionFee, stablecoinAddress);
         }
         
@@ -412,7 +413,12 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {
+        // 更新版本号
+        uint256 oldVersion = version;
+        version += 1;
+        emit VersionUpdated(oldVersion, version);
+    }
 
     /**
      * @dev 将uint256转换为string（助手函数）

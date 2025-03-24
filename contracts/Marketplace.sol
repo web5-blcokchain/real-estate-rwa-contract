@@ -229,7 +229,7 @@ contract Marketplace is
         
         // 记录交易费用
         // 使用数字1表示TRADING枚举类型
-        uint256 feeType = 1; // FeeManager.FeeType.TRADING的数值为1
+        FeeManager.FeeType feeType = FeeManager.FeeType.TRADING; // 正确使用枚举类型
         feeManager.collectFee(tradingFee, feeType, msg.sender);
         
         emit OrderFulfilled(orderId, msg.sender, price);
