@@ -3,18 +3,24 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";  // 添加 UUPS 导入
 import "./PropertyRegistry.sol";
 
-/**
- * @title RealEstateToken
- * @dev 房产代币，代表对特定房产的所有权份额
- */
-// 在合约定义中添加ERC20SnapshotUpgradeable
-contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgradeable, AccessControlUpgradeable, PausableUpgradeable, UUPSUpgradeable {
+
+
+
+
+
+
+
+contract RealEstateToken is 
+    ERC20Upgradeable, 
+    ERC20SnapshotUpgradeable, 
+    PausableUpgradeable, 
+    AccessControlUpgradeable,
+    UUPSUpgradeable {  // 添加 UUPSUpgradeable 继承
     // 角色定义
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -23,7 +29,7 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgrad
     
     // 房产信息
     string public propertyId;
-    PropertyRegistry public propertyRegistry;
+    PropertyRegistry public propertyRegistry;  // 确保 PropertyRegistry 已正确导入
     
     // 白名单映射
     mapping(address => bool) public whitelist;
@@ -276,12 +282,13 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgrad
         return _snapshot();
     }
     
-    // 重写 _beforeTokenTransfer 函数
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable, PausableUpgradeable) {
-        super._beforeTokenTransfer(from, to, amount);
-    }
+      function _beforeTokenTransfer(
+            address from,
+            address to,
+            uint256 amount
+        ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) { // 移除 PausableUpgradeable
+            super._beforeTokenTransfer(from, to, amount);
+        }
+
+        
 }

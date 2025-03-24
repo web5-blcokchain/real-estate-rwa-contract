@@ -77,6 +77,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         _;
     }
     
+    // 确保 createToken 函数在 batchCreateTokens 之前定义
     /**
      * @dev 创建新的房产代币
      * @param _name 代币名称
@@ -90,23 +91,13 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory _symbol,
         string memory _propertyId,
         uint256 _initialSupply
-    ) external onlyPropertyManager returns (address) {
+    ) internal returns (address) {  // 将可见性设置为 internal
         // 检查房产是否已审核
         require(propertyRegistry.isPropertyApproved(_propertyId), "Property not approved");
         
         // 检查该房产是否已经创建了代币
         require(tokens[_propertyId] == address(0), "Token already exists for this property");
         
-        /**
-         *  创建代理合约
-         *  这段代码的目的是准备调用 RealEstateToken 合约的 initialize 函数所需的数据，这样当代理合约被创建时，它就能正确地初始化。这是可升级合约模式中的标准做法，因为代理合约需要知道如何初始化实现合约
-         * @param newImplementation 
-         *  解释：
-            1. abi.encodeWithSelector 是 Solidity 提供的函数，用于将函数选择器和参数编码为字节数组，这个字节数组将作为代理合约的初始化数据。
-            2. RealEstateToken(address(0)).initialize.selector 获取 RealEstateToken 合约中 initialize 函数的选择器（函数签名的哈希值的前 4 个字节）。这里使用 address(0) 是因为我们只需要获取函数选择器，不需要实际调用函数。
-            3. 后面的参数 propertyId , name , symbol , msg.sender , address(propertyRegistry) 是传递给 initialize 函数的实际参数，它们将被编码到 initData 中。
-            4. 这个 initData 将在创建代理合约时使用，当代理合约被部署后，它会立即调用实现合约的 initialize 函数，并传入这些参数。
-         */
         bytes memory initData = abi.encodeWithSelector(
             RealEstateToken(address(0)).initialize.selector,
             _name,
@@ -129,7 +120,6 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         allTokens.push(tokenAddress);
         
         // 授予RentDistributor快照角色
-        // 铸造初始供应量
         RealEstateToken token = RealEstateToken(tokenAddress);
         if (_initialSupply > 0) {
             token.mint(msg.sender, _initialSupply);

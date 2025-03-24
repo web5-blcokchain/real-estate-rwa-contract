@@ -31,6 +31,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         PropertyStatus status;
         uint256 registrationTime;
         address registeredBy;
+        bool exists;  // 添加 exists 字段
     }
     
     // 房产映射
@@ -82,6 +83,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      * @param country 国家
      * @param metadataURI 元数据URI
      */
+    // 在 registerProperty 函数中设置 exists 字段
     function registerProperty(
         string memory propertyId,
         string memory country,
@@ -96,7 +98,8 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
             metadataURI: metadataURI,
             status: PropertyStatus.Pending,
             registrationTime: block.timestamp,
-            registeredBy: msg.sender
+            registeredBy: msg.sender,
+            exists: true  // 设置 exists 字段
         });
         
         allPropertyIds.push(propertyId);
@@ -137,25 +140,6 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      */
     function setPropertyToRedemption(string memory propertyId) external onlySuperAdmin {
         _setPropertyStatus(propertyId, PropertyStatus.Redemption, PropertyStatus.Approved);
-    }
-
-    /**
-     * @dev 冻结房产
-     * @param propertyId 房产ID
-     */
-    function freezeProperty(string memory propertyId) external onlySuperAdmin {
-        // 只要不是未注册状态，就可以冻结
-        require(propertyExists(propertyId), "Property not registered");
-        properties[propertyId].status = PropertyStatus.Frozen;
-        emit PropertyStatusUpdated(propertyId, PropertyStatus.Frozen);
-    }
-
-    /**
-     * @dev 解冻房产（恢复为已审核状态）
-     * @param propertyId 房产ID
-     */
-    function unfreezeProperty(string memory propertyId) external onlySuperAdmin {
-        _setPropertyStatus(propertyId, PropertyStatus.Approved, PropertyStatus.Frozen);
     }
 
     /**
@@ -212,39 +196,17 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
      */
     function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
 
-    /**
-     * @dev 设置房产为赎回状态
-     * @param propertyId 房产ID
-     */
-    function setPropertyToRedemption(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status == PropertyStatus.Approved, "Property not in approved status");
-        
-        properties[propertyId].status = PropertyStatus.Redemption;
-        
-        emit PropertyStatusUpdated(propertyId, PropertyStatus.Redemption);
-    }
-
-    /**
-     * @dev 冻结房产
-     * @param propertyId 房产ID
-     */
+    
+    // 保留233行和245行的函数定义
     function freezeProperty(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status != PropertyStatus.NotRegistered, "Property not registered");
-        
+        require(properties[propertyId].exists, "Property does not exist");
         properties[propertyId].status = PropertyStatus.Frozen;
-        
         emit PropertyStatusUpdated(propertyId, PropertyStatus.Frozen);
     }
 
-    /**
-     * @dev 解冻房产（恢复为已审核状态）
-     * @param propertyId 房产ID
-     */
     function unfreezeProperty(string memory propertyId) external onlySuperAdmin {
-        require(properties[propertyId].status == PropertyStatus.Frozen, "Property not in frozen status");
-        
+        require(properties[propertyId].exists, "Property does not exist");
         properties[propertyId].status = PropertyStatus.Approved;
-        
         emit PropertyStatusUpdated(propertyId, PropertyStatus.Approved);
     }
 

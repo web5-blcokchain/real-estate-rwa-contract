@@ -16,9 +16,10 @@ contract RoleManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable
     bytes32 public constant FEE_COLLECTOR = keccak256("FEE_COLLECTOR"); // 添加费用收集者角色
     
     // 事件
-    event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
-    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
-
+    // 删除以下重复事件定义
+    // event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
+    // event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();

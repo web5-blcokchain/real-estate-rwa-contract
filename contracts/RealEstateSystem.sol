@@ -126,11 +126,12 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         tokenFactory = TokenFactory(address(tokenFactoryProxy));
         
         // 部署市场合约
+        // 修改 Marketplace 初始化部分
         Marketplace marketplaceImpl = new Marketplace();
         ERC1967Proxy marketplaceProxy = new ERC1967Proxy(
             address(marketplaceImpl),
             abi.encodeWithSelector(
-                Marketplace(address(0)).initialize.selector,
+                bytes4(keccak256("initialize(address,address)")), // 使用明确的函数签名
                 address(roleManager),
                 address(feeManager)
             )

@@ -17,7 +17,7 @@ if (PRIVATE_KEY === "00000000000000000000000000000000000000000000000000000000000
 
 module.exports = {
   solidity: {
-    version: "0.8.17",
+    version: "0.8.19",
     settings: {
       optimizer: {
         enabled: true,

@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";  // 添加 IERC20 导入
 import "./RoleManager.sol";
-import "./RealEstateToken.sol";
-import "./FeeManager.sol";
+import "./FeeManager.sol";  // 添加 FeeManager 导入
 
-/**
- * @title Marketplace
- * @dev 房产代币二级市场（可升级版本）
- */
-contract Marketplace is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract Marketplace is 
+    Initializable, 
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable {  // 添加继承
     RoleManager public roleManager;
     FeeManager public feeManager;
     // 移除 KYCManager 变量
@@ -25,8 +23,8 @@ contract Marketplace is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeab
         address _feeManager
         // 移除 address _kycManager
     ) public initializer {
-        __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();  // 添加初始化
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
@@ -77,28 +75,22 @@ contract Marketplace is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeab
      */
     // 存在两个 initialize 函数，第一个在第23-33行，第二个在第78-89行
     // 第一个函数已经正确移除了 KYC 相关代码
+    // 合并两个 initialize 函数
     function initialize(
         address _roleManager,
-        address _feeManager
+        address /* _tokenFactory */  // 注释掉未使用的参数名
     ) public initializer {
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
+        
+        // 添加 tokenFactory 初始化（如果需要）
+        // tokenFactory = ITokenFactory(_tokenFactory);
     }
     
-    function initialize(
-        address _roleManager,
-        address _feeManager,
-        address _tokenFactory
-    ) public initializer {
-        __ReentrancyGuard_init();
-        __UUPSUpgradeable_init();
-        
-        roleManager = RoleManager(_roleManager);
-        feeManager = FeeManager(_feeManager);
-    }
+    // 删除旧的 initialize 函数定义
 
     /**
      * @dev 修饰器：只有超级管理员可以调用
