@@ -272,10 +272,6 @@ contract RealEstateToken is Initializable, ERC20Upgradeable, ERC20SnapshotUpgrad
      * @dev 创建快照
      * @return 快照ID
      */
-    // 添加 SNAPSHOT_ROLE 常量
-    bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE");
-    
-    // 添加 snapshot 函数
     function snapshot() external onlyRole(SNAPSHOT_ROLE) returns (uint256) {
         return _snapshot();
     }
