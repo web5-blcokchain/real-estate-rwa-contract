@@ -21,13 +21,16 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
+        runs: 1
+      },
+      viaIR: true
     }
   },
   networks: {
     hardhat: {
-      chainId: 31337
+      chainId: 31337,
+      allowUnlimitedContractSize: true,
+      port: 8546
     },
     bsc_mainnet: {
       url: MAINNET_RPC_URL,

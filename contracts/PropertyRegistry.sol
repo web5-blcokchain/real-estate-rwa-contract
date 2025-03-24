@@ -221,13 +221,52 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         PropertyStatus newStatus, 
         PropertyStatus requiredStatus
     ) internal {
+        require(properties[propertyId].exists, "Property does not exist");
+        
+        // 如果指定了requiredStatus，则验证当前状态
         if (requiredStatus != PropertyStatus.NotRegistered) {
             require(properties[propertyId].status == requiredStatus, 
                     string(abi.encodePacked("Property not in ", _getStatusString(requiredStatus), " status")));
         }
         
+        // 验证状态转换的有效性
+        _validateStatusTransition(properties[propertyId].status, newStatus);
+        
         properties[propertyId].status = newStatus;
         emit PropertyStatusUpdated(propertyId, newStatus);
+    }
+    
+    /**
+     * @dev 验证状态转换是否有效
+     * @param currentStatus 当前状态
+     * @param newStatus 新状态
+     */
+    function _validateStatusTransition(PropertyStatus currentStatus, PropertyStatus newStatus) internal pure {
+        // Frozen状态可以转换为Approved
+        if (currentStatus == PropertyStatus.Frozen && newStatus == PropertyStatus.Approved) {
+            return;
+        }
+        
+        // Redemption状态可以转换为Approved
+        if (currentStatus == PropertyStatus.Redemption && newStatus == PropertyStatus.Approved) {
+            return;
+        }
+        
+        // 通常的状态转换路径
+        if (currentStatus == PropertyStatus.Pending && 
+            (newStatus == PropertyStatus.Approved || newStatus == PropertyStatus.Rejected)) {
+            return;
+        }
+        
+        if (currentStatus == PropertyStatus.Approved && 
+            (newStatus == PropertyStatus.Delisted || 
+             newStatus == PropertyStatus.Redemption || 
+             newStatus == PropertyStatus.Frozen)) {
+            return;
+        }
+        
+        // 拒绝无效的状态转换
+        revert("Invalid status transition");
     }
 
     /**

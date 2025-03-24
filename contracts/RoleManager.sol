@@ -35,6 +35,7 @@ contract RoleManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable
         // 设置角色管理员
         _setRoleAdmin(SUPER_ADMIN, SUPER_ADMIN);
         _setRoleAdmin(PROPERTY_MANAGER, SUPER_ADMIN);
+        _setRoleAdmin(FEE_COLLECTOR, SUPER_ADMIN);
         
         // 授予部署者默认管理员角色
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);

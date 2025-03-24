@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";  // 添加 IERC20 导入
 import "./RoleManager.sol";
 import "./FeeManager.sol";  // 添加 FeeManager 导入
+import "./RealEstateToken.sol";  // 添加 RealEstateToken 导入
 
 contract Marketplace is 
     Initializable, 
@@ -14,22 +15,7 @@ contract Marketplace is
     ReentrancyGuardUpgradeable {  // 添加继承
     RoleManager public roleManager;
     FeeManager public feeManager;
-    // 移除 KYCManager 变量
-    // KYCManager public kycManager;
     
-    // 修改初始化函数
-    function initialize(
-        address _roleManager,
-        address _feeManager
-        // 移除 address _kycManager
-    ) public initializer {
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();  // 添加初始化
-        
-        roleManager = RoleManager(_roleManager);
-        feeManager = FeeManager(_feeManager);
-    }
-
     // 订单状态
     enum OrderStatus {
         Active,
@@ -73,24 +59,16 @@ contract Marketplace is
     /**
      * @dev 初始化函数（替代构造函数）
      */
-    // 存在两个 initialize 函数，第一个在第23-33行，第二个在第78-89行
-    // 第一个函数已经正确移除了 KYC 相关代码
-    // 合并两个 initialize 函数
     function initialize(
         address _roleManager,
-        address /* _tokenFactory */  // 注释掉未使用的参数名
+        address _feeManager
     ) public initializer {
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
-        
-        // 添加 tokenFactory 初始化（如果需要）
-        // tokenFactory = ITokenFactory(_tokenFactory);
     }
-    
-    // 删除旧的 initialize 函数定义
 
     /**
      * @dev 修饰器：只有超级管理员可以调用
@@ -134,7 +112,6 @@ contract Marketplace is
     ) external nonReentrant {
         require(tokenAmount > 0, "Token amount must be greater than 0");
         require(price > 0, "Price must be greater than 0");
-        // 移除 require(kycManager.isKYCVerified(msg.sender), "Seller not KYC verified");
         require(supportedStablecoins[stablecoinAddress], "Unsupported stablecoin");
         
         RealEstateToken token = RealEstateToken(tokenAddress);
@@ -163,11 +140,9 @@ contract Marketplace is
      * @dev 购买订单
      * @param orderId 订单ID
      */
-    // 修改 fulfillOrder 函数
     function fulfillOrder(uint256 orderId) external nonReentrant {
         Order storage order = orders[orderId];
         require(order.status == OrderStatus.Active, "Order not active");
-        // 移除 require(kycManager.isKYCVerified(msg.sender), "Buyer not KYC verified");
         
         // 获取稳定币合约
         IERC20 stablecoin = IERC20(order.stablecoinAddress);

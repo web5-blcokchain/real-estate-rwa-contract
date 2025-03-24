@@ -136,9 +136,12 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
      * @dev 处理租金分配
      * @param distributionId 分配ID
      */
-    function processRentDistribution(uint256 distributionId) external onlyPropertyManager {
+    function processRentDistribution(uint256 distributionId) external nonReentrant onlyPropertyManager() {
         RentDistribution storage distribution = rentDistributions[distributionId];
         require(!distribution.isProcessed, "Already processed");
+        
+        // 先更新状态，防止重入攻击
+        distribution.isProcessed = true;
         
         // 计算平台费用
         uint256 platformFeeAmount = feeManager.calculateFee(distribution.totalAmount, feeManager.platformFee());
@@ -167,7 +170,6 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         distribution.platformFee = platformFeeAmount;
         distribution.maintenanceFee = maintenanceFeeAmount;
         distribution.netAmount = netAmount;
-        distribution.isProcessed = true;
         
         emit RentProcessed(distributionId, platformFeeAmount, maintenanceFeeAmount, netAmount);
     }
@@ -181,6 +183,9 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         require(distribution.isProcessed, "Distribution not processed");
         require(!hasClaimed[distributionId][msg.sender], "Already claimed");
         
+        // 先标记为已领取，防止重入攻击
+        hasClaimed[distributionId][msg.sender] = true;
+        
         uint256 snapshotId = distributionSnapshots[distributionId];
         require(snapshotId > 0, "No snapshot for this distribution");
         
@@ -191,8 +196,6 @@ contract RentDistributor is Initializable, ReentrancyGuardUpgradeable, UUPSUpgra
         uint256 totalSupply = token.totalSupplyAt(snapshotId);
         uint256 userShare = (distribution.netAmount * userBalance) / totalSupply;
         require(userShare > 0, "Share too small");
-        
-        hasClaimed[distributionId][msg.sender] = true;
         
         // 转账稳定币给用户
         IERC20 stablecoin = IERC20(distribution.stablecoinAddress);

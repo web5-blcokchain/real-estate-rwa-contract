@@ -193,6 +193,14 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         RedemptionRequest storage request = redemptionRequests[requestId];
         require(request.status == RedemptionStatus.Approved, "Request not approved");
         
+        // 先更新状态以防止重入攻击
+        request.status = RedemptionStatus.Completed;
+        request.completionTime = block.timestamp;
+        
+        // 验证代币地址
+        RealEstateToken token = RealEstateToken(tokenAddress);
+        require(redemptionAmount > 0, "Redemption amount must be greater than 0");
+        
         // 计算赎回费用
         uint256 fee = feeManager.calculateFee(redemptionAmount, feeManager.redemptionFee());
         uint256 netAmount = redemptionAmount - fee;
@@ -205,7 +213,6 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
                 "Insufficient stablecoin allowance");
         
         // 销毁代币
-        RealEstateToken token = RealEstateToken(tokenAddress);
         token.burn(request.tokenAmount);
         
         // 转移稳定币给请求者
@@ -215,9 +222,6 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         // 转移费用给费用收集者
         require(stablecoin.transferFrom(msg.sender, feeManager.feeCollector(), fee), 
                 "Failed to transfer fee");
-        
-        request.status = RedemptionStatus.Completed;
-        request.completionTime = block.timestamp;
         
         emit RedemptionCompleted(requestId, netAmount, request.stablecoinAddress);
     }

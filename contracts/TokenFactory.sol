@@ -77,7 +77,6 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         _;
     }
     
-    // 确保 createToken 函数在 batchCreateTokens 之前定义
     /**
      * @dev 创建新的房产代币
      * @param _name 代币名称
@@ -91,7 +90,7 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         string memory _symbol,
         string memory _propertyId,
         uint256 _initialSupply
-    ) internal returns (address) {  // 将可见性设置为 internal
+    ) internal returns (address) {  // 内部函数
         // 检查房产是否已审核
         require(propertyRegistry.isPropertyApproved(_propertyId), "Property not approved");
         
@@ -100,11 +99,11 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         
         bytes memory initData = abi.encodeWithSelector(
             RealEstateToken(address(0)).initialize.selector,
+            _propertyId,
             _name,
             _symbol,
-            _propertyId,
-            address(propertyRegistry),
-            msg.sender
+            msg.sender,
+            address(propertyRegistry)
         );
         
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
@@ -130,6 +129,23 @@ contract TokenFactory is Initializable, UUPSUpgradeable {
         emit TokenCreated(_propertyId, tokenAddress, _name, _symbol);
         
         return tokenAddress;
+    }
+    
+    /**
+     * @dev 创建单个代币（公共接口）
+     * @param _name 代币名称
+     * @param _symbol 代币符号
+     * @param _propertyId 房产ID
+     * @param _initialSupply 初始供应量
+     * @return 新创建的代币地址
+     */
+    function createSingleToken(
+        string memory _name,
+        string memory _symbol,
+        string memory _propertyId,
+        uint256 _initialSupply
+    ) external onlySuperAdmin returns (address) {
+        return createToken(_name, _symbol, _propertyId, _initialSupply);
     }
     
     /**

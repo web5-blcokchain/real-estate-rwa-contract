@@ -282,13 +282,16 @@ contract RealEstateToken is
         return _snapshot();
     }
     
-      function _beforeTokenTransfer(
-            address from,
-            address to,
-            uint256 amount
-        ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) { // 移除 PausableUpgradeable
-            super._beforeTokenTransfer(from, to, amount);
-        }
-
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) {
+        super._beforeTokenTransfer(from, to, amount);
         
+        // 当合约暂停时，只允许特权角色进行操作
+        if (paused()) {
+            require(hasRole(PAUSER_ROLE, msg.sender), "Token transfers paused");
+        }
+    }
 }

@@ -42,7 +42,11 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
+        
+        // 初始时将部署者设为费用收集者
         feeCollector = msg.sender;
+        
+        // 角色将由RoleManager单独授予
     }
 
     /**
@@ -57,7 +61,8 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
      * @dev 修饰器：只有费用收集者可以调用
      */
     modifier onlyFeeCollector() {
-        require(roleManager.hasRole(roleManager.FEE_COLLECTOR(), msg.sender), "Caller is not a fee collector");
+        require(roleManager.hasRole(roleManager.FEE_COLLECTOR(), msg.sender) || 
+                msg.sender == feeCollector, "Caller is not a fee collector");
         _;
     }
 
@@ -100,6 +105,13 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
         require(_feeCollector != address(0), "Invalid address");
         address oldCollector = feeCollector;
         feeCollector = _feeCollector;
+        
+        // 同时更新角色
+        if (roleManager.hasRole(roleManager.FEE_COLLECTOR(), oldCollector)) {
+            roleManager.revokeRole(roleManager.FEE_COLLECTOR(), oldCollector);
+        }
+        roleManager.grantRole(roleManager.FEE_COLLECTOR(), _feeCollector);
+        
         emit FeeCollectorUpdated(oldCollector, _feeCollector);
     }
 

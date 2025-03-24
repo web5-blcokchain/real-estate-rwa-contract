@@ -8,6 +8,15 @@ const fs = require("fs");
 const path = require("path");
 const { verifyEnv } = require("./utils/verify-env");
 const { getLogger } = require("./utils/logging");
+const config = require("./config/deploy-config");
+const {
+  deployUpgradeable,
+  getContract,
+  getRoles
+} = require("./utils/deploy-utils");
+
+// 在main函数开始处添加
+const validateEnv = require("./utils/validate-env");
 
 const logger = getLogger("deploy");
 
@@ -125,28 +134,6 @@ function saveDeploymentRecord(contracts, chainId, networkName, deployer) {
   console.log(`部署记录已保存到: ${deploymentFile}`);
 }
 
-// 逐步部署系统的辅助函数
-async function deployStep(deployer_contract, step) {
-  console.log(`部署步骤 ${step}...`);
-  
-  // 估算gas
-  const gasEstimate = await deployer_contract.estimateGas.deployStep(step);
-  const safeGas = gasEstimate.mul(120).div(100); // 增加20%的安全余量
-  
-  // 获取gas价格
-  const gasPrice = await ethers.provider.getGasPrice();
-  const fastGasPrice = gasPrice.mul(110).div(100); // 增加10%
-  
-  const tx = await deployer_contract.deployStep(step, {
-    gasLimit: safeGas,
-    gasPrice: fastGasPrice
-  });
-  
-  console.log(`步骤 ${step} 交易已提交: ${tx.hash}`);
-  await tx.wait();
-  console.log(`步骤 ${step} 已完成`);
-}
-
 async function main() {
   try {
     // 验证环境变量
@@ -176,11 +163,6 @@ async function main() {
       console.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
     }
     
-    // 启动本地区块链网络
-    if (networkName === 'localhost' || networkName === 'hardhat') {
-      console.log("正在使用本地网络，确保本地节点已启动");
-    }
-    
     // 部署SystemDeployer合约
     logger.info("部署 SystemDeployer...");
     console.log("开始部署 SystemDeployer...");
@@ -196,20 +178,25 @@ async function main() {
     // 设置部署进度监听
     await monitorDeploymentProgress(deployer_contract);
     
-    // 逐步部署系统
-    logger.info("开始逐步部署系统...");
-    console.log("开始逐步部署系统...");
+    // 使用SystemDeployer部署整个系统
+    logger.info("开始部署整个系统...");
+    console.log("开始部署整个系统...");
     
-    // 部署总共11个步骤
-    for (let step = 1; step <= 11; step++) {
-      try {
-        await deployStep(deployer_contract, step);
-      } catch (error) {
-        console.error(`步骤 ${step} 部署失败: ${error.message}`);
-        logger.error(`步骤 ${step} 部署失败: ${error.message}`);
-        throw error;
-      }
-    }
+    // 获取gas价格并增加一点以加速交易
+    const gasPrice = await ethers.provider.getGasPrice();
+    const fastGasPrice = gasPrice.mul(110).div(100); // 增加10%
+    
+    const deploySystemOptions = {
+      gasPrice: fastGasPrice,
+      gasLimit: 15000000, // 设置较高的gas限制以确保交易不会失败
+    };
+    
+    const tx = await deployer_contract.deploySystem(deploySystemOptions);
+    console.log(`系统部署交易已提交: ${tx.hash}`);
+    logger.info(`系统部署交易已提交: ${tx.hash}`);
+    
+    console.log("等待交易确认...");
+    await tx.wait();
     
     console.log("系统部署完成");
     logger.info("系统部署完成");
@@ -249,6 +236,60 @@ async function main() {
     console.error(`部署过程中出错: ${error.message}`);
     console.error(error);
   }
+}
+
+function generateVerificationScript(networkName, contracts) {
+  const verifyScriptPath = path.join(__dirname, `verify-${networkName}.js`);
+  let verifyScript = `
+const hre = require("hardhat");
+
+async function main() {
+  console.log("开始验证${networkName}合约...");
+  
+`;
+
+  // 为每个合约生成验证代码
+  for (const [contractName, address] of Object.entries(contracts)) {
+    let constructorArgs = "[]";
+
+    // 根据合约类型设置构造函数参数
+    if (contractName === "PropertyRegistry") {
+      constructorArgs = `["${contracts.RoleManager}"]`;
+    } else if (contractName === "TokenFactory") {
+      constructorArgs = `["${contracts.PropertyRegistry}"]`;
+    } else if (contractName === "RedemptionManager") {
+      constructorArgs = `["${contracts.PropertyRegistry}"]`;
+    } else if (contractName === "RentDistributor" || contractName === "Marketplace" || contractName === "TokenHolderQuery") {
+      constructorArgs = `["${contracts.TokenFactory}"]`;
+    }
+
+    verifyScript += `  // 验证${contractName}
+  try {
+    await hre.run("verify:verify", {
+      address: "${address}",
+      constructorArguments: ${constructorArgs}
+    });
+    console.log("${contractName} 验证成功");
+  } catch (error) {
+    console.error("${contractName} 验证失败:", error.message);
+  }
+  
+`;
+  }
+
+  verifyScript += `  console.log("验证完成");
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+`;
+
+  fs.writeFileSync(verifyScriptPath, verifyScript);
+  logger.info(`验证脚本已生成: ${verifyScriptPath}`);
 }
 
 // 如果直接运行此脚本

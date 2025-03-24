@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./RoleManager.sol";
 import "./FeeManager.sol";
 import "./PropertyRegistry.sol";
@@ -12,6 +11,7 @@ import "./RedemptionManager.sol";
 import "./RentDistributor.sol";
 import "./Marketplace.sol";
 import "./TokenHolderQuery.sol";
+import "./RealEstateToken.sol";
 
 /**
  * @title RealEstateSystem
@@ -31,6 +31,9 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     Marketplace public marketplace;
     TokenHolderQuery public tokenHolderQuery;
     
+    // 合约升级映射
+    mapping(bytes32 => address) private _contractNameToAddress;
+    
     // 事件
     event SystemStatusChanged(bool active);
     event ContractUpgraded(string contractName, address newImplementation);
@@ -41,116 +44,41 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @dev 初始化函数（替代构造函数）
+     * @dev 初始化函数 - 使用已部署的合约地址而不是在初始化时部署
      */
-    function initialize() public initializer {
+    function initialize(
+        address _roleManager,
+        address _feeManager,
+        address _propertyRegistry,
+        address _tokenFactory,
+        address _redemptionManager,
+        address _rentDistributor,
+        address _marketplace,
+        address _tokenHolderQuery
+    ) public initializer {
         __UUPSUpgradeable_init();
         
         systemActive = true;
         
-        // 部署角色管理合约
-        RoleManager roleManagerImpl = new RoleManager();
-        ERC1967Proxy roleManagerProxy = new ERC1967Proxy(
-            address(roleManagerImpl),
-            abi.encodeWithSelector(RoleManager(address(0)).initialize.selector)
-        );
-        roleManager = RoleManager(address(roleManagerProxy));
+        // 设置合约引用
+        roleManager = RoleManager(_roleManager);
+        feeManager = FeeManager(_feeManager);
+        propertyRegistry = PropertyRegistry(_propertyRegistry);
+        tokenFactory = TokenFactory(_tokenFactory);
+        redemptionManager = RedemptionManager(_redemptionManager);
+        rentDistributor = RentDistributor(_rentDistributor);
+        marketplace = Marketplace(_marketplace);
+        tokenHolderQuery = TokenHolderQuery(_tokenHolderQuery);
         
-        // 部署费用管理合约
-        FeeManager feeManagerImpl = new FeeManager();
-        ERC1967Proxy feeManagerProxy = new ERC1967Proxy(
-            address(feeManagerImpl),
-            abi.encodeWithSelector(FeeManager(address(0)).initialize.selector, address(roleManager))
-        );
-        feeManager = FeeManager(address(feeManagerProxy));
-        
-        // 部署房产注册合约
-        PropertyRegistry propertyRegistryImpl = new PropertyRegistry();
-        ERC1967Proxy propertyRegistryProxy = new ERC1967Proxy(
-            address(propertyRegistryImpl),
-            abi.encodeWithSelector(PropertyRegistry(address(0)).initialize.selector, address(roleManager))
-        );
-        propertyRegistry = PropertyRegistry(address(propertyRegistryProxy));
-        
-        // 部署代币工厂合约
-        // 移除第一次部署的 TokenFactory 代码
-        /*
-        TokenFactory tokenFactoryImpl = new TokenFactory();
-        ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
-            address(tokenFactoryImpl),
-            abi.encodeWithSelector(
-                TokenFactory(address(0)).initialize.selector,
-                address(roleManager),
-                address(propertyRegistry),
-                address(feeManager) // 这里应该是 tokenImplementation
-            )
-        );
-        tokenFactory = TokenFactory(address(tokenFactoryProxy));
-        */
-        
-        // 部署赎回管理合约
-        RedemptionManager redemptionManagerImpl = new RedemptionManager();
-        ERC1967Proxy redemptionManagerProxy = new ERC1967Proxy(
-            address(redemptionManagerImpl),
-            abi.encodeWithSelector(
-                RedemptionManager(address(0)).initialize.selector,
-                address(roleManager),
-                address(feeManager)
-            )
-        );
-        redemptionManager = RedemptionManager(address(redemptionManagerProxy));
-        
-        // 部署租金分配合约
-        // 保留第二次部署的代码，但调整部署顺序
-        // 先部署 RentDistributor
-        RentDistributor rentDistributorImpl = new RentDistributor();
-        ERC1967Proxy rentDistributorProxy = new ERC1967Proxy(
-            address(rentDistributorImpl),
-            abi.encodeWithSelector(RentDistributor(address(0)).initialize.selector, address(roleManager), address(feeManager))
-        );
-        rentDistributor = RentDistributor(address(rentDistributorProxy));
-        
-        // 再部署 TokenFactory
-        RealEstateToken tokenImpl = new RealEstateToken();
-        TokenFactory tokenFactoryImpl = new TokenFactory();
-        ERC1967Proxy tokenFactoryProxy = new ERC1967Proxy(
-            address(tokenFactoryImpl),
-            abi.encodeWithSelector(
-                TokenFactory(address(0)).initialize.selector, 
-                address(roleManager), 
-                address(propertyRegistry), 
-                address(tokenImpl),
-                address(rentDistributor)
-            )
-        );
-        tokenFactory = TokenFactory(address(tokenFactoryProxy));
-        
-        // 部署市场合约
-        // 修改 Marketplace 初始化部分
-        Marketplace marketplaceImpl = new Marketplace();
-        ERC1967Proxy marketplaceProxy = new ERC1967Proxy(
-            address(marketplaceImpl),
-            abi.encodeWithSelector(
-                bytes4(keccak256("initialize(address,address)")), // 使用明确的函数签名
-                address(roleManager),
-                address(feeManager)
-            )
-        );
-        marketplace = Marketplace(address(marketplaceProxy));
-        
-        // 授予当前部署者超级管理员角色
-        roleManager.grantRole(roleManager.SUPER_ADMIN(), msg.sender);
-        
-        // 部署TokenHolderQuery
-        TokenHolderQuery tokenHolderQueryImpl = new TokenHolderQuery();
-        ERC1967Proxy tokenHolderQueryProxy = new ERC1967Proxy(
-            address(tokenHolderQueryImpl),
-            abi.encodeWithSelector(
-                TokenHolderQuery(address(0)).initialize.selector,
-                address(roleManager)
-            )
-        );
-        tokenHolderQuery = TokenHolderQuery(address(tokenHolderQueryProxy));
+        // 初始化合约升级映射
+        _contractNameToAddress[keccak256(abi.encodePacked("RoleManager"))] = _roleManager;
+        _contractNameToAddress[keccak256(abi.encodePacked("FeeManager"))] = _feeManager;
+        _contractNameToAddress[keccak256(abi.encodePacked("PropertyRegistry"))] = _propertyRegistry;
+        _contractNameToAddress[keccak256(abi.encodePacked("TokenFactory"))] = _tokenFactory;
+        _contractNameToAddress[keccak256(abi.encodePacked("RedemptionManager"))] = _redemptionManager;
+        _contractNameToAddress[keccak256(abi.encodePacked("RentDistributor"))] = _rentDistributor;
+        _contractNameToAddress[keccak256(abi.encodePacked("Marketplace"))] = _marketplace;
+        _contractNameToAddress[keccak256(abi.encodePacked("TokenHolderQuery"))] = _tokenHolderQuery;
     }
 
     /**
@@ -177,13 +105,50 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         systemActive = _active;
         emit SystemStatusChanged(_active);
     }
+    
+    /**
+     * @dev 紧急暂停所有系统组件
+     * 暂停代币转移、市场交易等所有操作
+     */
+    function emergencyPause() external onlySuperAdmin {
+        // 设置系统状态为不活动
+        systemActive = false;
+        emit SystemStatusChanged(false);
+        
+        // 暂停所有代币
+        address[] memory allTokenAddresses = tokenFactory.getAllTokens();
+        for (uint256 i = 0; i < allTokenAddresses.length; i++) {
+            RealEstateToken token = RealEstateToken(allTokenAddresses[i]);
+            if (!token.paused()) {
+                token.pause();
+            }
+        }
+    }
+    
+    /**
+     * @dev 紧急恢复系统组件
+     */
+    function emergencyUnpause() external onlySuperAdmin {
+        // 设置系统状态为活动
+        systemActive = true;
+        emit SystemStatusChanged(true);
+        
+        // 恢复所有代币
+        address[] memory allTokenAddresses = tokenFactory.getAllTokens();
+        for (uint256 i = 0; i < allTokenAddresses.length; i++) {
+            RealEstateToken token = RealEstateToken(allTokenAddresses[i]);
+            if (token.paused()) {
+                token.unpause();
+            }
+        }
+    }
 
     /**
      * @dev 获取系统合约地址
      * @return 合约地址数组
      */
     function getSystemContracts() external view returns (address[] memory) {
-        address[] memory contracts = new address[](7);
+        address[] memory contracts = new address[](8);
         contracts[0] = address(roleManager);
         contracts[1] = address(feeManager);
         contracts[2] = address(propertyRegistry);
@@ -191,6 +156,7 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         contracts[4] = address(redemptionManager);
         contracts[5] = address(rentDistributor);
         contracts[6] = address(marketplace);
+        contracts[7] = address(tokenHolderQuery);
         return contracts;
     }
 
@@ -203,26 +169,12 @@ contract RealEstateSystem is Initializable, UUPSUpgradeable {
         require(newImplementation != address(0), "Invalid implementation address");
         
         bytes32 nameHash = keccak256(abi.encodePacked(contractName));
+        address contractAddress = _contractNameToAddress[nameHash];
         
-        if (nameHash == keccak256(abi.encodePacked("RoleManager"))) {
-            roleManager.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("FeeManager"))) {
-            feeManager.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("PropertyRegistry"))) {
-            propertyRegistry.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("TokenFactory"))) {
-            tokenFactory.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("RedemptionManager"))) {
-            redemptionManager.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("RentDistributor"))) {
-            rentDistributor.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("Marketplace"))) {
-            marketplace.upgradeTo(newImplementation);
-        } else if (nameHash == keccak256(abi.encodePacked("TokenHolderQuery"))) {
-            tokenHolderQuery.upgradeTo(newImplementation);
-        } else {
-            revert("Unknown contract name");
-        }
+        require(contractAddress != address(0), "Unknown contract name");
+        
+        UUPSUpgradeable upgradeableContract = UUPSUpgradeable(contractAddress);
+        upgradeableContract.upgradeTo(newImplementation);
         
         emit ContractUpgraded(contractName, newImplementation);
     }
