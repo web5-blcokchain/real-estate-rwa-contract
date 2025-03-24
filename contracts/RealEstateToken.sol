@@ -5,31 +5,32 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";  // 添加 UUPS 导入
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./PropertyRegistry.sol";
 
-
-
-
-
-
-
-
+/**
+ * @title RealEstateToken
+ * @dev 房产通证化的ERC20代币合约，包含暂停、快照和访问控制功能
+ */
 contract RealEstateToken is 
     ERC20Upgradeable, 
     ERC20SnapshotUpgradeable, 
     PausableUpgradeable, 
     AccessControlUpgradeable,
-    UUPSUpgradeable {  // 添加 UUPSUpgradeable 继承
+    UUPSUpgradeable {
+    
+    // 合约版本，用于追踪升级
+    uint256 public version;
+    
     // 角色定义
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE"); // 添加快照角色
+    bytes32 public constant SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE");
     
     // 房产信息
     string public propertyId;
-    PropertyRegistry public propertyRegistry;  // 确保 PropertyRegistry 已正确导入
+    PropertyRegistry public propertyRegistry;
     
     // 白名单映射
     mapping(address => bool) public whitelist;
@@ -45,9 +46,12 @@ contract RealEstateToken is
     
     // 事件
     event WhitelistUpdated(address indexed user, bool status);
+    event WhitelistBatchUpdated(uint256 count, bool status);
     event TransferRestrictionUpdated(bool restricted);
     event WhitelistEnabledUpdated(bool indexed enabled);
     event MaxSupplyUpdated(uint256 indexed oldMaxSupply, uint256 indexed newMaxSupply);
+    event TokenInitialized(string propertyId, address admin, uint256 version);
+    event VersionUpdated(uint256 oldVersion, uint256 newVersion);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -71,19 +75,23 @@ contract RealEstateToken is
         __UUPSUpgradeable_init();
         
         propertyId = _propertyId;
-        // 将传入的地址转换为PropertyRegistry合约实例，用于后续调用PropertyRegistry的函数
         propertyRegistry = PropertyRegistry(_propertyRegistry);
         transferRestricted = true;
         whitelistEnabled = false; // 默认不启用白名单功能
         maxSupply = 1000000000 * 10**decimals(); // 默认设置为10亿代币
+        version = 1; // 初始版本
         
-        _setupRole(DEFAULT_ADMIN_ROLE, _admin);
-        _setupRole(SUPER_ADMIN_ROLE, _admin);
-        _setupRole(MINTER_ROLE, _admin);
-        _setupRole(PAUSER_ROLE, _admin);
+        // 使用_grantRole替代过时的_setupRole
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(SUPER_ADMIN_ROLE, _admin);
+        _grantRole(MINTER_ROLE, _admin);
+        _grantRole(PAUSER_ROLE, _admin);
+        _grantRole(SNAPSHOT_ROLE, _admin);
         
         // 自动将管理员添加到白名单
         whitelist[_admin] = true;
+        
+        emit TokenInitialized(_propertyId, _admin, version);
     }
     
     /**
@@ -92,6 +100,7 @@ contract RealEstateToken is
      * @param amount 代币数量
      */
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        // 检查是否超过最大供应量
         require(totalSupply() + amount <= maxSupply, "Exceeds maximum supply");
         _mint(to, amount);
     }
@@ -116,21 +125,21 @@ contract RealEstateToken is
     }
     
     /**
-     * @dev 暂停所有代币操作
+     * @dev 暂停所有代币转账
      */
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
     
     /**
-     * @dev 恢复所有代币操作
+     * @dev 恢复所有代币转账
      */
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
     }
     
     /**
-     * @dev 设置转账限制状态
+     * @dev 启用/禁用转账限制
      * @param _restricted 是否限制
      */
     function setTransferRestriction(bool _restricted) external onlyRole(SUPER_ADMIN_ROLE) {
@@ -139,102 +148,102 @@ contract RealEstateToken is
     }
     
     /**
-     * @dev 添加用户到白名单
-     * @param _user 用户地址
-     */
-    function addToWhitelist(address _user) external onlyRole(SUPER_ADMIN_ROLE) {
-        whitelist[_user] = true;
-        emit WhitelistUpdated(_user, true);
-    }
-    
-    /**
-     * @dev 从白名单移除用户
-     * @param _user 用户地址
-     */
-    function removeFromWhitelist(address _user) external onlyRole(SUPER_ADMIN_ROLE) {
-        whitelist[_user] = false;
-        emit WhitelistUpdated(_user, false);
-    }
-    
-    /**
-     * @dev 批量添加用户到白名单
-     * @param _users 用户地址数组
-     */
-    function batchAddToWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
-        for (uint256 i = 0; i < _users.length; i++) {
-            whitelist[_users[i]] = true;
-            emit WhitelistUpdated(_users[i], true);
-        }
-    }
-    
-    /**
-     * @dev 批量从白名单移除用户
-     * @param _users 用户地址数组
-     */
-    function batchRemoveFromWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
-        for (uint256 i = 0; i < _users.length; i++) {
-            whitelist[_users[i]] = false;
-            emit WhitelistUpdated(_users[i], false);
-        }
-    }
-    
-    /**
-     * @dev 重写transfer函数，添加白名单检查
-     */
-    function transfer(address to, uint256 amount) public override whenNotPaused returns (bool) {
-        _checkTransferRestrictions(msg.sender, to);
-        return super.transfer(to, amount);
-    }
-    
-    /**
-     * @dev 重写transferFrom函数，添加白名单检查
-     */
-    function transferFrom(address from, address to, uint256 amount) public override whenNotPaused returns (bool) {
-        _checkTransferRestrictions(from, to);
-        return super.transferFrom(from, to, amount);
-    }
-    
-    /**
-     * @dev 设置白名单功能开关
-     * @param _enabled 是否启用白名单
+     * @dev 启用/禁用白名单功能
+     * @param _enabled 是否启用
      */
     function setWhitelistEnabled(bool _enabled) external onlyRole(SUPER_ADMIN_ROLE) {
         whitelistEnabled = _enabled;
         emit WhitelistEnabledUpdated(_enabled);
     }
     
-    // 删除: 
-    // function setOperationalStatus(OperationalStatus _status) external onlyRole(SUPER_ADMIN_ROLE) {
-    //     operationalStatus = _status;
-    //     emit OperationalStatusUpdated(_status);
-    // }
-
     /**
-     * @dev 检查转账限制
+     * @dev 添加地址到白名单
+     * @param _user 用户地址
      */
+    function addToWhitelist(address _user) external onlyRole(SUPER_ADMIN_ROLE) {
+        require(_user != address(0), "Invalid address");
+        whitelist[_user] = true;
+        emit WhitelistUpdated(_user, true);
+    }
+    
+    /**
+     * @dev 从白名单中移除地址
+     * @param _user 用户地址
+     */
+    function removeFromWhitelist(address _user) external onlyRole(SUPER_ADMIN_ROLE) {
+        require(_user != address(0), "Invalid address");
+        whitelist[_user] = false;
+        emit WhitelistUpdated(_user, false);
+    }
+    
+    /**
+     * @dev 批量添加地址到白名单
+     * @param _users 用户地址数组
+     */
+    function batchAddToWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
+        for (uint256 i = 0; i < _users.length; i++) {
+            require(_users[i] != address(0), "Invalid address");
+            whitelist[_users[i]] = true;
+        }
+        emit WhitelistBatchUpdated(_users.length, true);
+    }
+    
+    /**
+     * @dev 批量从白名单中移除地址
+     * @param _users 用户地址数组
+     */
+    function batchRemoveFromWhitelist(address[] calldata _users) external onlyRole(SUPER_ADMIN_ROLE) {
+        for (uint256 i = 0; i < _users.length; i++) {
+            require(_users[i] != address(0), "Invalid address");
+            whitelist[_users[i]] = false;
+        }
+        emit WhitelistBatchUpdated(_users.length, false);
+    }
+    
+    /**
+     * @dev 在转账前检查各种限制条件
+     * @param from 发送者地址
+     * @param to 接收者地址
+     */
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) {
+        super._beforeTokenTransfer(from, to, amount);
+        
+        // 当合约暂停时，只允许特权角色进行操作
+        if (paused()) {
+            require(hasRole(PAUSER_ROLE, msg.sender), "Token transfers paused");
+        }
+        
+        // 如果不是铸造或销毁操作，检查转账限制
+        if (from != address(0) && to != address(0)) {
+            _checkTransferRestrictions(from, to);
+        }
+    }
+    
     /**
      * @dev 检查转账限制
+     * @param from 发送者地址
+     * @param to 接收者地址
      */
     function _checkTransferRestrictions(address from, address to) internal view {
-        // 获取房产信息
-        PropertyRegistry.Property memory property = propertyRegistry.getProperty(propertyId);
-        PropertyRegistry.PropertyStatus status = property.status;
+        // 如果没有开启转账限制，则不需要检查
+        if (!transferRestricted) {
+            return;
+        }
+        
+        // 管理员可以绕过限制
+        if (hasRole(SUPER_ADMIN_ROLE, from) || hasRole(SUPER_ADMIN_ROLE, to)) {
+            return;
+        }
+        
+        // 获取房产状态
+        PropertyRegistry.PropertyStatus status = propertyRegistry.getPropertyStatus(propertyId);
         
         // 检查房产状态
-        if (status == PropertyRegistry.PropertyStatus.Frozen) {
-            revert("Transfers frozen: property is in frozen state");
-        }
-        
-        if (status == PropertyRegistry.PropertyStatus.Redemption) {
-            // 在赎回状态下，只允许向管理员转账（用于赎回流程）
-            require(
-                hasRole(SUPER_ADMIN_ROLE, to) || hasRole(MINTER_ROLE, to),
-                "During redemption, transfers only allowed to admins"
-            );
-        }
-        
         if (status == PropertyRegistry.PropertyStatus.Delisted) {
-            // 在下架状态下，可以增加特定的限制
             require(
                 hasRole(SUPER_ADMIN_ROLE, from) || hasRole(SUPER_ADMIN_ROLE, to),
                 "When delisted, only admins can transfer tokens"
@@ -258,7 +267,12 @@ contract RealEstateToken is
     /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(SUPER_ADMIN_ROLE) {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(SUPER_ADMIN_ROLE) {
+        // 更新版本号
+        uint256 oldVersion = version;
+        version += 1;
+        emit VersionUpdated(oldVersion, version);
+    }
     
     /**
      * @dev 批量转账
@@ -268,9 +282,23 @@ contract RealEstateToken is
     function batchTransfer(address[] calldata recipients, uint256[] calldata amounts) external whenNotPaused {
         require(recipients.length == amounts.length, "Array lengths must match");
         
+        // 只检查一次转账发起者是否符合条件
+        address sender = msg.sender;
+        if (transferRestricted && !hasRole(SUPER_ADMIN_ROLE, sender)) {
+            PropertyRegistry.PropertyStatus status = propertyRegistry.getPropertyStatus(propertyId);
+            require(
+                status == PropertyRegistry.PropertyStatus.Approved,
+                "Property not in approved status"
+            );
+        }
+        
+        // 执行批量转账
         for (uint256 i = 0; i < recipients.length; i++) {
-            _checkTransferRestrictions(msg.sender, recipients[i]);
-            _transfer(msg.sender, recipients[i], amounts[i]);
+            // 检查接收者是否符合白名单条件
+            if (transferRestricted && whitelistEnabled) {
+                require(whitelist[recipients[i]], "Recipient not whitelisted");
+            }
+            _transfer(sender, recipients[i], amounts[i]);
         }
     }
     
@@ -282,16 +310,20 @@ contract RealEstateToken is
         return _snapshot();
     }
     
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) {
-        super._beforeTokenTransfer(from, to, amount);
-        
-        // 当合约暂停时，只允许特权角色进行操作
-        if (paused()) {
-            require(hasRole(PAUSER_ROLE, msg.sender), "Token transfers paused");
-        }
+    /**
+     * @dev 检查特定地址是否在白名单中
+     * @param account 要检查的地址
+     * @return 是否在白名单中
+     */
+    function isWhitelisted(address account) external view returns (bool) {
+        return whitelist[account];
+    }
+    
+    /**
+     * @dev 检查当前可用供应量
+     * @return availableSupply 可用供应量
+     */
+    function availableSupply() external view returns (uint256 availableSupply) {
+        return maxSupply - totalSupply();
     }
 }

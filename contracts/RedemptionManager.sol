@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./RoleManager.sol";
 import "./RealEstateToken.sol";
 import "./FeeManager.sol";
+import "./PropertyRegistry.sol";
 
 /**
  * @title RedemptionManager
@@ -16,6 +17,10 @@ import "./FeeManager.sol";
 contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     RoleManager public roleManager;
     FeeManager public feeManager;
+    PropertyRegistry public propertyRegistry;
+
+    // 合约版本，用于追踪升级
+    uint256 public version;
 
     // 赎回状态
     enum RedemptionStatus {
@@ -28,14 +33,18 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
     // 赎回请求
     struct RedemptionRequest {
-        string propertyId;
+        uint256 requestId;
+        uint256 propertyId;
         address requester;
+        address tokenAddress;
         uint256 tokenAmount;
+        address stablecoinAddress;
         uint256 requestTime;
         uint256 approvalTime;
         uint256 completionTime;
+        uint256 stablecoinAmount;
         RedemptionStatus status;
-        address stablecoinAddress; // 用于赎回的稳定币地址
+        string rejectReason;
     }
 
     // 赎回请求映射
@@ -50,13 +59,29 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     // 支持的稳定币列表
     mapping(address => bool) public supportedStablecoins;
     
+    // 用户赎回请求映射
+    mapping(address => uint256[]) public userRequests;
+    
+    // 房产赎回请求映射
+    mapping(uint256 => uint256[]) public propertyRequests;
+    
+    // 错误定义
+    error InvalidRequestStatus(uint256 requestId, RedemptionStatus currentStatus);
+    error NotRequestOwner(uint256 requestId, address caller);
+    error InsufficientTokenAmount(uint256 requestId, uint256 required, uint256 actual);
+    error InvalidPropertyStatus(uint256 propertyId);
+    error InsufficientStablecoinBalance(address stablecoin, uint256 required, uint256 actual);
+    error TransferFailed();
+    
     // 事件
-    event RedemptionRequested(uint256 requestId, string propertyId, address requester, uint256 tokenAmount, address stablecoin);
-    event RedemptionApproved(uint256 requestId, address approver);
-    event RedemptionRejected(uint256 requestId, address rejector);
-    event RedemptionCompleted(uint256 requestId, uint256 amount, address stablecoin);
-    event RedemptionCancelled(uint256 requestId);
-    event StablecoinStatusUpdated(address indexed token, bool status);
+    event RedemptionRequested(uint256 indexed requestId, address indexed requester, uint256 indexed propertyId, address tokenAddress, uint256 tokenAmount);
+    event RedemptionApproved(uint256 indexed requestId, address indexed approver, uint256 stablecoinAmount);
+    event RedemptionRejected(uint256 indexed requestId, address indexed rejecter, string reason);
+    event RedemptionCompleted(uint256 indexed requestId, address indexed completer);
+    event RedemptionCancelled(uint256 indexed requestId, address indexed canceller);
+    event RedemptionFeeCollected(uint256 requestId, uint256 feeAmount, address feeToken);
+    event VersionUpdated(uint256 oldVersion, uint256 newVersion);
+    event RedemptionManagerInitialized(address deployer, address roleManager, address feeManager, address propertyRegistry, uint256 version);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -66,12 +91,16 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     /**
      * @dev 初始化函数（替代构造函数）
      */
-    function initialize(address _roleManager, address _feeManager) public initializer {
+    function initialize(address _roleManager, address _feeManager, address _propertyRegistry) public initializer {
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
+        propertyRegistry = PropertyRegistry(_propertyRegistry);
+        version = 1;
+        
+        emit RedemptionManagerInitialized(msg.sender, _roleManager, _feeManager, _propertyRegistry, version);
     }
 
     /**
@@ -97,7 +126,6 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     function addSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
         require(_stablecoin != address(0), "Invalid stablecoin address");
         supportedStablecoins[_stablecoin] = true;
-        emit StablecoinStatusUpdated(_stablecoin, true);
     }
 
     /**
@@ -106,143 +134,271 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
      */
     function removeSupportedStablecoin(address _stablecoin) external onlySuperAdmin {
         supportedStablecoins[_stablecoin] = false;
-        emit StablecoinStatusUpdated(_stablecoin, false);
     }
 
     /**
-     * @dev 请求赎回
+     * @dev 提交赎回请求
      * @param propertyId 房产ID
      * @param tokenAddress 代币地址
      * @param tokenAmount 代币数量
-     * @param stablecoinAddress 用于赎回的稳定币地址
+     * @param stablecoinAddress 稳定币地址
      */
     function requestRedemption(
-        string memory propertyId,
+        uint256 propertyId,
         address tokenAddress,
         uint256 tokenAmount,
         address stablecoinAddress
-    ) external nonReentrant {
-        require(tokenAmount > 0, "Token amount must be greater than 0");
-        require(supportedStablecoins[stablecoinAddress], "Unsupported stablecoin");
+    ) external nonReentrant returns (uint256) {
+        // 检查房产状态
+        PropertyRegistry.PropertyStatus propertyStatus = propertyRegistry.getPropertyStatus(uint256ToString(propertyId));
+        if (propertyStatus != PropertyRegistry.PropertyStatus.Approved) {
+            revert InvalidPropertyStatus(propertyId);
+        }
         
+        // 检查代币余额和授权
         RealEstateToken token = RealEstateToken(tokenAddress);
-        require(token.balanceOf(msg.sender) >= tokenAmount, "Insufficient token balance");
+        uint256 balance = token.balanceOf(msg.sender);
+        if (balance < tokenAmount) {
+            revert InsufficientTokenAmount(0, tokenAmount, balance);
+        }
         
-        // 锁定代币
-        token.transferFrom(msg.sender, address(this), tokenAmount);
+        uint256 allowance = token.allowance(msg.sender, address(this));
+        if (allowance < tokenAmount) {
+            revert InsufficientTokenAmount(0, tokenAmount, allowance);
+        }
+        
+        // 转移代币到合约
+        bool transferSuccess = token.transferFrom(msg.sender, address(this), tokenAmount);
+        if (!transferSuccess) {
+            revert TransferFailed();
+        }
         
         // 创建赎回请求
-        requestCount++;
-        redemptionRequests[requestCount] = RedemptionRequest({
+        uint256 requestId = ++requestCount;
+        redemptionRequests[requestId] = RedemptionRequest({
+            requestId: requestId,
             propertyId: propertyId,
             requester: msg.sender,
+            tokenAddress: tokenAddress,
             tokenAmount: tokenAmount,
+            stablecoinAddress: stablecoinAddress,
             requestTime: block.timestamp,
             approvalTime: 0,
             completionTime: 0,
+            stablecoinAmount: 0,
             status: RedemptionStatus.Pending,
-            stablecoinAddress: stablecoinAddress
+            rejectReason: ""
         });
         
-        emit RedemptionRequested(requestCount, propertyId, msg.sender, tokenAmount, stablecoinAddress);
+        // 更新用户请求映射
+        userRequests[msg.sender].push(requestId);
+        
+        // 更新房产请求映射
+        propertyRequests[propertyId].push(requestId);
+        
+        // 通知房产合约有赎回请求
+        propertyRegistry.setPropertyStatus(uint256ToString(propertyId), PropertyRegistry.PropertyStatus.Redemption);
+        
+        emit RedemptionRequested(requestId, msg.sender, propertyId, tokenAddress, tokenAmount);
+        
+        return requestId;
     }
 
     /**
      * @dev 批准赎回请求
      * @param requestId 请求ID
+     * @param stablecoinAmount 稳定币数量
      */
-    function approveRedemption(uint256 requestId) external onlySuperAdmin {
+    function approveRedemption(
+        uint256 requestId,
+        uint256 stablecoinAmount
+    ) external onlyPropertyManager nonReentrant {
         RedemptionRequest storage request = redemptionRequests[requestId];
-        require(request.status == RedemptionStatus.Pending, "Request not pending");
         
+        // 检查请求状态
+        if (request.status != RedemptionStatus.Pending) {
+            revert InvalidRequestStatus(requestId, request.status);
+        }
+        
+        // 更新请求信息
         request.status = RedemptionStatus.Approved;
         request.approvalTime = block.timestamp;
+        request.stablecoinAmount = stablecoinAmount;
         
-        emit RedemptionApproved(requestId, msg.sender);
+        emit RedemptionApproved(requestId, msg.sender, stablecoinAmount);
     }
 
     /**
      * @dev 拒绝赎回请求
      * @param requestId 请求ID
-     * @param tokenAddress 代币地址
+     * @param reason 拒绝原因
      */
-    function rejectRedemption(uint256 requestId, address tokenAddress) external onlySuperAdmin {
+    function rejectRedemption(
+        uint256 requestId,
+        string calldata reason
+    ) external onlyPropertyManager nonReentrant {
         RedemptionRequest storage request = redemptionRequests[requestId];
-        require(request.status == RedemptionStatus.Pending, "Request not pending");
         
-        // 返还代币
-        RealEstateToken token = RealEstateToken(tokenAddress);
-        token.transfer(request.requester, request.tokenAmount);
+        // 检查请求状态
+        if (request.status != RedemptionStatus.Pending) {
+            revert InvalidRequestStatus(requestId, request.status);
+        }
         
+        // 更新请求信息
         request.status = RedemptionStatus.Rejected;
+        request.rejectReason = reason;
         
-        emit RedemptionRejected(requestId, msg.sender);
+        // 返还代币给请求者
+        address tokenAddress = request.tokenAddress;
+        address requester = request.requester;
+        uint256 tokenAmount = request.tokenAmount;
+        
+        IERC20 token = IERC20(tokenAddress);
+        bool success = token.transfer(requester, tokenAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
+        
+        // 检查是否有其他待处理的赎回请求
+        bool hasPendingRedemptions = false;
+        uint256[] memory propRequests = propertyRequests[request.propertyId];
+        for (uint256 i = 0; i < propRequests.length; i++) {
+            if (redemptionRequests[propRequests[i]].status == RedemptionStatus.Pending) {
+                hasPendingRedemptions = true;
+                break;
+            }
+        }
+        
+        // 如果没有其他待处理的赎回请求，恢复房产状态
+        if (!hasPendingRedemptions) {
+            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+        }
+        
+        emit RedemptionRejected(requestId, msg.sender, reason);
     }
 
     /**
-     * @dev 完成赎回
+     * @dev 完成赎回请求
      * @param requestId 请求ID
-     * @param tokenAddress 代币地址
-     * @param redemptionAmount 赎回金额
      */
-    function completeRedemption(
-        uint256 requestId,
-        address tokenAddress,
-        uint256 redemptionAmount
-    ) external onlySuperAdmin nonReentrant {
+    function completeRedemption(uint256 requestId) external onlyPropertyManager nonReentrant {
         RedemptionRequest storage request = redemptionRequests[requestId];
-        require(request.status == RedemptionStatus.Approved, "Request not approved");
         
-        // 先更新状态以防止重入攻击
+        // 检查请求状态
+        if (request.status != RedemptionStatus.Approved) {
+            revert InvalidRequestStatus(requestId, request.status);
+        }
+        
+        // 检查稳定币余额和授权
+        address stablecoinAddress = request.stablecoinAddress;
+        uint256 stablecoinAmount = request.stablecoinAmount;
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        
+        // 检查管理员是否有足够的稳定币
+        uint256 balance = stablecoin.balanceOf(msg.sender);
+        if (balance < stablecoinAmount) {
+            revert InsufficientStablecoinBalance(stablecoinAddress, stablecoinAmount, balance);
+        }
+        
+        // 检查管理员是否授权了足够的稳定币
+        uint256 allowance = stablecoin.allowance(msg.sender, address(this));
+        if (allowance < stablecoinAmount) {
+            revert InsufficientStablecoinBalance(stablecoinAddress, stablecoinAmount, allowance);
+        }
+        
+        // 计算赎回费用
+        uint256 redemptionFee = (stablecoinAmount * feeManager.redemptionFee()) / 10000;
+        uint256 requesterAmount = stablecoinAmount - redemptionFee;
+        
+        // 转移稳定币给请求者
+        bool success = stablecoin.transferFrom(msg.sender, request.requester, requesterAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
+        
+        // 如果有赎回费用，转移到费用收集者
+        if (redemptionFee > 0) {
+            address feeCollector = feeManager.feeCollector();
+            bool feeSuccess = stablecoin.transferFrom(msg.sender, feeCollector, redemptionFee);
+            if (!feeSuccess) {
+                revert TransferFailed();
+            }
+            
+            // 记录费用收集
+            feeManager.collectFee(redemptionFee, FeeManager.FeeType.REDEMPTION, request.requester);
+            emit RedemptionFeeCollected(requestId, redemptionFee, stablecoinAddress);
+        }
+        
+        // 销毁代币
+        RealEstateToken token = RealEstateToken(request.tokenAddress);
+        token.burn(request.tokenAmount);
+        
+        // 更新请求信息
         request.status = RedemptionStatus.Completed;
         request.completionTime = block.timestamp;
         
-        // 验证代币地址
-        RealEstateToken token = RealEstateToken(tokenAddress);
-        require(redemptionAmount > 0, "Redemption amount must be greater than 0");
+        // 检查是否有其他待处理或已批准的赎回请求
+        bool hasActiveRedemptions = false;
+        uint256[] memory propRequests = propertyRequests[request.propertyId];
+        for (uint256 i = 0; i < propRequests.length; i++) {
+            RedemptionStatus status = redemptionRequests[propRequests[i]].status;
+            if (status == RedemptionStatus.Pending || status == RedemptionStatus.Approved) {
+                hasActiveRedemptions = true;
+                break;
+            }
+        }
         
-        // 计算赎回费用
-        uint256 fee = feeManager.calculateFee(redemptionAmount, feeManager.redemptionFee());
-        uint256 netAmount = redemptionAmount - fee;
+        // 如果没有其他活跃的赎回请求，恢复房产状态
+        if (!hasActiveRedemptions) {
+            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+        }
         
-        // 获取稳定币合约
-        IERC20 stablecoin = IERC20(request.stablecoinAddress);
-        
-        // 确保管理员已经批准合约使用足够的稳定币
-        require(stablecoin.allowance(msg.sender, address(this)) >= redemptionAmount, 
-                "Insufficient stablecoin allowance");
-        
-        // 销毁代币
-        token.burn(request.tokenAmount);
-        
-        // 转移稳定币给请求者
-        require(stablecoin.transferFrom(msg.sender, request.requester, netAmount), 
-                "Failed to transfer redemption amount");
-        
-        // 转移费用给费用收集者
-        require(stablecoin.transferFrom(msg.sender, feeManager.feeCollector(), fee), 
-                "Failed to transfer fee");
-        
-        emit RedemptionCompleted(requestId, netAmount, request.stablecoinAddress);
+        emit RedemptionCompleted(requestId, msg.sender);
     }
 
     /**
      * @dev 取消赎回请求
      * @param requestId 请求ID
-     * @param tokenAddress 代币地址
      */
-    function cancelRedemption(uint256 requestId, address tokenAddress) external nonReentrant {
+    function cancelRedemption(uint256 requestId) external nonReentrant {
         RedemptionRequest storage request = redemptionRequests[requestId];
-        require(request.requester == msg.sender, "Not requester");
-        require(request.status == RedemptionStatus.Pending, "Request not pending");
         
-        // 返还代币
-        RealEstateToken token = RealEstateToken(tokenAddress);
-        token.transfer(request.requester, request.tokenAmount);
+        // 检查请求状态
+        if (request.status != RedemptionStatus.Pending) {
+            revert InvalidRequestStatus(requestId, request.status);
+        }
         
+        // 检查是否是请求者或超级管理员
+        if (request.requester != msg.sender && !roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender)) {
+            revert NotRequestOwner(requestId, msg.sender);
+        }
+        
+        // 更新请求信息
         request.status = RedemptionStatus.Cancelled;
         
-        emit RedemptionCancelled(requestId);
+        // 返还代币给请求者
+        IERC20 token = IERC20(request.tokenAddress);
+        bool success = token.transfer(request.requester, request.tokenAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
+        
+        // 检查是否有其他待处理的赎回请求
+        bool hasPendingRedemptions = false;
+        uint256[] memory propRequests = propertyRequests[request.propertyId];
+        for (uint256 i = 0; i < propRequests.length; i++) {
+            if (redemptionRequests[propRequests[i]].status == RedemptionStatus.Pending) {
+                hasPendingRedemptions = true;
+                break;
+            }
+        }
+        
+        // 如果没有其他待处理的赎回请求，恢复房产状态
+        if (!hasPendingRedemptions) {
+            propertyRegistry.setPropertyStatus(uint256ToString(request.propertyId), PropertyRegistry.PropertyStatus.Approved);
+        }
+        
+        emit RedemptionCancelled(requestId, msg.sender);
     }
 
     /**
@@ -257,4 +413,32 @@ contract RedemptionManager is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+
+    /**
+     * @dev 将uint256转换为string（助手函数）
+     * @param value 要转换的数值
+     * @return 转换后的字符串
+     */
+    function uint256ToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        
+        uint256 temp = value;
+        uint256 digits;
+        
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        
+        return string(buffer);
+    }
 }

@@ -5,14 +5,32 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./RoleManager.sol";
 
 /**
  * @title FeeManager
  * @dev 管理系统中的各种费用
  */
-contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
+contract FeeManager is 
+    Initializable, 
+    AccessControlUpgradeable, 
+    UUPSUpgradeable, 
+    ReentrancyGuardUpgradeable
+{
     RoleManager public roleManager;
+    
+    // 合约版本，用于追踪升级
+    uint256 public version;
+
+    // 费用类型枚举
+    enum FeeType {
+        TOKENIZATION,
+        TRADING,
+        REDEMPTION,
+        MAINTENANCE,
+        PLATFORM
+    }
 
     // 费用类型
     uint256 public tokenizationFee = 100;     // 通证化费用，万分之一 (0.01%)
@@ -21,12 +39,18 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
     uint256 public maintenanceFee = 100;      // 维护费用，万分之一 (0.01%)
     uint256 public platformFee = 100;         // 平台费用，万分之一 (0.01%)
 
+    // 费用上限，确保不超过10%
+    uint256 public constant MAX_FEE = 1000;   // 最大为10%
+    
     address public feeCollector;              // 费用收集地址
 
     // 事件
-    event FeeUpdated(string feeType, uint256 oldValue, uint256 newValue);
+    event FeeUpdated(FeeType indexed feeType, uint256 oldValue, uint256 newValue);
     event FeeCollectorUpdated(address oldCollector, address newCollector);
-    event FeeCollected(string feeType, uint256 amount, address from);
+    event FeeCollected(FeeType indexed feeType, uint256 amount, address from);
+    event FeeWithdrawn(address to, uint256 amount);
+    event VersionUpdated(uint256 oldVersion, uint256 newVersion);
+    event FeeManagerInitialized(address deployer, address roleManager, uint256 version);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -40,13 +64,18 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
     function initialize(address _roleManager) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         
         roleManager = RoleManager(_roleManager);
         
         // 初始时将部署者设为费用收集者
         feeCollector = msg.sender;
         
+        // 设置初始版本
+        version = 1;
+        
         // 角色将由RoleManager单独授予
+        emit FeeManagerInitialized(msg.sender, _roleManager, version);
     }
 
     /**
@@ -67,27 +96,28 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
     }
 
     /**
-     * @dev 更新费用
-     * @param feeType 费用类型
+     * @dev 更新费用，使用枚举类型代替字符串比较
+     * @param feeType 费用类型枚举
      * @param newValue 新费用值
      */
-    function updateFee(string memory feeType, uint256 newValue) external onlySuperAdmin {
-        require(newValue <= 1000, "Fee too high"); // 最高不超过10%
+    function updateFee(FeeType feeType, uint256 newValue) external onlySuperAdmin {
+        require(newValue <= MAX_FEE, "Fee too high"); // 最高不超过10%
 
         uint256 oldValue;
-        if (keccak256(bytes(feeType)) == keccak256(bytes("tokenization"))) {
+        
+        if (feeType == FeeType.TOKENIZATION) {
             oldValue = tokenizationFee;
             tokenizationFee = newValue;
-        } else if (keccak256(bytes(feeType)) == keccak256(bytes("trading"))) {
+        } else if (feeType == FeeType.TRADING) {
             oldValue = tradingFee;
             tradingFee = newValue;
-        } else if (keccak256(bytes(feeType)) == keccak256(bytes("redemption"))) {
+        } else if (feeType == FeeType.REDEMPTION) {
             oldValue = redemptionFee;
             redemptionFee = newValue;
-        } else if (keccak256(bytes(feeType)) == keccak256(bytes("maintenance"))) {
+        } else if (feeType == FeeType.MAINTENANCE) {
             oldValue = maintenanceFee;
             maintenanceFee = newValue;
-        } else if (keccak256(bytes(feeType)) == keccak256(bytes("platform"))) {
+        } else if (feeType == FeeType.PLATFORM) {
             oldValue = platformFee;
             platformFee = newValue;
         } else {
@@ -105,66 +135,84 @@ contract FeeManager is Initializable, AccessControlUpgradeable, UUPSUpgradeable 
         require(_feeCollector != address(0), "Invalid address");
         address oldCollector = feeCollector;
         feeCollector = _feeCollector;
-        
-        // 同时更新角色
-        if (roleManager.hasRole(roleManager.FEE_COLLECTOR(), oldCollector)) {
-            roleManager.revokeRole(roleManager.FEE_COLLECTOR(), oldCollector);
-        }
-        roleManager.grantRole(roleManager.FEE_COLLECTOR(), _feeCollector);
-        
         emit FeeCollectorUpdated(oldCollector, _feeCollector);
     }
 
     /**
      * @dev 计算费用
      * @param amount 金额
-     * @param feeRate 费率
+     * @param feeType 费用类型枚举
      * @return 费用金额
      */
-    function calculateFee(uint256 amount, uint256 feeRate) public pure returns (uint256) {
-        return (amount * feeRate) / 10000;
+    function calculateFee(uint256 amount, FeeType feeType) external view returns (uint256) {
+        if (feeType == FeeType.TOKENIZATION) {
+            return (amount * tokenizationFee) / 10000;
+        } else if (feeType == FeeType.TRADING) {
+            return (amount * tradingFee) / 10000;
+        } else if (feeType == FeeType.REDEMPTION) {
+            return (amount * redemptionFee) / 10000;
+        } else if (feeType == FeeType.MAINTENANCE) {
+            return (amount * maintenanceFee) / 10000;
+        } else if (feeType == FeeType.PLATFORM) {
+            return (amount * platformFee) / 10000;
+        } else {
+            revert("Invalid fee type");
+        }
     }
 
     /**
      * @dev 收集费用
-     * @param feeType 费用类型
-     * @param amount 金额
+     * @param amount 费用金额
+     * @param feeType 费用类型枚举
      * @param from 费用来源
      */
-    function collectFee(string memory feeType, uint256 amount, address from) external payable {
-        require(msg.value == amount, "Incorrect fee amount");
+    function collectFee(uint256 amount, FeeType feeType, address from) external payable {
+        // 确保调用者是有权限的合约或超级管理员
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            roleManager.hasRole(roleManager.PROPERTY_MANAGER(), msg.sender),
+            "Caller not authorized to collect fees"
+        );
         
-        payable(feeCollector).transfer(amount);
         emit FeeCollected(feeType, amount, from);
     }
 
     /**
-     * @dev 提取合约中的ETH
+     * @dev 提取账户余额
+     * @param to 接收地址
      */
-    function withdrawETH() external onlyFeeCollector {
-        payable(feeCollector).transfer(address(this).balance);
+    function withdrawBalance(address payable to) external onlyFeeCollector nonReentrant {
+        require(to != address(0), "Invalid withdrawal address");
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No balance to withdraw");
+        
+        (bool success, ) = to.call{value: balance}("");
+        require(success, "Withdrawal failed");
+        
+        emit FeeWithdrawn(to, balance);
     }
 
     /**
-     * @dev 计算平台费用
-     * @param amount 金额
-     * @return 平台费用金额
-     */
-    function calculatePlatformFee(uint256 amount) public view returns (uint256) {
-        return calculateFee(amount, platformFee);
-    }
-    
-    /**
-     * @dev 计算维护费用
-     * @param amount 金额
-     * @return 维护费用金额
-     */
-    function calculateMaintenanceFee(uint256 amount) public view returns (uint256) {
-        return calculateFee(amount, maintenanceFee);
-    }
-    
-    /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {
+        // 更新版本号
+        uint256 oldVersion = version;
+        version += 1;
+        emit VersionUpdated(oldVersion, version);
+    }
+    
+    /**
+     * @dev 获取所有费用类型
+     * @return 费用类型和值数组
+     */
+    function getAllFees() external view returns (uint256[] memory) {
+        uint256[] memory fees = new uint256[](5);
+        fees[0] = tokenizationFee;
+        fees[1] = tradingFee;
+        fees[2] = redemptionFee;
+        fees[3] = maintenanceFee;
+        fees[4] = platformFee;
+        return fees;
+    }
 }

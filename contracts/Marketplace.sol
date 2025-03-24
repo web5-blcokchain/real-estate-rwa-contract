@@ -9,12 +9,19 @@ import "./RoleManager.sol";
 import "./FeeManager.sol";  // 添加 FeeManager 导入
 import "./RealEstateToken.sol";  // 添加 RealEstateToken 导入
 
+/**
+ * @title Marketplace
+ * @dev 房产通证交易市场合约，支持创建/取消订单和完成交易
+ */
 contract Marketplace is 
     Initializable, 
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable {  // 添加继承
     RoleManager public roleManager;
     FeeManager public feeManager;
+    
+    // 合约版本，用于追踪升级
+    uint256 public version;
     
     // 订单状态
     enum OrderStatus {
@@ -44,12 +51,23 @@ contract Marketplace is
     // 支持的稳定币列表
     mapping(address => bool) public supportedStablecoins;
     
+    // 错误定义
+    error InvalidOrderStatus(uint256 orderId, OrderStatus currentStatus);
+    error UnsupportedStablecoin(address stablecoin);
+    error NotOrderOwner(uint256 orderId, address caller);
+    error InsufficientTokenAllowance(address token, uint256 required, uint256 actual);
+    error InvalidOrderParameters();
+    error TransferFailed();
+    
     // 事件
-    event OrderCreated(uint256 orderId, address seller, address tokenAddress, uint256 tokenAmount, uint256 price, address stablecoin);
-    event OrderFulfilled(uint256 orderId, address buyer);
-    event OrderCancelled(uint256 orderId);
-    event PriceUpdated(uint256 orderId, uint256 oldPrice, uint256 newPrice);
+    event OrderCreated(uint256 indexed orderId, address indexed seller, address tokenAddress, uint256 tokenAmount, uint256 price, address stablecoin);
+    event OrderFulfilled(uint256 indexed orderId, address indexed buyer, uint256 price);
+    event OrderCancelled(uint256 indexed orderId, address indexed seller);
+    event PriceUpdated(uint256 indexed orderId, uint256 oldPrice, uint256 newPrice);
     event StablecoinStatusUpdated(address indexed token, bool status);
+    event VersionUpdated(uint256 oldVersion, uint256 newVersion);
+    event MarketplaceInitialized(address deployer, address roleManager, address feeManager, uint256 version);
+    event TradingFeeCollected(uint256 orderId, uint256 feeAmount, address feeToken);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -68,6 +86,9 @@ contract Marketplace is
         
         roleManager = RoleManager(_roleManager);
         feeManager = FeeManager(_feeManager);
+        version = 1;
+        
+        emit MarketplaceInitialized(msg.sender, _roleManager, _feeManager, version);
     }
 
     /**
@@ -109,21 +130,34 @@ contract Marketplace is
         uint256 tokenAmount,
         uint256 price,
         address stablecoinAddress
-    ) external nonReentrant {
-        require(tokenAmount > 0, "Token amount must be greater than 0");
-        require(price > 0, "Price must be greater than 0");
-        require(supportedStablecoins[stablecoinAddress], "Unsupported stablecoin");
+    ) external nonReentrant returns (uint256) {
+        // 参数验证
+        if (tokenAddress == address(0) || tokenAmount == 0 || price == 0 || stablecoinAddress == address(0)) {
+            revert InvalidOrderParameters();
+        }
         
-        RealEstateToken token = RealEstateToken(tokenAddress);
-        require(token.balanceOf(msg.sender) >= tokenAmount, "Insufficient token balance");
+        // 检查稳定币是否支持
+        if (!supportedStablecoins[stablecoinAddress]) {
+            revert UnsupportedStablecoin(stablecoinAddress);
+        }
         
-        // 转移代币到合约
-        token.transferFrom(msg.sender, address(this), tokenAmount);
+        // 检查代币授权
+        IERC20 token = IERC20(tokenAddress);
+        uint256 allowance = token.allowance(msg.sender, address(this));
+        if (allowance < tokenAmount) {
+            revert InsufficientTokenAllowance(tokenAddress, tokenAmount, allowance);
+        }
+        
+        // 转移代币到市场合约
+        bool success = token.transferFrom(msg.sender, address(this), tokenAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
         
         // 创建订单
-        orderCount++;
-        orders[orderCount] = Order({
-            orderId: orderCount,
+        uint256 orderId = ++orderCount;
+        orders[orderId] = Order({
+            orderId: orderId,
             seller: msg.sender,
             tokenAddress: tokenAddress,
             tokenAmount: tokenAmount,
@@ -133,42 +167,72 @@ contract Marketplace is
             status: OrderStatus.Active
         });
         
-        emit OrderCreated(orderCount, msg.sender, tokenAddress, tokenAmount, price, stablecoinAddress);
+        emit OrderCreated(orderId, msg.sender, tokenAddress, tokenAmount, price, stablecoinAddress);
+        return orderId;
     }
 
     /**
-     * @dev 购买订单
+     * @dev 完成订单
      * @param orderId 订单ID
      */
     function fulfillOrder(uint256 orderId) external nonReentrant {
         Order storage order = orders[orderId];
-        require(order.status == OrderStatus.Active, "Order not active");
         
-        // 获取稳定币合约
-        IERC20 stablecoin = IERC20(order.stablecoinAddress);
-        
-        // 检查买家是否有足够的稳定币余额和授权
-        require(stablecoin.balanceOf(msg.sender) >= order.price, "Insufficient stablecoin balance");
-        require(stablecoin.allowance(msg.sender, address(this)) >= order.price, "Insufficient stablecoin allowance");
-        
-        // 计算交易费用
-        uint256 fee = feeManager.calculateFee(order.price, feeManager.tradingFee());
-        uint256 sellerAmount = order.price - fee;
-        
-        // 转移稳定币给卖家
-        require(stablecoin.transferFrom(msg.sender, order.seller, sellerAmount), "Failed to transfer to seller");
-        
-        // 转移费用给费用收集者
-        require(stablecoin.transferFrom(msg.sender, feeManager.feeCollector(), fee), "Failed to transfer fee");
-        
-        // 转移代币给买家
-        RealEstateToken token = RealEstateToken(order.tokenAddress);
-        token.transfer(msg.sender, order.tokenAmount);
+        // 检查订单状态
+        if (order.status != OrderStatus.Active) {
+            revert InvalidOrderStatus(orderId, order.status);
+        }
         
         // 更新订单状态
         order.status = OrderStatus.Fulfilled;
         
-        emit OrderFulfilled(orderId, msg.sender);
+        // 获取订单详情
+        address seller = order.seller;
+        address tokenAddress = order.tokenAddress;
+        uint256 tokenAmount = order.tokenAmount;
+        uint256 price = order.price;
+        address stablecoinAddress = order.stablecoinAddress;
+        
+        // 计算交易费用
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        uint256 tradingFee = (price * feeManager.tradingFee()) / 10000;
+        uint256 sellerAmount = price - tradingFee;
+        
+        // 检查买家的稳定币授权
+        uint256 allowance = stablecoin.allowance(msg.sender, address(this));
+        if (allowance < price) {
+            revert InsufficientTokenAllowance(stablecoinAddress, price, allowance);
+        }
+        
+        // 转移稳定币（从买家到卖家和平台）
+        bool stablecoinSuccess = stablecoin.transferFrom(msg.sender, seller, sellerAmount);
+        if (!stablecoinSuccess) {
+            revert TransferFailed();
+        }
+        
+        // 如果有交易费，转移到费用收集地址
+        if (tradingFee > 0) {
+            address feeCollector = feeManager.feeCollector();
+            bool feeSuccess = stablecoin.transferFrom(msg.sender, feeCollector, tradingFee);
+            if (!feeSuccess) {
+                revert TransferFailed();
+            }
+            emit TradingFeeCollected(orderId, tradingFee, stablecoinAddress);
+        }
+        
+        // 转移代币到买家
+        IERC20 token = IERC20(tokenAddress);
+        bool tokenSuccess = token.transfer(msg.sender, tokenAmount);
+        if (!tokenSuccess) {
+            revert TransferFailed();
+        }
+        
+        // 记录交易费用
+        // 使用数字1表示TRADING枚举类型
+        uint256 feeType = 1; // FeeManager.FeeType.TRADING的数值为1
+        feeManager.collectFee(tradingFee, feeType, msg.sender);
+        
+        emit OrderFulfilled(orderId, msg.sender, price);
     }
 
     /**
@@ -177,17 +241,28 @@ contract Marketplace is
      */
     function cancelOrder(uint256 orderId) external nonReentrant {
         Order storage order = orders[orderId];
-        require(order.status == OrderStatus.Active, "Order not active");
-        require(order.seller == msg.sender, "Not seller");
         
-        // 返还代币给卖家
-        RealEstateToken token = RealEstateToken(order.tokenAddress);
-        token.transfer(order.seller, order.tokenAmount);
+        // 检查订单状态
+        if (order.status != OrderStatus.Active) {
+            revert InvalidOrderStatus(orderId, order.status);
+        }
+        
+        // 检查是否是订单创建者或超级管理员
+        if (order.seller != msg.sender && !roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender)) {
+            revert NotOrderOwner(orderId, msg.sender);
+        }
         
         // 更新订单状态
         order.status = OrderStatus.Cancelled;
         
-        emit OrderCancelled(orderId);
+        // 返还代币给卖家
+        IERC20 token = IERC20(order.tokenAddress);
+        bool success = token.transfer(order.seller, order.tokenAmount);
+        if (!success) {
+            revert TransferFailed();
+        }
+        
+        emit OrderCancelled(orderId, msg.sender);
     }
 
     /**
@@ -195,12 +270,22 @@ contract Marketplace is
      * @param orderId 订单ID
      * @param newPrice 新价格
      */
-    function updatePrice(uint256 orderId, uint256 newPrice) external {
-        Order storage order = orders[orderId];
-        require(order.status == OrderStatus.Active, "Order not active");
-        require(order.seller == msg.sender, "Not seller");
-        require(newPrice > 0, "Price must be greater than 0");
+    function updateOrderPrice(uint256 orderId, uint256 newPrice) external {
+        require(newPrice > 0, "Invalid price");
         
+        Order storage order = orders[orderId];
+        
+        // 检查订单状态
+        if (order.status != OrderStatus.Active) {
+            revert InvalidOrderStatus(orderId, order.status);
+        }
+        
+        // 检查是否是订单创建者
+        if (order.seller != msg.sender) {
+            revert NotOrderOwner(orderId, msg.sender);
+        }
+        
+        // 更新价格
         uint256 oldPrice = order.price;
         order.price = newPrice;
         
@@ -208,43 +293,89 @@ contract Marketplace is
     }
 
     /**
-     * @dev 获取活跃订单数量
-     * @return 活跃订单数量
+     * @dev 获取订单详情
+     * @param orderId 订单ID
      */
-    function getActiveOrderCount() external view returns (uint256) {
-        uint256 count = 0;
-        for (uint256 i = 1; i <= orderCount; i++) {
-            if (orders[i].status == OrderStatus.Active) {
-                count++;
-            }
-        }
-        return count;
+    function getOrder(uint256 orderId) external view returns (
+        address seller,
+        address tokenAddress,
+        uint256 tokenAmount,
+        uint256 price,
+        address stablecoin,
+        uint256 creationTime,
+        OrderStatus status
+    ) {
+        Order storage order = orders[orderId];
+        return (
+            order.seller,
+            order.tokenAddress,
+            order.tokenAmount,
+            order.price,
+            order.stablecoinAddress,
+            order.creationTime,
+            order.status
+        );
     }
 
     /**
-     * @dev 获取用户订单
-     * @param user 用户地址
-     * @return 订单ID数组
+     * @dev 获取卖家的活跃订单
+     * @param seller 卖家地址
      */
-    function getUserOrders(address user) external view returns (uint256[] memory) {
-        uint256 userOrderCount = 0;
+    function getSellerActiveOrders(address seller) external view returns (uint256[] memory) {
+        uint256 count = 0;
         
-        // 计算用户订单数量
+        // 首先计算活跃订单数量
         for (uint256 i = 1; i <= orderCount; i++) {
-            if (orders[i].seller == user) {
-                userOrderCount++;
+            if (orders[i].seller == seller && orders[i].status == OrderStatus.Active) {
+                count++;
             }
         }
         
         // 创建结果数组
-        uint256[] memory result = new uint256[](userOrderCount);
+        uint256[] memory result = new uint256[](count);
         uint256 index = 0;
         
         // 填充结果数组
         for (uint256 i = 1; i <= orderCount; i++) {
-            if (orders[i].seller == user) {
-                result[index] = i;
-                index++;
+            if (orders[i].seller == seller && orders[i].status == OrderStatus.Active) {
+                result[index++] = i;
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * @dev 检查稳定币是否被支持
+     * @param stablecoin 稳定币地址
+     */
+    function isStablecoinSupported(address stablecoin) external view returns (bool) {
+        return supportedStablecoins[stablecoin];
+    }
+    
+    /**
+     * @dev 获取支持的稳定币列表
+     * @param startIndex 起始索引
+     * @param count 数量
+     */
+    function getSupportedStablecoins(uint256 startIndex, uint256 count) external view returns (address[] memory) {
+        // 计算支持的稳定币总数
+        uint256 totalSupported = 0;
+        for (uint256 i = startIndex; i < startIndex + count; i++) {
+            if (supportedStablecoins[address(uint160(i))]) {
+                totalSupported++;
+            }
+        }
+        
+        // 创建结果数组
+        address[] memory result = new address[](totalSupported);
+        uint256 index = 0;
+        
+        // 填充结果数组
+        for (uint256 i = startIndex; i < startIndex + count; i++) {
+            address stablecoin = address(uint160(i));
+            if (supportedStablecoins[stablecoin]) {
+                result[index++] = stablecoin;
             }
         }
         
@@ -254,5 +385,21 @@ contract Marketplace is
     /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {
+        // 更新版本号
+        uint256 oldVersion = version;
+        version += 1;
+        emit VersionUpdated(oldVersion, version);
+    }
+    
+    /**
+     * @dev 紧急提取代币（用于意外情况）
+     * @param tokenAddress 代币地址
+     * @param amount 数量
+     */
+    function emergencyWithdraw(address tokenAddress, uint256 amount) external onlySuperAdmin nonReentrant {
+        IERC20 token = IERC20(tokenAddress);
+        bool success = token.transfer(msg.sender, amount);
+        require(success, "Transfer failed");
+    }
 }

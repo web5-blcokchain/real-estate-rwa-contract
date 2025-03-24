@@ -131,28 +131,24 @@ library SystemDeployerLib2 {
         
         // 获取超级管理员角色ID
         bytes32 superAdminRole = roleManager.SUPER_ADMIN();
+        bytes32 defaultAdminRole = roleManager.DEFAULT_ADMIN_ROLE();
         
-        // 确保deployer已经有DEFAULT_ADMIN_ROLE
-        require(roleManager.hasRole(roleManager.DEFAULT_ADMIN_ROLE(), deployer), "Deployer must have DEFAULT_ADMIN_ROLE");
+        // 检查deployer是否已经有DEFAULT_ADMIN_ROLE
+        bool hasDefaultAdmin = roleManager.hasRole(defaultAdminRole, deployer);
+        bool hasSuperAdmin = roleManager.hasRole(superAdminRole, deployer);
         
-        // 使用try-catch来处理可能的错误
-        try roleManager.grantRole(superAdminRole, deployer) {
-            // 角色授予成功，什么都不做
-        } catch {
-            // 如果直接授予失败，尝试创建一个新实现并初始化
-            RoleManager newImpl = new RoleManager();
-            newImpl.initialize();
-            
-            // 授予SUPER_ADMIN角色
-            newImpl.grantRole(superAdminRole, deployer);
-            
-            // 这种方法可能会失败，因为UUPS升级是受保护的，但这是一个后备措施
-            try roleManager.grantRole(superAdminRole, deployer) {
-                // 第二次尝试成功
-            } catch {
-                // 所有尝试都失败了，至少我们尝试了
-                revert("Failed to grant SUPER_ADMIN role");
-            }
+        if (!hasDefaultAdmin) {
+            revert("Deployer must have DEFAULT_ADMIN_ROLE");
+        }
+        
+        // 如果部署者还没有SUPER_ADMIN角色，则授予
+        if (!hasSuperAdmin) {
+            roleManager.grantRole(superAdminRole, deployer);
+        }
+        
+        // 验证角色授予是否成功
+        if (!roleManager.hasRole(superAdminRole, deployer)) {
+            revert("Failed to grant SUPER_ADMIN role");
         }
     }
 } 

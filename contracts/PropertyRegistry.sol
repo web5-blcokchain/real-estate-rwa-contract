@@ -40,12 +40,17 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     // 所有房产ID数组
     string[] public allPropertyIds;
     
+    // 合约版本，用于追踪升级
+    uint256 public version;
+    
     // 事件
     event PropertyRegistered(string propertyId, string country, string metadataURI, address registeredBy);
     event PropertyApproved(string propertyId, address approvedBy);
     event PropertyRejected(string propertyId, address rejectedBy);
     event PropertyDelisted(string propertyId, address delistedBy);
     event PropertyStatusUpdated(string propertyId, PropertyStatus status);
+    event VersionUpdated(uint256 oldVersion, uint256 newVersion);
+    event PropertyRegistryInitialized(address deployer, address roleManager, uint256 version);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -59,6 +64,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
         
         roleManager = RoleManager(_roleManager);
+        version = 1;
+        
+        emit PropertyRegistryInitialized(msg.sender, _roleManager, version);
     }
 
     /**
@@ -194,7 +202,12 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlySuperAdmin {
+        // 更新版本号
+        uint256 oldVersion = version;
+        version += 1;
+        emit VersionUpdated(oldVersion, version);
+    }
 
     
     // 保留233行和245行的函数定义
@@ -318,5 +331,37 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         }
         
         return result;
+    }
+
+    /**
+     * @dev 获取房产状态
+     * @param _propertyId 房产ID
+     * @return 房产状态
+     */
+    function getPropertyStatus(string memory _propertyId) external view returns (PropertyStatus) {
+        require(properties[_propertyId].exists, "Property does not exist");
+        return properties[_propertyId].status;
+    }
+    
+    /**
+     * @dev 设置房产状态（公开接口）
+     * @param propertyId 房产ID
+     * @param newStatus 新状态
+     */
+    function setPropertyStatus(string memory propertyId, PropertyStatus newStatus) external {
+        // 检查调用者是否是超级管理员或有房产管理权限
+        require(
+            roleManager.hasRole(roleManager.SUPER_ADMIN(), msg.sender) || 
+            roleManager.hasRole(roleManager.PROPERTY_MANAGER(), msg.sender),
+            "Caller is not authorized to set property status"
+        );
+        
+        require(properties[propertyId].exists, "Property does not exist");
+        
+        // 验证状态转换的有效性
+        _validateStatusTransition(properties[propertyId].status, newStatus);
+        
+        properties[propertyId].status = newStatus;
+        emit PropertyStatusUpdated(propertyId, newStatus);
     }
 }
