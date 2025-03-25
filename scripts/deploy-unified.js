@@ -196,11 +196,13 @@ async function main() {
     
     // 部署 SystemDeployerLib1
     const SystemDeployerLib1 = await ethers.getContractFactory("SystemDeployerLib1");
-    const lib1Result = await deployUtils.deployContract(
+    const lib1Result = await deployUtils.deployLibrary(
       SystemDeployerLib1,
       "SystemDeployerLib1",
-      [],
-      { verify: true }
+      {
+        gasLimit: 5000000,
+        priority: 'medium'
+      }
     );
     
     if (!lib1Result.success) {
@@ -209,11 +211,13 @@ async function main() {
     
     // 部署 SystemDeployerLib2
     const SystemDeployerLib2 = await ethers.getContractFactory("SystemDeployerLib2");
-    const lib2Result = await deployUtils.deployContract(
+    const lib2Result = await deployUtils.deployLibrary(
       SystemDeployerLib2,
       "SystemDeployerLib2",
-      [],
-      { verify: true }
+      {
+        gasLimit: 5000000,
+        priority: 'medium'
+      }
     );
     
     if (!lib2Result.success) {
