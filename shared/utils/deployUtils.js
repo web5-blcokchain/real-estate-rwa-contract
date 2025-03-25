@@ -82,7 +82,8 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     }
     
     // 获取部署交易收据
-    const receipt = await contract.provider.getTransactionReceipt(tx.hash);
+    const provider = await ethers.provider;
+    const receipt = await provider.getTransactionReceipt(tx.hash);
     
     return {
       success: true,
@@ -274,7 +275,8 @@ async function deployLibrary(factory, libraryName, options = {}) {
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
     // 获取部署交易收据
-    const receipt = await library.provider.getTransactionReceipt(library.deploymentTransaction().hash);
+    const provider = await ethers.provider;
+    const receipt = await provider.getTransactionReceipt(library.deploymentTransaction().hash);
     
     return {
       success: true,
