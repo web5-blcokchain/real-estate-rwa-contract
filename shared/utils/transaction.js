@@ -92,9 +92,23 @@ async function estimateGas(contract, method, args, options = {}) {
     logger.info(`方法 ${method} 估算gas: ${estimatedGas.toString()}, 安全gas限制: ${gasLimit.toString()}`);
     
     // 检查是否超过区块gas限制
-    const blockGasLimit = await contract.provider.getBlock('latest').then(block => block.gasLimit);
-    if (gasLimit > blockGasLimit) {
-      logger.warn(`警告: 估算的gas限制(${gasLimit.toString()})超过区块gas限制(${blockGasLimit.toString()})`);
+    try {
+      // 确保我们有有效的provider
+      const provider = contract.provider || await ethers.provider;
+      if (!provider) {
+        throw new Error('Provider is not available');
+      }
+      
+      const block = await provider.getBlock('latest');
+      if (!block) {
+        throw new Error('Failed to get latest block');
+      }
+      
+      if (gasLimit > block.gasLimit) {
+        logger.warn(`警告: 估算的gas限制(${gasLimit.toString()})超过区块gas限制(${block.gasLimit.toString()})`);
+      }
+    } catch (error) {
+      logger.warn(`获取区块gas限制失败: ${error.message}`);
     }
     
     return gasLimit;
@@ -102,7 +116,8 @@ async function estimateGas(contract, method, args, options = {}) {
     logger.warn(`估算gas失败: ${error.message}`);
     
     // 如果估算失败，返回配置的默认值或固定值
-    return BigInt(options.defaultGasLimit || 500000);
+    const defaultGasLimit = options.defaultGasLimit || 500000;
+    return BigInt(defaultGasLimit);
   }
 }
 
@@ -140,29 +155,21 @@ async function getGasPrice(provider) {
 
 /**
  * 等待交易确认
- * @param {ethers.Provider} provider 提供者
- * @param {string} txHash 交易哈希
+ * @param {ethers.TransactionResponse} tx 交易响应
  * @param {number} confirmations 确认数
  * @returns {Promise<ethers.TransactionReceipt>} 交易收据
  */
-async function waitForTransaction(provider, txHash, confirmations = 1) {
+async function waitForTransaction(tx, confirmations = 1) {
   try {
-    logger.info(`等待交易 ${txHash} 确认中...`);
+    // 等待交易确认
+    const receipt = await tx.wait(confirmations);
+    if (!receipt) {
+      throw new Error('Transaction receipt is not available');
+    }
     
-    // 设置超时时间（5分钟）
-    const timeout = 5 * 60 * 1000;
-    const receipt = await Promise.race([
-      provider.waitForTransaction(txHash, confirmations),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('交易确认超时')), timeout)
-      )
-    ]);
-    
-    if (receipt.status === 1) {
-      logger.info(`交易 ${txHash} 已确认，区块: ${receipt.blockNumber}`);
-      logger.info(`Gas使用: ${receipt.gasUsed.toString()}`);
-    } else {
-      logger.error(`交易 ${txHash} 失败`);
+    // 检查交易状态
+    if (receipt.status === 0) {
+      throw new Error('Transaction failed');
     }
     
     return receipt;
@@ -216,15 +223,28 @@ async function executeTransaction(contract, method, args, options = {}) {
     logger.info(`${operation}交易已提交: ${tx.hash}`);
     
     // 等待交易确认
-    const receipt = await waitForTransaction(contract.provider, tx.hash, options.confirmations || 1);
+    const receipt = await waitForTransaction(tx, options.confirmations || 1);
     
-    return {
+    // 构建返回结果
+    const result = {
       success: true,
-      transactionHash: tx.hash,
-      receipt: receipt,
-      gasUsed: receipt.gasUsed.toString(),
-      effectiveGasPrice: receipt.effectiveGasPrice.toString()
+      transactionHash: tx.hash
     };
+    
+    // 安全地添加收据信息
+    if (receipt) {
+      if (receipt.gasUsed) {
+        result.gasUsed = receipt.gasUsed.toString();
+      }
+      if (receipt.effectiveGasPrice) {
+        result.effectiveGasPrice = receipt.effectiveGasPrice.toString();
+      }
+      if (receipt.blockNumber) {
+        result.blockNumber = receipt.blockNumber;
+      }
+    }
+    
+    return result;
   } catch (error) {
     return handleTransactionError(error, operation);
   }

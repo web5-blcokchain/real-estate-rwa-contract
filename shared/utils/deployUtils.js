@@ -47,8 +47,9 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     
     // 设置交易优先级
     if (options.priority === 'high') {
-      deployOptions.maxFeePerGas = options.gasPrice * BigInt(2);
-      deployOptions.maxPriorityFeePerGas = options.gasPrice / BigInt(2);
+      const baseGasPrice = options.gasPrice || await ethers.provider.getFeeData().then(fee => fee.gasPrice);
+      deployOptions.maxFeePerGas = baseGasPrice * BigInt(2);
+      deployOptions.maxPriorityFeePerGas = baseGasPrice / BigInt(2);
     }
     
     // 检查 provider
@@ -85,40 +86,32 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       contracts.saveToDeployState();
     }
     
-    // 验证合约
-    if (deployConfig.verifyContracts && options.verify !== false) {
-      try {
-        await verifyContract(contractAddress, contractName, constructorArgs);
-      } catch (verifyError) {
-        logger.warn(`${contractName} 验证失败: ${verifyError.message}`);
-      }
-    }
-    
-    // 获取部署交易收据
-    const receipt = await provider.getTransactionReceipt(tx.hash);
-    if (!receipt) {
-      throw new Error('Transaction receipt is not available');
-    }
-    
+    // 返回部署结果
     return {
       success: true,
-      contractAddress,
+      contractAddress: contractAddress.toString(),
       contractName,
-      transactionHash: tx.hash,
-      gasUsed: receipt.gasUsed.toString(),
-      effectiveGasPrice: receipt.effectiveGasPrice.toString()
+      transactionHash: tx.hash
     };
   } catch (error) {
     logger.error(`${contractName} 部署失败: ${error.message}`);
     logger.error(`错误详情: ${JSON.stringify(error, null, 2)}`);
+    
+    // 构建错误对象
+    const errorObj = {
+      message: error.message,
+      contractName,
+      stack: error.stack
+    };
+    
+    // 如果存在交易哈希，则添加
+    if (error.transaction?.hash) {
+      errorObj.transactionHash = error.transaction.hash;
+    }
+    
     return {
       success: false,
-      error: {
-        message: error.message,
-        contractName,
-        transactionHash: error.transaction?.hash,
-        stack: error.stack
-      }
+      error: errorObj
     };
   }
 }
@@ -287,21 +280,18 @@ async function deployLibrary(factory, libraryName, options = {}) {
     // 部署库
     const library = await factory.deploy(options);
     logger.info(`${libraryName} 部署交易已提交: ${library.deploymentTransaction().hash}`);
+    
+    // 等待部署完成
     await library.waitForDeployment();
     const libraryAddress = await library.getAddress();
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
-    // 获取部署交易收据
-    const provider = await ethers.provider;
-    const receipt = await provider.getTransactionReceipt(library.deploymentTransaction().hash);
-    
+    // 返回部署结果
     return {
       success: true,
-      libraryAddress: libraryAddress,
+      contractAddress: libraryAddress.toString(),
       libraryName,
-      transactionHash: library.deploymentTransaction().hash,
-      gasUsed: receipt.gasUsed.toString(),
-      effectiveGasPrice: receipt.effectiveGasPrice.toString()
+      transactionHash: library.deploymentTransaction().hash
     };
   } catch (error) {
     logger.error(`${libraryName} 库部署失败: ${error.message}`);

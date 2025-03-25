@@ -3,15 +3,15 @@
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "timestamp": "2025-03-24T16:06:30.653Z",
   "contracts": {
-    "RoleManager": "0xB5052A3D5A755D4710f6eA9D25E8f705281BaB25",
-    "PropertyRegistry": "0x8Ffc718252673F6D656BA4A1A2A267fA1fB8875a",
-    "TokenFactory": "0x5aE856a639a92623b8ecf1c6DFf77Cf665fd7e14",
-    "RedemptionManager": "0x67413011D683714fB4a15b3389fbf9E6457ee1F6",
-    "RentDistributor": "0x49EE29c306fEF77B71B3d8d9460Ad16754b3F7b0",
-    "FeeManager": "0xFbfFAE4f52E4901c0F5F7141210e8B018925DE68",
-    "Marketplace": "0x7ab7892abecB6CB719EB640214378B38895e2dC4",
-    "TokenHolderQuery": "0x74c86c1d1D94C754c02b10957767e8A656A6EF0e",
-    "RealEstateSystem": "0xad018fB8ec00bfd622B91C83E684a6AC7bB8fbA4"
+    "RoleManager": "0x4a46860E025D02f60Bff5f44afB25ed75298784C",
+    "PropertyRegistry": "0x0d3AA1Ff33792CD98b966846B0F661276E8eA4e1",
+    "TokenFactory": "0x00029cf217b9b1696A51d2145386f601d56D425f",
+    "RedemptionManager": "0xe320Ed42E8FFbFd8efd219bC35fe0F66c5773890",
+    "RentDistributor": "0xA0A6e9950d626A1f4F707a82BdE6e48ACFc2FF82",
+    "FeeManager": "0x873B05552B084BB737107ED762C36e2eB64b4cDe",
+    "Marketplace": "0x5291df3ed41ec21b2F0389179f19e4A29778D4af",
+    "TokenHolderQuery": "0x7c1E7EE65Cef5B71f90505074b3f1478b4567bd6",
+    "RealEstateSystem": "0x0d814923E62CCC7733f63935Ef150C25b98137Fe"
   },
   "status": "initialized",
   "currentStep": 0
