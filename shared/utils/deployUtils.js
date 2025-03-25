@@ -51,12 +51,25 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       deployOptions.maxPriorityFeePerGas = options.gasPrice / BigInt(2);
     }
     
+    // 检查 provider
+    const provider = await ethers.provider;
+    if (!provider) {
+      throw new Error('Provider is not initialized');
+    }
+    logger.info(`使用网络: ${(await provider.getNetwork()).name}`);
+    
     // 使用ethers的ContractFactory部署合约
     const contract = await factory.deploy(...constructorArgs, deployOptions);
-    const tx = contract.deploymentTransaction();
-    if (tx) {
-      logger.info(`${contractName} 部署交易已提交: ${tx.hash}`);
+    if (!contract) {
+      throw new Error('Contract deployment failed');
     }
+    
+    const tx = contract.deploymentTransaction();
+    if (!tx) {
+      throw new Error('Deployment transaction is not available');
+    }
+    
+    logger.info(`${contractName} 部署交易已提交: ${tx.hash}`);
     
     // 等待合约部署确认
     await contract.waitForDeployment();
@@ -82,8 +95,10 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     }
     
     // 获取部署交易收据
-    const provider = await ethers.provider;
     const receipt = await provider.getTransactionReceipt(tx.hash);
+    if (!receipt) {
+      throw new Error('Transaction receipt is not available');
+    }
     
     return {
       success: true,
@@ -95,12 +110,14 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     };
   } catch (error) {
     logger.error(`${contractName} 部署失败: ${error.message}`);
+    logger.error(`错误详情: ${JSON.stringify(error, null, 2)}`);
     return {
       success: false,
       error: {
         message: error.message,
         contractName,
-        transactionHash: error.transaction?.hash
+        transactionHash: error.transaction?.hash,
+        stack: error.stack
       }
     };
   }
