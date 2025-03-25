@@ -45,6 +45,12 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       deployOptions.gasPrice = options.gasPrice;
     }
     
+    // 设置交易优先级
+    if (options.priority === 'high') {
+      deployOptions.maxFeePerGas = options.gasPrice * BigInt(2);
+      deployOptions.maxPriorityFeePerGas = options.gasPrice / BigInt(2);
+    }
+    
     // 使用ethers的ContractFactory部署合约
     const contract = await factory.deploy(...constructorArgs, deployOptions);
     const tx = contract.deploymentTransaction();
@@ -75,11 +81,16 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       }
     }
     
+    // 获取部署交易收据
+    const receipt = await contract.provider.getTransactionReceipt(tx.hash);
+    
     return {
       success: true,
       contractAddress,
       contractName,
-      transactionHash: tx ? tx.hash : undefined
+      transactionHash: tx.hash,
+      gasUsed: receipt.gasUsed.toString(),
+      effectiveGasPrice: receipt.effectiveGasPrice.toString()
     };
   } catch (error) {
     logger.error(`${contractName} 部署失败: ${error.message}`);
@@ -87,7 +98,8 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       success: false,
       error: {
         message: error.message,
-        contractName
+        contractName,
+        transactionHash: error.transaction?.hash
       }
     };
   }
@@ -104,13 +116,40 @@ async function verifyContract(contractAddress, contractName, constructorArgs = [
   try {
     logger.info(`开始验证合约 ${contractName} (${contractAddress})...`);
     
-    // 在这里调用对应网络的验证API
-    // 例如: hardhat的验证任务、etherscan API或BSCscan API
-    // 不同网络的验证方式不同，需要具体实现
+    // 获取网络信息
+    const network = await ethers.provider.getNetwork();
+    const chainId = network.chainId;
     
-    // 模拟验证流程
-    logger.info(`合约 ${contractName} 验证请求已提交，等待验证结果...`);
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // 根据不同的网络选择验证方式
+    switch (chainId) {
+      case 1: // Ethereum Mainnet
+        // 使用 Etherscan API
+        await run("verify:verify", {
+          address: contractAddress,
+          constructorArguments: constructorArgs,
+        });
+        break;
+        
+      case 56: // BSC Mainnet
+        // 使用 BSCscan API
+        await run("verify:verify", {
+          address: contractAddress,
+          constructorArguments: constructorArgs,
+        });
+        break;
+        
+      case 97: // BSC Testnet
+        // 使用 BSCscan Testnet API
+        await run("verify:verify", {
+          address: contractAddress,
+          constructorArguments: constructorArgs,
+        });
+        break;
+        
+      default:
+        logger.warn(`网络 ${network.name} (Chain ID: ${chainId}) 暂不支持合约验证`);
+        return false;
+    }
     
     logger.info(`合约 ${contractName} 验证成功`);
     return true;
@@ -153,8 +192,6 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     logger.info(`${contractName} 实现合约部署成功，地址: ${implementationAddress}`);
     
     // 部署代理合约
-    // 这里使用简化的代理部署流程，实际上通常会使用OpenZeppelin的可升级合约库
-    // 如hardhat-upgrades或@openzeppelin/upgrades
     logger.info(`部署 ${contractName} 的代理合约...`);
     const proxyContract = await deployProxyContract(implementationAddress, initializerArgs);
     
@@ -189,7 +226,8 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
       success: false,
       error: {
         message: error.message,
-        contractName
+        contractName,
+        transactionHash: error.transaction?.hash
       }
     };
   }
@@ -235,11 +273,16 @@ async function deployLibrary(factory, libraryName, options = {}) {
     const libraryAddress = await library.getAddress();
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
+    // 获取部署交易收据
+    const receipt = await library.provider.getTransactionReceipt(library.deploymentTransaction().hash);
+    
     return {
       success: true,
       libraryAddress: libraryAddress,
       libraryName,
-      transactionHash: library.deploymentTransaction().hash
+      transactionHash: library.deploymentTransaction().hash,
+      gasUsed: receipt.gasUsed.toString(),
+      effectiveGasPrice: receipt.effectiveGasPrice.toString()
     };
   } catch (error) {
     logger.error(`${libraryName} 库部署失败: ${error.message}`);
@@ -247,7 +290,8 @@ async function deployLibrary(factory, libraryName, options = {}) {
       success: false,
       error: {
         message: error.message,
-        libraryName
+        libraryName,
+        transactionHash: error.transaction?.hash
       }
     };
   }
@@ -277,6 +321,14 @@ async function initializeContract(contract, initMethod, args, options = {}) {
 async function linkLibraries(libraries, contractNames) {
   try {
     logger.info(`开始链接库到合约: ${contractNames.join(', ')}...`);
+    
+    // 验证所有库地址
+    for (const [name, address] of Object.entries(libraries)) {
+      const code = await ethers.provider.getCode(address);
+      if (code === '0x') {
+        throw new Error(`库 ${name} 在地址 ${address} 不存在`);
+      }
+    }
     
     // 返回链接信息
     return {
