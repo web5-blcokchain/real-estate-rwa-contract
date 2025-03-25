@@ -1,6 +1,9 @@
 const path = require('path');
 const winston = require('winston');
-const { serverConfig } = require('../config');
+
+// 从环境变量获取配置
+const logLevel = process.env.LOG_LEVEL || 'info';
+const environment = process.env.NODE_ENV || 'development';
 
 // 定义日志格式
 const logFormat = winston.format.combine(
@@ -17,7 +20,7 @@ const logDir = path.join(process.cwd(), 'logs');
 
 // 创建Winston日志记录器
 const logger = winston.createLogger({
-  level: serverConfig.logLevel,
+  level: logLevel,
   format: logFormat,
   defaultMeta: { service: 'japan-rwa-backend' },
   transports: [
@@ -45,7 +48,7 @@ const logger = winston.createLogger({
 });
 
 // 在非生产环境中，增加详细信息
-if (serverConfig.environment !== 'production') {
+if (environment !== 'production') {
   logger.add(new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),

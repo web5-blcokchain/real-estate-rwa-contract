@@ -1,4 +1,4 @@
-const { getSystemContract, sendTransaction, callContractMethod } = require('../utils/blockchain');
+const { getSystemContract, sendTransaction, callContractMethod } = require('../../../shared/utils/blockchain');
 const logger = require('../utils/logger');
 const { ApiError } = require('../middlewares/errorHandler');
 const { ethers } = require('ethers');

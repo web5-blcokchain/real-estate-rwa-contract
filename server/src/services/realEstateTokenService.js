@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
-const { provider, getSigner } = require('../utils/web3Provider');
+const { provider, getSigner } = require('../../../shared/utils/blockchain');
 const logger = require('../utils/logger');
-const { contractAbis } = require('../utils/getAbis');
+const { contractAbis } = require('../../../shared/utils/getAbis');
 const { ApiError } = require('../middlewares/errorHandler');
 
 /**

@@ -1,12 +1,37 @@
 const { ethers } = require('ethers');
-const { contractAddresses, operationRoles } = require('../config');
-const { getProvider, getSigner } = require('../utils/web3Provider');
-const { getAbi } = require('../utils/getAbis');
+const { getContractAddresses } = require('../../../shared/config/contracts');
+const { provider, getSigner } = require('../../../shared/utils/blockchain');
+const { getAbi } = require('../../../shared/utils/getAbis');
 const logger = require('../utils/logger');
 
+// 操作权限配置 - 定义每种操作需要的角色
+const operationRoles = {
+  // 房产管理
+  registerProperty: 'operator',
+  updateProperty: 'operator',
+  deleteProperty: 'operator',
+  
+  // 代币管理
+  mintToken: 'operator',
+  burnToken: 'operator',
+  transferToken: 'operator',
+  
+  // 赎回管理
+  createRedemption: 'operator',
+  approveRedemption: 'operator',
+  rejectRedemption: 'operator',
+  executeRedemption: 'operator',
+  
+  // 租金分配
+  createDistribution: 'operator',
+  distributeRent: 'operator',
+  claimRent: 'user',
+  liquidateUnclaimedRent: 'operator'
+};
+
 /**
- * 合约服务基类
- * 提供连接合约的共通方法
+ * 基础合约服务类
+ * 提供通用的合约交互功能
  */
 class BaseContractService {
   /**
@@ -26,10 +51,13 @@ class BaseContractService {
    * @returns {string} 合约地址
    */
   getContractAddress() {
-    const address = contractAddresses[this.addressKey];
+    const addresses = getContractAddresses();
+    const address = addresses[this.addressKey];
+    
     if (!address) {
-      throw new Error(`未找到 ${this.contractName} 合约地址，请检查配置`);
+      throw new Error(`Contract address not found for ${this.addressKey}`);
     }
+    
     return address;
   }
   
@@ -49,7 +77,6 @@ class BaseContractService {
     if (!this._contract) {
       const address = this.getContractAddress();
       const abi = this.getContractAbi();
-      const provider = getProvider();
       
       this._contract = new ethers.Contract(address, abi, provider);
     }
@@ -63,23 +90,16 @@ class BaseContractService {
    * @returns {ethers.Contract} 带签名者的合约实例
    */
   getContractWithSigner(operationName) {
-    const role = operationName ? operationRoles[operationName] || 'admin' : 'admin';
+    const requiredRole = operationRoles[operationName];
     
-    // 如果已有对应角色的合约实例，直接返回
-    if (this._contractWithSigner[role]) {
-      return this._contractWithSigner[role];
+    if (!requiredRole) {
+      throw new Error(`No role defined for operation: ${operationName}`);
     }
     
     const contract = this.getContract();
-    const signer = getSigner(role);
+    const signer = getSigner();
     
-    // 记录操作角色
-    logger.debug(`使用角色 "${role}" (${signer.address}) 连接 ${this.contractName} 合约`);
-    
-    // 创建并缓存带签名者的合约实例
-    this._contractWithSigner[role] = contract.connect(signer);
-    
-    return this._contractWithSigner[role];
+    return contract.connect(signer);
   }
   
   /**
@@ -90,12 +110,12 @@ class BaseContractService {
    */
   async waitForTransaction(tx, confirmations = 1) {
     try {
-      logger.debug(`等待交易 ${tx.hash} 被确认...`);
+      logger.info(`Waiting for transaction ${tx.hash} to be confirmed...`);
       const receipt = await tx.wait(confirmations);
-      logger.debug(`交易 ${tx.hash} 已确认，区块号: ${receipt.blockNumber}`);
+      logger.info(`Transaction ${tx.hash} confirmed in block ${receipt.blockNumber}`);
       return receipt;
     } catch (error) {
-      logger.error(`交易 ${tx.hash} 确认失败: ${error.message}`);
+      logger.error(`Transaction ${tx.hash} failed: ${error.message}`);
       throw error;
     }
   }
@@ -111,24 +131,19 @@ class BaseContractService {
    * @returns {Promise<ethers.providers.TransactionReceipt>} 交易收据
    */
   async executeWrite(methodName, args = [], options = {}) {
-    const { operationName, gasLimit, value } = options;
-    
     try {
-      const contract = this.getContractWithSigner(operationName);
+      const contract = this.getContractWithSigner(methodName);
+      logger.info(`Executing write method ${methodName} with args:`, args);
       
-      // 准备交易选项
-      const txOptions = {};
-      if (gasLimit) txOptions.gasLimit = gasLimit;
-      if (value) txOptions.value = value;
+      const tx = await contract[methodName](...args, options);
+      logger.info(`Write method ${methodName} transaction sent: ${tx.hash}`);
       
-      // 发送交易
-      logger.debug(`执行 ${this.contractName}.${methodName}(${args.join(', ')})${operationName ? ` [${operationName}]` : ''}`);
-      const tx = await contract[methodName](...args, txOptions);
+      const receipt = await this.waitForTransaction(tx, options.confirmations);
+      logger.info(`Write method ${methodName} completed successfully`);
       
-      // 等待交易确认
-      return await this.waitForTransaction(tx);
+      return receipt;
     } catch (error) {
-      logger.error(`执行 ${this.contractName}.${methodName} 失败: ${error.message}`);
+      logger.error(`Write method ${methodName} failed: ${error.message}`);
       throw error;
     }
   }
@@ -142,10 +157,14 @@ class BaseContractService {
   async executeRead(methodName, args = []) {
     try {
       const contract = this.getContract();
-      logger.debug(`调用 ${this.contractName}.${methodName}(${args.join(', ')})`);
-      return await contract[methodName](...args);
+      logger.info(`Executing read method ${methodName} with args:`, args);
+      
+      const result = await contract[methodName](...args);
+      logger.info(`Read method ${methodName} completed successfully`);
+      
+      return result;
     } catch (error) {
-      logger.error(`调用 ${this.contractName}.${methodName} 失败: ${error.message}`);
+      logger.error(`Read method ${methodName} failed: ${error.message}`);
       throw error;
     }
   }

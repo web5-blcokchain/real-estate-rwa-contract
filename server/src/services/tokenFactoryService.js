@@ -1,4 +1,4 @@
-const { getSystemContract, sendTransaction, callContractMethod } = require('../utils/blockchain');
+const { contractService } = require('../../../shared/utils/contractService');
 const logger = require('../utils/logger');
 const { ApiError } = require('../middlewares/errorHandler');
 const { ethers } = require('ethers');
@@ -14,7 +14,7 @@ class TokenFactoryService {
    * @returns {ethers.Contract} 合约实例
    */
   static getContract(withSigner = true) {
-    return getSystemContract('TokenFactory', withSigner);
+    return contractService.getContract('TokenFactory', withSigner);
   }
 
   /**
@@ -37,7 +37,7 @@ class TokenFactoryService {
       const initialSupplyBN = ethers.BigNumber.from(initialSupply).toString();
       
       const contract = this.getContract();
-      const receipt = await sendTransaction(contract, 'createToken', [
+      const receipt = await contractService.sendTransaction(contract, 'createToken', [
         propertyId,
         name,
         symbol,
@@ -73,7 +73,7 @@ class TokenFactoryService {
   static async getRealEstateToken(propertyId) {
     try {
       const contract = this.getContract(false);
-      return await callContractMethod(contract, 'RealEstateTokens', [propertyId]);
+      return await contractService.callContractMethod(contract, 'RealEstateTokens', [propertyId]);
     } catch (error) {
       logger.error(`Failed to get property token: ${error.message}`);
       throw ApiError.contractError(`Failed to get property token: ${error.message}`);
@@ -89,24 +89,19 @@ class TokenFactoryService {
       const contract = this.getContract(false);
       
       // 获取所有房产ID
-      const propertyRegistry = await getSystemContract('PropertyRegistry', false);
-      const propertyIds = await callContractMethod(propertyRegistry, 'getAllPropertyIds', []);
+      const propertyRegistry = contractService.getContract('PropertyRegistry', false);
+      const propertyIds = await contractService.callContractMethod(propertyRegistry, 'getAllPropertyIds', []);
       
       // 并行获取所有代币地址
       const tokensPromises = propertyIds.map(async propertyId => {
         const tokenAddress = await this.getRealEstateToken(propertyId);
         return {
           propertyId,
-          tokenAddress,
-          // 只返回非零地址的代币
-          valid: tokenAddress !== ethers.constants.AddressZero
+          tokenAddress
         };
       });
       
-      const allTokens = await Promise.all(tokensPromises);
-      
-      // 过滤掉无效的代币地址
-      return allTokens.filter(token => token.valid);
+      return await Promise.all(tokensPromises);
     } catch (error) {
       logger.error(`Failed to get all tokens: ${error.message}`);
       throw ApiError.contractError(`Failed to get all tokens: ${error.message}`);
@@ -120,7 +115,7 @@ class TokenFactoryService {
   static async getTokenImplementation() {
     try {
       const contract = this.getContract(false);
-      return await callContractMethod(contract, 'tokenImplementation', []);
+      return await contractService.callContractMethod(contract, 'tokenImplementation', []);
     } catch (error) {
       logger.error(`Failed to get token implementation: ${error.message}`);
       throw ApiError.contractError(`Failed to get token implementation: ${error.message}`);
@@ -136,7 +131,7 @@ class TokenFactoryService {
     try {
       logger.info(`Updating token implementation to ${newImplementation}`);
       const contract = this.getContract();
-      return await sendTransaction(contract, 'updateTokenImplementation', [newImplementation]);
+      return await contractService.sendTransaction(contract, 'updateTokenImplementation', [newImplementation]);
     } catch (error) {
       logger.error(`Failed to update token implementation: ${error.message}`);
       throw ApiError.contractError(`Failed to update token implementation: ${error.message}`);
@@ -150,7 +145,7 @@ class TokenFactoryService {
   static async getVersion() {
     try {
       const contract = this.getContract(false);
-      const version = await callContractMethod(contract, 'version', []);
+      const version = await contractService.callContractMethod(contract, 'version', []);
       return Number(version);
     } catch (error) {
       logger.error(`Failed to get version: ${error.message}`);

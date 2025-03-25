@@ -4,26 +4,14 @@
  */
 
 require('dotenv').config({ path: '../../.env' });
-const fs = require('fs');
 const path = require('path');
-const { getAbis } = require('../../../shared/utils/getAbis');
 const { web3Provider } = require('../../../shared/utils/web3Provider');
 const { contractService } = require('../../../shared/utils/contractService');
-const { logger } = require('../utils/logger');
+const { getContractAddresses } = require('../../../shared/config/contracts');
+const logger = require('../utils/logger');
 
-// 尝试读取部署状态文件
-let deployedContracts = {};
-try {
-  const deployStateFile = path.join(__dirname, '../../../deploy-state.json');
-  if (fs.existsSync(deployStateFile)) {
-    deployedContracts = JSON.parse(fs.readFileSync(deployStateFile, 'utf8'));
-  }
-} catch (error) {
-  console.warn('Warning: Could not load deployment state file:', error.message);
-}
-
-// 服务器配置
-const serverConfig = {
+// 基础配置
+const baseConfig = {
   port: process.env.SERVER_PORT || 3000,
   environment: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
@@ -34,20 +22,7 @@ const serverConfig = {
 const networkConfig = {
   rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
   chainId: parseInt(process.env.CHAIN_ID || '31337'),
-  privateKey: process.env.ADMIN_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000000',
-};
-
-// 合约地址配置
-const contractAddresses = {
-  roleManager: process.env.ROLE_MANAGER_ADDRESS || deployedContracts.roleManager || '',
-  propertyRegistry: process.env.PROPERTY_REGISTRY_ADDRESS || deployedContracts.propertyRegistry || '',
-  tokenFactory: process.env.TOKEN_FACTORY_ADDRESS || deployedContracts.tokenFactory || '',
-  redemptionManager: process.env.REDEMPTION_MANAGER_ADDRESS || deployedContracts.redemptionManager || '',
-  rentDistributor: process.env.RENT_DISTRIBUTOR_ADDRESS || deployedContracts.rentDistributor || '',
-  feeManager: process.env.FEE_MANAGER_ADDRESS || deployedContracts.feeManager || '',
-  marketplace: process.env.MARKETPLACE_ADDRESS || deployedContracts.marketplace || '',
-  tokenHolderQuery: process.env.TOKEN_HOLDER_QUERY_ADDRESS || deployedContracts.tokenHolderQuery || '',
-  realEstateSystem: process.env.REAL_ESTATE_SYSTEM_ADDRESS || deployedContracts.realEstateSystem || ''
+  privateKey: process.env.ADMIN_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000000'
 };
 
 // 操作权限配置 - 定义每种操作需要的角色
@@ -80,20 +55,45 @@ const operationRoles = {
   liquidateUnclaimedRent: 'finance'
 };
 
-// ABI文件路径配置
-const getAbiPath = (contractName) => {
-  return path.join(__dirname, `../../../artifacts/contracts/${contractName}.sol/${contractName}.json`);
-};
+/**
+ * 将 camelCase 转换为 PascalCase
+ * @param {string} str camelCase 字符串
+ * @returns {string} PascalCase 字符串
+ */
+function camelToPascalCase(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
-// 导出共享的工具
+/**
+ * 初始化配置
+ * @returns {Object} 配置对象
+ */
+function initializeConfig() {
+  logger.info('Starting configuration initialization...');
+  
+  // 加载合约地址
+  const addresses = getContractAddresses();
+  
+  // 验证合约地址
+  Object.entries(addresses).forEach(([name, address]) => {
+    const contractName = camelToPascalCase(name);
+    if (!address) {
+      logger.warn(`Warning: Contract address for ${contractName} is not configured`);
+    } else {
+      logger.info(`Loaded contract address for ${contractName}: ${address}`);
+    }
+  });
+  
+  logger.info('Configuration initialized successfully');
+  return addresses;
+}
+
+// 导出配置
 module.exports = {
-  serverConfig,
+  baseConfig,
   networkConfig,
-  contractAddresses,
   operationRoles,
-  getAbiPath,
-  getAbis,
   web3Provider,
   contractService,
-  logger
+  initializeConfig
 };

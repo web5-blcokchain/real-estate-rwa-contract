@@ -5,67 +5,48 @@ const morgan = require('morgan');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
 const logger = require('./utils/logger');
-const { serverConfig } = require('./config');
-const { initializeAbis } = require('./utils/getAbis');
+const { baseConfig, initializeConfig } = require('./config');
+const { initializeAbis } = require('../../shared/utils/getAbis');
+const { getContractAddresses } = require('../../shared/config/contracts');
 
 // 创建 Express 应用
 const app = express();
 
-// 安全增强中间件
-app.use(helmet());
-
-// CORS配置
-app.use(cors({
-  origin: serverConfig.corsOrigin,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
-
-// 请求体解析中间件
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// 请求日志中间件
-app.use(morgan('combined', { stream: { write: message => logger.http(message.trim()) } }));
-
-// 注册API路由
-app.use('/', routes);
-
-// 404处理中间件
-app.use(notFoundHandler);
-
-// 全局错误处理中间件
-app.use(errorHandler);
-
 // 启动服务器
-const start = async () => {
+async function start() {
   try {
-    // 初始化合约ABIs
-    initializeAbis();
+    logger.info('Starting server initialization...');
     
-    // 监听端口
-    app.listen(serverConfig.port, () => {
-      logger.info(`Server running in ${serverConfig.environment} mode on port ${serverConfig.port}`);
+    // 初始化配置
+    const contractAddresses = initializeConfig();
+    logger.info('Configuration initialized',contractAddresses);
+    
+    // 加载合约地址
+    const addresses = getContractAddresses();
+    logger.info('Contract addresses loaded:', addresses);
+    
+    // 初始化合约 ABIs
+    await initializeAbis(logger);
+    logger.info('Contract ABIs initialized');
+    
+    // 启动服务器
+    app.listen(baseConfig.port, () => {
+      logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${baseConfig.port}`);
     });
   } catch (error) {
-    logger.error(`Error starting server: ${error.message}`);
+    logger.error('Failed to start server:', error);
+    logger.error('Stack trace:', error.stack);
     process.exit(1);
   }
-};
+}
 
 // 启动应用
-start();
-
-// 优雅退出处理
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
+start().catch(error => {
+  logger.error(`Failed to start server: ${error.message}`);
+  if (error.stack) {
+    logger.error(`Stack trace: ${error.stack}`);
+  }
+  process.exit(1);
 });
 
 module.exports = app; 

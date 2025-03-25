@@ -1,57 +1,54 @@
 const TokenFactoryService = require('../services/tokenFactoryService');
-const RealEstateTokenService = require('../services/realEstateTokenService');
+const logger = require('../utils/logger');
 const { ApiError } = require('../middlewares/errorHandler');
 const { ethers } = require('ethers');
 
 /**
  * 代币控制器
- * 处理代币相关的HTTP请求
+ * 处理与代币相关的HTTP请求
  */
 class TokenController {
   /**
-   * 创建新代币
-   * @param {object} req 请求对象
-   * @param {object} res 响应对象
-   * @param {function} next 下一个中间件
+   * 创建房产代币
+   * @param {Object} req Express请求对象
+   * @param {Object} res Express响应对象
+   * @param {Function} next Express下一个中间件函数
    */
   static async createToken(req, res, next) {
     try {
-      const { 
-        propertyId, 
-        name, 
-        symbol, 
-        tokenOwner, 
-        totalSupply, 
-        maxSupply 
+      const {
+        propertyId,
+        name,
+        symbol,
+        decimals,
+        maxSupply,
+        initialSupply,
+        initialHolder
       } = req.body;
-      
-      // 验证参数
-      if (!propertyId || !name || !symbol || !tokenOwner || !totalSupply || !maxSupply) {
-        throw new ApiError(400, '缺少必要参数');
+
+      // 验证必要参数
+      if (!propertyId || !name || !symbol || !maxSupply || !initialSupply || !initialHolder) {
+        throw ApiError.badRequest('Missing required parameters');
       }
-      
+
       // 验证地址格式
-      if (!ethers.utils.isAddress(tokenOwner)) {
-        throw new ApiError(400, '无效的代币所有者地址');
+      if (!ethers.isAddress(initialHolder)) {
+        throw ApiError.badRequest('Invalid initial holder address');
       }
-      
+
       const result = await TokenFactoryService.createToken(
         propertyId,
         name,
         symbol,
-        tokenOwner,
-        totalSupply,
-        maxSupply
+        decimals || 18,
+        maxSupply,
+        initialSupply,
+        initialHolder
       );
-      
-      res.status(201).json({
+
+      res.json({
         success: true,
-        data: {
-          message: '代币创建成功',
-          transactionHash: result.transactionHash,
-          tokenAddress: result.tokenAddress,
-          propertyId
-        }
+        data: result
       });
     } catch (error) {
       next(error);
@@ -59,18 +56,22 @@ class TokenController {
   }
 
   /**
-   * 获取特定房产的代币地址
-   * @param {object} req 请求对象
-   * @param {object} res 响应对象
-   * @param {function} next 下一个中间件
+   * 获取房产对应的代币地址
+   * @param {Object} req Express请求对象
+   * @param {Object} res Express响应对象
+   * @param {Function} next Express下一个中间件函数
    */
-  static async getRealEstateToken(req, res, next) {
+  static async getPropertyToken(req, res, next) {
     try {
       const { propertyId } = req.params;
-      
+
+      if (!propertyId) {
+        throw ApiError.badRequest('Property ID is required');
+      }
+
       const tokenAddress = await TokenFactoryService.getRealEstateToken(propertyId);
-      
-      res.status(200).json({
+
+      res.json({
         success: true,
         data: {
           propertyId,
@@ -84,15 +85,15 @@ class TokenController {
 
   /**
    * 获取所有已创建的代币
-   * @param {object} req 请求对象
-   * @param {object} res 响应对象
-   * @param {function} next 下一个中间件
+   * @param {Object} req Express请求对象
+   * @param {Object} res Express响应对象
+   * @param {Function} next Express下一个中间件函数
    */
   static async getAllTokens(req, res, next) {
     try {
       const tokens = await TokenFactoryService.getAllTokens();
-      
-      res.status(200).json({
+
+      res.json({
         success: true,
         data: tokens
       });
