@@ -4,12 +4,26 @@
 
 ## 文档中心
 
-- [完整文档中心](./server/docs/README.md) - 详细的技术和用户文档
+- [English Documentation](./server/docs/README.md) - English documentation center
 - [中文文档导航](./server/docs/文档导航.md) - 项目文档的中文导航
 - [后端服务说明](./server/README.md) - 后端服务架构与API说明
+- [技术实施指南](./server/docs/技术实施.md) - 后端与智能合约交互实现细节
+
+### 核心文档
+
 - [系统流程图](./docs/系统流程图.md) - 系统组件交互流程图
 - [技术文档](./docs/技术文档.md) - 详细技术实现说明
+- [角色功能表](./docs/角色功能表.md) - 系统角色及权限说明
+
+### 用户文档
+
+- [用户手册](./docs/用户手册.md) - 系统操作指南
 - [FAQ](./docs/FAQ.md) - 常见问题解答
+
+### 部署与维护
+
+- [开发部署指南](./docs/开发部署指南.md) - 开发环境部署步骤
+- [主网部署指南](./docs/主网部署指南.md) - 生产环境部署流程
 - [修复指南](./docs/修复指南.md) - 常见问题修复方法
 
 ## 架构概述
