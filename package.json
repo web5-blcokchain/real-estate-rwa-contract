@@ -1,36 +1,27 @@
 {
   "name": "japan-rwa",
   "version": "1.0.0",
-  "description": "日本房产通证化系统",
-  "devDependencies": {
-    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
-    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
-    "@nomicfoundation/hardhat-verify": "^1.0.0",
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-etherscan": "^3.1.7",
-    "@nomiclabs/hardhat-waffle": "^2.0.6",
-    "@openzeppelin/contracts-upgradeable": "^4.8.3",
-    "@openzeppelin/hardhat-upgrades": "^1.28.0",
-    "@typechain/ethers-v5": "^10.2.1",
-    "@typechain/hardhat": "^6.1.6",
-    "chai": "^4.3.7",
-    "dotenv": "^16.3.1",
-    "ethereum-waffle": "^4.0.10",
-    "ethers": "^5.7.2",
-    "hardhat": "^2.17.3",
-    "hardhat-gas-reporter": "^1.0.9",
-    "solidity-coverage": "^0.8.4"
-  },
-  "dependencies": {
-    "@openzeppelin/contracts": "^4.8.3"
-  },
+  "description": "日本房地产代币化平台",
   "scripts": {
+    "test:frontend": "node frontend-tests/scripts/run-tests.js",
+    "test:server": "cd server && npm test",
+    "start:server": "cd server && npm start",
+    "start:monitor": "cd monitor && npm start",
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "hardhat run scripts/deploy-unified.js --network localhost",
-    "verify-contracts": "hardhat run scripts/verify-deployment.js --network localhost",
-    "fix-references": "hardhat run scripts/manual-fix-reference.js",
-    "verify-fix": "hardhat run scripts/verify-reference-fix.js",
-    "generate-calldata": "hardhat run scripts/create-initialize-calldata.js"
+    "update-abis": "node scripts/update-abis.js",
+    "deploy": "hardhat run scripts/deploy-unified.js",
+    "deploy:testnet": "hardhat run scripts/deploy-unified.js --network testnet",
+    "deploy:mainnet": "hardhat run scripts/deploy-unified.js --network mainnet",
+    "verify": "hardhat run scripts/verify-contracts.js",
+    "verify:testnet": "hardhat run scripts/verify-contracts.js --network testnet",
+    "verify:mainnet": "hardhat run scripts/verify-contracts.js --network mainnet"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^5.7.2"
+  },
+  "devDependencies": {
+    "hardhat": "^2.19.5"
   }
 }
