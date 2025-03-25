@@ -20,6 +20,11 @@
 - [用户手册](./docs/用户手册.md) - 系统操作指南
 - [FAQ](./docs/FAQ.md) - 常见问题解答
 
+### 工具与监控
+
+- [区块链事件监控](./monitor/README.md) - 区块链事件监控工具
+- [合约状态检查](./monitor/scripts/check-contracts.js) - 检查合约状态的脚本
+
 ### 部署与维护
 
 - [开发部署指南](./docs/开发部署指南.md) - 开发环境部署步骤

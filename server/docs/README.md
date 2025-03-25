@@ -26,6 +26,13 @@ The backend service interacts with Ethereum smart contracts to manage property r
 | [Technical Documentation](../../docs/技术文档.md) | Detailed technical implementation documentation |
 | [Role Function Table](../../docs/角色功能表.md) | System roles and their corresponding permissions |
 
+## Tools and Monitoring
+
+| Tool | Description |
+|------|-------------|
+| [Blockchain Event Monitor](../../monitor/README.md) | Real-time blockchain event monitoring tool |
+| [Contract Status Check](../../monitor/scripts/check-contracts.js) | Script to verify contract addresses and status |
+
 ## User Guides
 
 | Document | Description |
