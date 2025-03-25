@@ -70,10 +70,10 @@ class TokenFactoryService {
    * @param {string} propertyId 房产ID
    * @returns {Promise<string>} 代币地址
    */
-  static async getPropertyToken(propertyId) {
+  static async getRealEstateToken(propertyId) {
     try {
       const contract = this.getContract(false);
-      return await callContractMethod(contract, 'propertyTokens', [propertyId]);
+      return await callContractMethod(contract, 'RealEstateTokens', [propertyId]);
     } catch (error) {
       logger.error(`Failed to get property token: ${error.message}`);
       throw ApiError.contractError(`Failed to get property token: ${error.message}`);
@@ -94,7 +94,7 @@ class TokenFactoryService {
       
       // 并行获取所有代币地址
       const tokensPromises = propertyIds.map(async propertyId => {
-        const tokenAddress = await this.getPropertyToken(propertyId);
+        const tokenAddress = await this.getRealEstateToken(propertyId);
         return {
           propertyId,
           tokenAddress,

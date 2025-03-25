@@ -94,7 +94,7 @@ describe("模拟房产资产业务流程测试", function() {
       // 模拟代币工厂和代币
       const tokenFactory = {
         tokens: {},
-        propertyTokens: {},
+        RealEstateTokens: {},
         createToken: function(propertyId, name, symbol, decimals, maxSupply, initialSupply, initialHolder) {
           const tokenAddress = ethers.utils.id(`token-${propertyId}-${Date.now()}`);
           this.tokens[tokenAddress] = {
@@ -108,7 +108,7 @@ describe("模拟房产资产业务流程测试", function() {
             },
             whitelisted: {}
           };
-          this.propertyTokens[propertyId] = tokenAddress;
+          this.RealEstateTokens[propertyId] = tokenAddress;
           return tokenAddress;
         }
       };
@@ -126,7 +126,7 @@ describe("模拟房产资产业务流程测试", function() {
       );
       
       // 验证代币创建
-      expect(tokenFactory.propertyTokens[propertyId]).to.equal(tokenAddress);
+      expect(tokenFactory.RealEstateTokens[propertyId]).to.equal(tokenAddress);
       expect(tokenFactory.tokens[tokenAddress].name).to.equal("Japan Property Token");
       expect(tokenFactory.tokens[tokenAddress].totalSupply).to.equal(ethers.utils.parseEther("1000"));
       

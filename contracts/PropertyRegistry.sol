@@ -55,7 +55,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
     mapping(address => bool) public authorizedContracts;
     
     // 添加房产ID到代币地址的映射，与TokenFactory中的数据保持一致
-    mapping(string => address) public propertyTokens;
+    mapping(string => address) public RealEstateTokens;
     
     // 事件
     event PropertyRegistered(string indexed propertyId, string country, string metadataURI);
@@ -580,7 +580,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         properties[propertyId].status = newStatus;
         
         // 如果该房产已关联代币，通知代币合约状态变更
-        address tokenAddress = propertyTokens[propertyId];
+        address tokenAddress = RealEstateTokens[propertyId];
         if (tokenAddress != address(0)) {
             // 尝试调用代币合约的通知函数
             try IRealEstateToken(tokenAddress).notifyPropertyStatusChange(newStatus) {
@@ -627,7 +627,7 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         properties[propertyIdStr].status = newStatus;
         
         // 如果该房产已关联代币，通知代币合约状态变更
-        address tokenAddress = propertyTokens[propertyIdStr];
+        address tokenAddress = RealEstateTokens[propertyIdStr];
         if (tokenAddress != address(0)) {
             // 尝试调用代币合约的通知函数
             try IRealEstateToken(tokenAddress).notifyPropertyStatusChange(newStatus) {
@@ -648,9 +648,9 @@ contract PropertyRegistry is Initializable, UUPSUpgradeable {
         // 只允许授权合约调用
         require(isAuthorizedContract(msg.sender), "Only authorized contracts can register tokens");
         require(properties[propertyId].exists, "Property does not exist");
-        require(propertyTokens[propertyId] == address(0), "Token already registered for property");
+        require(RealEstateTokens[propertyId] == address(0), "Token already registered for property");
         
-        propertyTokens[propertyId] = tokenAddress;
+        RealEstateTokens[propertyId] = tokenAddress;
         emit TokenRegistered(propertyId, tokenAddress);
     }
 }

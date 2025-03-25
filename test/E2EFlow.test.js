@@ -214,7 +214,7 @@ describe("房产资产端到端流程测试", function() {
       expect(await realEstateToken.balanceOf(propertyOwner.address)).to.equal(TOKEN_INITIAL_SUPPLY);
       
       // 验证代币与房产关联
-      expect(await tokenFactory.propertyTokens(PROPERTY_ID)).to.equal(tokenAddress);
+      expect(await tokenFactory.RealEstateTokens(PROPERTY_ID)).to.equal(tokenAddress);
     });
     
     it("将投资者加入白名单", async function() {

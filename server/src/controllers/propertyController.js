@@ -160,7 +160,7 @@ class PropertyController {
       // 获取关联的代币地址，如果有
       let tokenAddress = null;
       try {
-        tokenAddress = await TokenFactoryService.getPropertyToken(propertyId);
+        tokenAddress = await TokenFactoryService.getRealEstateToken(propertyId);
       } catch (error) {
         logger.warn(`获取房产代币地址失败 - propertyId: ${propertyId}, error: ${error.message}`);
       }

@@ -21,7 +21,7 @@ const contractNames = [
   "RentDistributor",
   "Marketplace",
   "TokenHolderQuery",
-  "PropertyToken",
+  "RealEstateToken",
   "SystemDeployer",
   "SystemDeployerLib1",
   "SystemDeployerLib2"

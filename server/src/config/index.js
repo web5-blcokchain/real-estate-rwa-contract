@@ -6,6 +6,10 @@
 require('dotenv').config({ path: '../../.env' });
 const fs = require('fs');
 const path = require('path');
+const { getAbis } = require('../../../shared/utils/getAbis');
+const { web3Provider } = require('../../../shared/utils/web3Provider');
+const { contractService } = require('../../../shared/utils/contractService');
+const { logger } = require('../utils/logger');
 
 // 尝试读取部署状态文件
 let deployedContracts = {};
@@ -81,10 +85,15 @@ const getAbiPath = (contractName) => {
   return path.join(__dirname, `../../../artifacts/contracts/${contractName}.sol/${contractName}.json`);
 };
 
+// 导出共享的工具
 module.exports = {
   serverConfig,
   networkConfig,
   contractAddresses,
   operationRoles,
-  getAbiPath
+  getAbiPath,
+  getAbis,
+  web3Provider,
+  contractService,
+  logger
 };

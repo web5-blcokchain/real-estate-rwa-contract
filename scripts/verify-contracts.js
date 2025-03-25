@@ -198,10 +198,10 @@ async function main() {
     try {
       const tokenImplementationAddress = contracts.getContractAddress("tokenImplementation");
       if (tokenImplementationAddress) {
-        await verifyContract("PropertyToken", tokenImplementationAddress);
+        await verifyContract("RealEstateToken", tokenImplementationAddress);
       }
     } catch (error) {
-      verifyLogger.warn(`跳过 PropertyToken 实现合约验证: ${error.message}`);
+      verifyLogger.warn(`跳过 RealEstateToken 实现合约验证: ${error.message}`);
     }
     
     verifyLogger.info("合约验证流程完成");

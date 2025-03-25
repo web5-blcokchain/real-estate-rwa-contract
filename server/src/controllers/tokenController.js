@@ -64,11 +64,11 @@ class TokenController {
    * @param {object} res 响应对象
    * @param {function} next 下一个中间件
    */
-  static async getPropertyToken(req, res, next) {
+  static async getRealEstateToken(req, res, next) {
     try {
       const { propertyId } = req.params;
       
-      const tokenAddress = await TokenFactoryService.getPropertyToken(propertyId);
+      const tokenAddress = await TokenFactoryService.getRealEstateToken(propertyId);
       
       res.status(200).json({
         success: true,

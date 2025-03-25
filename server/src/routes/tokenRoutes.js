@@ -35,7 +35,7 @@ router.get('/', asyncHandler(TokenController.getAllTokens));
  *       404:
  *         description: 找不到房产对应的代币
  */
-router.get('/property/:propertyId', asyncHandler(TokenController.getPropertyToken));
+router.get('/property/:propertyId', asyncHandler(TokenController.getRealEstateToken));
 
 /**
  * @swagger
