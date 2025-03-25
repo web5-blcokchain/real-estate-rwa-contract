@@ -2,7 +2,7 @@
  * 交易工具模块
  * 提供交易处理的公共函数
  */
-const { ethers } = require('ethers');
+const { ethers } = require('hardhat');
 const { logger } = require('./logger');
 
 /**
@@ -20,9 +20,20 @@ function handleTransactionError(error, operation) {
   let errorData = '';
   
   // 检查是否是ethers的错误
-  if (error.code && error.reason) {
+  if (error.code) {
     errorCode = error.code;
-    errorMessage = error.reason;
+    // ethers v6 错误处理
+    if (error.code === 'NETWORK_ERROR') {
+      errorMessage = '网络连接错误，请检查网络连接';
+    } else if (error.code === 'NONCE_EXPIRED') {
+      errorMessage = '交易nonce已过期，请重试';
+    } else if (error.code === 'INSUFFICIENT_FUNDS') {
+      errorMessage = '账户余额不足';
+    } else if (error.code === 'REPLACEMENT_TRANSACTION_UNDERPRICED') {
+      errorMessage = '替换交易gas价格过低';
+    } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+      errorMessage = '无法预测gas限制，可能是合约执行失败';
+    }
   }
   
   // 检查是否包含交易数据
@@ -31,14 +42,15 @@ function handleTransactionError(error, operation) {
       to: error.transaction.to,
       from: error.transaction.from,
       data: error.transaction.data ? error.transaction.data.substring(0, 66) + '...' : '',
-      gasLimit: error.transaction.gasLimit?.toString() || ''
+      gasLimit: error.transaction.gasLimit?.toString() || '',
+      nonce: error.transaction.nonce?.toString() || ''
     };
   }
   
   // 解析智能合约错误
   if (error.data) {
     try {
-      const iface = new ethers.utils.Interface(['function Error(string)']);
+      const iface = new ethers.Interface(['function Error(string)']);
       const decodedError = iface.parseError(error.data);
       if (decodedError && decodedError.args && decodedError.args.length > 0) {
         errorMessage = decodedError.args[0];
@@ -65,87 +77,90 @@ function handleTransactionError(error, operation) {
  * @param {string} method 方法名称
  * @param {Array} args 方法参数
  * @param {Object} options 选项
- * @returns {Promise<ethers.BigNumber>} gas限制
+ * @returns {Promise<bigint>} gas限制
  */
 async function estimateGas(contract, method, args, options = {}) {
   try {
     // 获取方法估算gas
-    const estimatedGas = await contract.estimateGas[method](...args);
+    const estimatedGas = await contract[method].estimateGas(...args);
     
     // 增加安全边际 (默认20%)
     const safetyMargin = options.safetyMargin || 0.2;
-    const gasLimit = estimatedGas.mul(Math.floor(100 + safetyMargin * 100)).div(100);
+    const gasLimit = estimatedGas * BigInt(Math.floor(100 + safetyMargin * 100)) / BigInt(100);
     
+    // 记录gas估算信息
     logger.info(`方法 ${method} 估算gas: ${estimatedGas.toString()}, 安全gas限制: ${gasLimit.toString()}`);
+    
+    // 检查是否超过区块gas限制
+    const blockGasLimit = await contract.provider.getBlock('latest').then(block => block.gasLimit);
+    if (gasLimit > blockGasLimit) {
+      logger.warn(`警告: 估算的gas限制(${gasLimit.toString()})超过区块gas限制(${blockGasLimit.toString()})`);
+    }
     
     return gasLimit;
   } catch (error) {
     logger.warn(`估算gas失败: ${error.message}`);
     
     // 如果估算失败，返回配置的默认值或固定值
-    return ethers.BigNumber.from(options.defaultGasLimit || 500000);
+    return BigInt(options.defaultGasLimit || 500000);
   }
 }
 
 /**
  * 获取最佳gas价格
- * @param {ethers.providers.Provider} provider 提供者
- * @param {Object} options 选项
- * @returns {Promise<ethers.BigNumber>} gas价格
+ * @param {ethers.Provider} provider 提供者
+ * @returns {Promise<bigint>} gas价格
  */
-async function getGasPrice(provider, options = {}) {
+async function getGasPrice(provider) {
   try {
-    // 获取当前gas价格
-    const gasPrice = await provider.getGasPrice();
-    
-    // 根据优先级调整gas价格 (默认10%)
-    const priority = options.priority || 'medium';
-    let priorityMultiplier = 1.0;
-    
-    switch (priority) {
-      case 'low':
-        priorityMultiplier = 0.9;  // 低优先级，降低10%
-        break;
-      case 'medium':
-        priorityMultiplier = 1.1;  // 中优先级，增加10%
-        break;
-      case 'high':
-        priorityMultiplier = 1.3;  // 高优先级，增加30%
-        break;
-      case 'urgent':
-        priorityMultiplier = 1.5;  // 紧急，增加50%
-        break;
-      default:
-        priorityMultiplier = 1.0;
+    // Ensure we have a valid provider
+    if (!provider) {
+      provider = await ethers.provider;
     }
     
-    const adjustedGasPrice = gasPrice.mul(Math.floor(priorityMultiplier * 100)).div(100);
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
     
-    logger.info(`当前gas价格: ${ethers.utils.formatUnits(gasPrice, 'gwei')} Gwei, 调整后: ${ethers.utils.formatUnits(adjustedGasPrice, 'gwei')} Gwei`);
+    // 记录gas价格信息
+    logger.info(`[system] 当前gas价格: ${ethers.formatUnits(gasPrice, 'gwei')} gwei`);
     
-    return adjustedGasPrice;
+    // 检查gas价格是否过高
+    const maxGasPrice = ethers.parseUnits('100', 'gwei'); // 100 gwei
+    if (gasPrice > maxGasPrice) {
+      logger.warn(`警告: gas价格(${ethers.formatUnits(gasPrice, 'gwei')} gwei)超过阈值`);
+    }
+    
+    return gasPrice;
   } catch (error) {
-    logger.warn(`获取gas价格失败: ${error.message}`);
-    
-    // 如果获取失败，返回配置的默认值
-    return ethers.utils.parseUnits(options.defaultGasPrice || '5', 'gwei');
+    logger.warn(`[system] 获取gas价格失败: ${error.message}`);
+    // Return a reasonable default gas price (30 gwei)
+    return ethers.parseUnits('30', 'gwei');
   }
 }
 
 /**
  * 等待交易确认
- * @param {ethers.providers.Provider} provider 提供者
+ * @param {ethers.Provider} provider 提供者
  * @param {string} txHash 交易哈希
  * @param {number} confirmations 确认数
- * @returns {Promise<ethers.providers.TransactionReceipt>} 交易收据
+ * @returns {Promise<ethers.TransactionReceipt>} 交易收据
  */
 async function waitForTransaction(provider, txHash, confirmations = 1) {
   try {
     logger.info(`等待交易 ${txHash} 确认中...`);
-    const receipt = await provider.waitForTransaction(txHash, confirmations);
+    
+    // 设置超时时间（5分钟）
+    const timeout = 5 * 60 * 1000;
+    const receipt = await Promise.race([
+      provider.waitForTransaction(txHash, confirmations),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('交易确认超时')), timeout)
+      )
+    ]);
     
     if (receipt.status === 1) {
       logger.info(`交易 ${txHash} 已确认，区块: ${receipt.blockNumber}`);
+      logger.info(`Gas使用: ${receipt.gasUsed.toString()}`);
     } else {
       logger.error(`交易 ${txHash} 失败`);
     }
@@ -187,39 +202,29 @@ async function executeTransaction(contract, method, args, options = {}) {
     if (options.customGasPrice) {
       txOptions.gasPrice = options.customGasPrice;
     } else if (options.getGasPrice !== false) {
-      txOptions.gasPrice = await getGasPrice(contract.provider, {
-        priority: options.priority,
-        defaultGasPrice: options.defaultGasPrice
-      });
+      txOptions.gasPrice = await getGasPrice(contract.provider);
+    }
+    
+    // 设置交易优先级
+    if (options.priority === 'high') {
+      txOptions.maxFeePerGas = txOptions.gasPrice * BigInt(2);
+      txOptions.maxPriorityFeePerGas = txOptions.gasPrice / BigInt(2);
     }
     
     // 执行交易
-    const tx = await contract.functions[method](...args, txOptions);
+    const tx = await contract[method](...args, txOptions);
     logger.info(`${operation}交易已提交: ${tx.hash}`);
     
     // 等待交易确认
-    const confirmations = options.confirmations || 1;
-    const receipt = await waitForTransaction(contract.provider, tx.hash, confirmations);
+    const receipt = await waitForTransaction(contract.provider, tx.hash, options.confirmations || 1);
     
-    // 处理交易结果
-    if (receipt.status === 1) {
-      logger.info(`${operation}成功，交易哈希: ${tx.hash}`);
-      return {
-        success: true,
-        transactionHash: tx.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
-      };
-    } else {
-      logger.error(`${operation}失败，交易被回滚`);
-      return {
-        success: false,
-        error: {
-          message: '交易被回滚',
-          transactionHash: tx.hash
-        }
-      };
-    }
+    return {
+      success: true,
+      transactionHash: tx.hash,
+      receipt: receipt,
+      gasUsed: receipt.gasUsed.toString(),
+      effectiveGasPrice: receipt.effectiveGasPrice.toString()
+    };
   } catch (error) {
     return handleTransactionError(error, operation);
   }

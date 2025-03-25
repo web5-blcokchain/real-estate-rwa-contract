@@ -5,7 +5,16 @@
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
-const { loggingConfig } = require('../config');
+
+// 默认日志配置
+const loggingConfig = {
+  directory: path.join(process.cwd(), 'logs'),
+  filename: 'app.log',
+  level: 'info',
+  maxSize: 5242880, // 5MB
+  maxFiles: 5,
+  logObjects: true
+};
 
 // 确保日志目录存在
 const logDir = loggingConfig.directory;

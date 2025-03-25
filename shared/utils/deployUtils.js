@@ -2,7 +2,7 @@
  * 部署工具模块
  * 提供智能合约部署和验证的公共函数
  */
-const { ethers } = require('ethers');
+const { ethers } = require('hardhat');
 const { logger } = require('./logger');
 const { getProvider } = require('./web3Provider');
 const { contracts, deployConfig } = require('../config');
@@ -47,15 +47,19 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     
     // 使用ethers的ContractFactory部署合约
     const contract = await factory.deploy(...constructorArgs, deployOptions);
-    logger.info(`${contractName} 部署交易已提交: ${contract.deployTransaction.hash}`);
+    const tx = contract.deploymentTransaction();
+    if (tx) {
+      logger.info(`${contractName} 部署交易已提交: ${tx.hash}`);
+    }
     
     // 等待合约部署确认
-    await contract.deployed();
-    logger.info(`${contractName} 部署成功，合约地址: ${contract.address}`);
+    await contract.waitForDeployment();
+    const contractAddress = await contract.getAddress();
+    logger.info(`${contractName} 部署成功，合约地址: ${contractAddress}`);
     
     // 更新合约地址配置
     const configKey = contractName.charAt(0).toLowerCase() + contractName.slice(1);
-    contracts.updateContractAddress(configKey, contract.address);
+    contracts.updateContractAddress(configKey, contractAddress);
     
     // 保存部署状态
     if (options.saveState !== false) {
@@ -65,7 +69,7 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     // 验证合约
     if (deployConfig.verifyContracts && options.verify !== false) {
       try {
-        await verifyContract(contract.address, contractName, constructorArgs);
+        await verifyContract(contractAddress, contractName, constructorArgs);
       } catch (verifyError) {
         logger.warn(`${contractName} 验证失败: ${verifyError.message}`);
       }
@@ -73,9 +77,9 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     
     return {
       success: true,
-      contractAddress: contract.address,
+      contractAddress,
       contractName,
-      transactionHash: contract.deployTransaction.hash
+      transactionHash: tx ? tx.hash : undefined
     };
   } catch (error) {
     logger.error(`${contractName} 部署失败: ${error.message}`);
@@ -143,15 +147,16 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     
     // 部署实现合约
     const contract = await factory.deploy(...constructorArgs);
-    logger.info(`${contractName} 实现合约部署交易已提交: ${contract.deployTransaction.hash}`);
-    await contract.deployed();
-    logger.info(`${contractName} 实现合约部署成功，地址: ${contract.address}`);
+    logger.info(`${contractName} 实现合约部署交易已提交: ${contract.deploymentTransaction().hash}`);
+    await contract.waitForDeployment();
+    const implementationAddress = await contract.getAddress();
+    logger.info(`${contractName} 实现合约部署成功，地址: ${implementationAddress}`);
     
     // 部署代理合约
     // 这里使用简化的代理部署流程，实际上通常会使用OpenZeppelin的可升级合约库
     // 如hardhat-upgrades或@openzeppelin/upgrades
     logger.info(`部署 ${contractName} 的代理合约...`);
-    const proxyContract = await deployProxyContract(contract.address, initializerArgs);
+    const proxyContract = await deployProxyContract(implementationAddress, initializerArgs);
     
     // 更新合约地址配置
     const configKey = contractName.charAt(0).toLowerCase() + contractName.slice(1);
@@ -165,7 +170,7 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     // 验证合约
     if (deployConfig.verifyContracts && options.verify !== false) {
       try {
-        await verifyContract(contract.address, contractName, constructorArgs);
+        await verifyContract(implementationAddress, contractName, constructorArgs);
       } catch (verifyError) {
         logger.warn(`${contractName} 验证失败: ${verifyError.message}`);
       }
@@ -174,9 +179,9 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     return {
       success: true,
       contractAddress: proxyContract.address,
-      implementationAddress: contract.address,
+      implementationAddress: implementationAddress,
       contractName,
-      transactionHash: proxyContract.deployTransaction.hash
+      transactionHash: proxyContract.deploymentTransaction().hash
     };
   } catch (error) {
     logger.error(`${contractName} 可升级合约部署失败: ${error.message}`);
@@ -206,9 +211,9 @@ async function deployProxyContract(implementationAddress, initializerArgs = []) 
   // 返回模拟的代理合约对象
   return {
     address: `0xProxy${implementationAddress.substring(4)}`,
-    deployTransaction: {
+    deploymentTransaction: () => ({
       hash: `0xProxyTx${Date.now().toString(16)}`
-    }
+    })
   };
 }
 
@@ -225,15 +230,16 @@ async function deployLibrary(factory, libraryName, options = {}) {
     
     // 部署库
     const library = await factory.deploy(options);
-    logger.info(`${libraryName} 部署交易已提交: ${library.deployTransaction.hash}`);
-    await library.deployed();
-    logger.info(`${libraryName} 部署成功，地址: ${library.address}`);
+    logger.info(`${libraryName} 部署交易已提交: ${library.deploymentTransaction().hash}`);
+    await library.waitForDeployment();
+    const libraryAddress = await library.getAddress();
+    logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
     return {
       success: true,
-      libraryAddress: library.address,
+      libraryAddress: libraryAddress,
       libraryName,
-      transactionHash: library.deployTransaction.hash
+      transactionHash: library.deploymentTransaction().hash
     };
   } catch (error) {
     logger.error(`${libraryName} 库部署失败: ${error.message}`);

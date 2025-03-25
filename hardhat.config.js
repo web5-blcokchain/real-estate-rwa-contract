@@ -1,5 +1,5 @@
-require("@nomiclabs/hardhat-waffle");
-require("@nomiclabs/hardhat-etherscan");
+require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-verify");
 require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config();
 const { getPrivateKey } = require("./scripts/utils/secure-key");
@@ -17,7 +17,7 @@ if (PRIVATE_KEY === "00000000000000000000000000000000000000000000000000000000000
 
 module.exports = {
   solidity: {
-    version: "0.8.19",
+    version: "0.8.22",
     settings: {
       optimizer: {
         enabled: true,

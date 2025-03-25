@@ -107,15 +107,23 @@ function saveToDeployState() {
     Object.entries(contractAddresses).forEach(([name, address]) => {
       if (address) {
         const pascalCaseName = name.charAt(0).toUpperCase() + name.slice(1);
-        contracts[pascalCaseName] = address;
+        // Convert BigInt to string if needed
+        contracts[pascalCaseName] = typeof address === 'bigint' ? address.toString() : address;
       }
     });
 
     // 更新合约地址
     deployState.contracts = contracts;
     
-    // 保存文件
-    fs.writeFileSync(DEPLOY_STATE_FILE, JSON.stringify(deployState, null, 2));
+    // 保存文件，使用自定义replacer处理BigInt
+    const replacer = (key, value) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
+      return value;
+    };
+    
+    fs.writeFileSync(DEPLOY_STATE_FILE, JSON.stringify(deployState, replacer, 2));
     console.log('Contract addresses saved to deploy-state.json');
   } catch (error) {
     console.error(`Error saving contract addresses: ${error.message}`);

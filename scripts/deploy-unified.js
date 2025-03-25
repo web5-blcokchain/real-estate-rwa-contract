@@ -11,12 +11,12 @@ const path = require("path");
 const { 
   logger, 
   deployUtils, 
-  contracts, 
   getLogger, 
   transaction, 
   contractService 
 } = require("../shared/utils");
 const config = require("../shared/config");
+const contracts = require("../shared/config/contracts");
 
 // 获取部署专用日志记录器
 const deployLogger = getLogger("deploy");
@@ -105,29 +105,39 @@ function saveDeploymentRecord(deployedContracts, chainId, networkName, deployer)
   // 创建部署记录对象
   const contractAddresses = {};
   for (let i = 0; i < contractNames.length; i++) {
-    contractAddresses[contractNames[i]] = deployedContracts[i];
+    // Convert BigInt to string if needed
+    const address = deployedContracts[i];
+    contractAddresses[contractNames[i]] = typeof address === 'bigint' ? address.toString() : address;
   }
   
   const deploymentData = {
     network: networkName,
-    chainId: chainId,
+    chainId: chainId.toString(), // Convert chainId to string
     timestamp: timestamp,
     deployer: deployer,
     contracts: contractAddresses
+  };
+  
+  // 保存部署记录，使用自定义replacer处理BigInt
+  const replacer = (key, value) => {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    return value;
   };
   
   // 保存部署记录
   const deploymentFile = path.join(deploymentPath, `${networkName}-${timestamp}.json`);
   fs.writeFileSync(
     deploymentFile,
-    JSON.stringify(deploymentData, null, 2)
+    JSON.stringify(deploymentData, replacer, 2)
   );
   
   // 更新最新部署记录
   const latestDeploymentFile = path.join(deploymentPath, `${networkName}-latest.json`);
   fs.writeFileSync(
     latestDeploymentFile,
-    JSON.stringify(deploymentData, null, 2)
+    JSON.stringify(deploymentData, replacer, 2)
   );
   
   // 同时更新共享配置中的合约地址
@@ -165,15 +175,15 @@ async function deployStep(deployer_contract, step) {
 async function main() {
   try {
     // 获取网络和部署者信息
-    const [deployer] = await ethers.getSigners();
-    const chainId = await deployer.getChainId();
+    const [signer] = await ethers.getSigners();
+    const chainId = await ethers.provider.getNetwork().then(n => n.chainId);
     const network = await ethers.provider.getNetwork();
     const networkName = network.name !== 'unknown' ? network.name : `chain-${chainId}`;
-    const balance = ethers.utils.formatEther(await deployer.getBalance());
+    const balance = ethers.formatEther(await ethers.provider.getBalance(signer.address));
     
     // 记录部署信息
     deployLogger.info(`部署网络: ${networkName} (Chain ID: ${chainId})`);
-    deployLogger.info(`部署账户: ${deployer.address}`);
+    deployLogger.info(`部署账户: ${signer.address}`);
     deployLogger.info(`账户余额: ${balance} ETH`);
     
     // 检查余额是否足够
@@ -186,103 +196,77 @@ async function main() {
     
     // 部署 SystemDeployerLib1
     const SystemDeployerLib1 = await ethers.getContractFactory("SystemDeployerLib1");
-    const lib1 = await deployUtils.deployContract(
+    const lib1Result = await deployUtils.deployContract(
       SystemDeployerLib1,
       "SystemDeployerLib1",
       [],
       { verify: true }
     );
     
+    if (!lib1Result.success) {
+      throw new Error(`SystemDeployerLib1 部署失败: ${lib1Result.error.message}`);
+    }
+    
     // 部署 SystemDeployerLib2
     const SystemDeployerLib2 = await ethers.getContractFactory("SystemDeployerLib2");
-    const lib2 = await deployUtils.deployContract(
+    const lib2Result = await deployUtils.deployContract(
       SystemDeployerLib2,
       "SystemDeployerLib2",
       [],
       { verify: true }
     );
     
-    // 链接库合约到SystemDeployer
-    deployLogger.info("链接库合约到SystemDeployer...");
-    const libraries = {
-      SystemDeployerLib1: lib1.contractAddress,
-      SystemDeployerLib2: lib2.contractAddress
-    };
+    if (!lib2Result.success) {
+      throw new Error(`SystemDeployerLib2 部署失败: ${lib2Result.error.message}`);
+    }
     
-    await deployUtils.linkLibraries(libraries, ["SystemDeployer"]);
-    
-    // 部署SystemDeployer合约
+    // 部署主合约
+    deployLogger.info("部署主合约...");
     const SystemDeployer = await ethers.getContractFactory("SystemDeployer", {
-      libraries: libraries
+      libraries: {
+        SystemDeployerLib1: lib1Result.contractAddress,
+        SystemDeployerLib2: lib2Result.contractAddress
+      }
     });
-    
-    const deployerConfig = {
-      superAdmin: config.roleAddresses.superAdmin || deployer.address,
-      propertyManager: config.roleAddresses.propertyManager || deployer.address,
-      feeCollector: config.roleAddresses.feeCollector || deployer.address,
-      tradingFee: config.feeConfig.tradingFee,
-      tokenizationFee: config.feeConfig.tokenizationFee,
-      redemptionFee: config.feeConfig.redemptionFee,
-      platformFee: config.feeConfig.platformFee,
-      maintenanceFee: config.feeConfig.maintenanceFee
-    };
-    
-    deployLogger.info("部署SystemDeployer合约...");
-    deployLogger.info(`配置参数: ${JSON.stringify(deployerConfig)}`);
     
     const deployerResult = await deployUtils.deployContract(
       SystemDeployer,
       "SystemDeployer",
-      [
-        deployerConfig.superAdmin,
-        deployerConfig.propertyManager,
-        deployerConfig.feeCollector,
-        deployerConfig.tradingFee,
-        deployerConfig.tokenizationFee,
-        deployerConfig.redemptionFee,
-        deployerConfig.platformFee,
-        deployerConfig.maintenanceFee
-      ],
-      {
-        gasLimit: 8000000,
-        verify: true
-      }
+      [],
+      { verify: true }
     );
     
-    const deployer_contract = SystemDeployer.attach(deployerResult.contractAddress);
-    
-    // 监听部署进度
-    monitorDeploymentProgress(deployer_contract);
-    
-    // 执行部署步骤
-    const totalSteps = 12; // 总共12个步骤
-    
-    for (let step = 0; step < totalSteps; step++) {
-      await deployStep(deployer_contract, step);
+    if (!deployerResult.success) {
+      throw new Error(`SystemDeployer 部署失败: ${deployerResult.error.message}`);
     }
     
-    // 获取部署结果
-    deployLogger.info("获取部署结果...");
-    const deployedContracts = await deployer_contract.getDeployedContracts();
+    const systemDeployer = await ethers.getContractAt("SystemDeployer", deployerResult.contractAddress);
+    
+    // 开始监听部署进度
+    monitorDeploymentProgress(systemDeployer);
+    
+    // 逐步部署系统
+    for (let step = 0; step < 12; step++) {
+      await deployStep(systemDeployer, step);
+    }
+    
+    // 获取部署的合约地址
+    const deployedContracts = await systemDeployer.getDeployedContracts();
     
     // 保存部署记录
-    saveDeploymentRecord(deployedContracts, chainId, networkName, deployer.address);
-    
-    // 初始化合约服务
-    contractService.initialize(contracts.getContractAddresses());
+    saveDeploymentRecord(deployedContracts, chainId, networkName, signer.address);
     
     deployLogger.info("部署完成！");
-    
   } catch (error) {
     deployLogger.error(`部署失败: ${error.message}`);
-    console.error(error);
-    process.exit(1);
+    throw error;
   }
 }
 
+// 执行部署
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error(error);
+    deployLogger.error(error);
     process.exit(1);
   });
