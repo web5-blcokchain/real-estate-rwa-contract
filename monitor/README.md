@@ -60,6 +60,23 @@ cp .env.example .env
 - 各合约地址
 - 监控参数
 
+### 更新合约ABI
+
+如果智能合约有更新，可以使用以下命令从编译产物中更新合约ABI：
+
+```bash
+# 只提取合约事件定义（推荐用于监控工具）
+npm run update-abis
+
+# 提取完整合约ABI
+npm run update-abis:full
+
+# 指定artifacts目录路径
+npm run update-abis -- --artifacts-path ../path/to/artifacts/contracts
+```
+
+> 注意：需要先编译合约，确保 `artifacts` 目录中有最新的合约编译产物。
+
 ### 检查合约状态
 
 在开始监控前，可以检查所有合约的可用性：

@@ -7,6 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "check": "node scripts/check-contracts.js",
+    "update-abis": "node scripts/update-abis.js",
+    "update-abis:full": "node scripts/update-abis.js --full",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
