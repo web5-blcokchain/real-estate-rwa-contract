@@ -1,4 +1,4 @@
-const BaseRouter = require('../../shared/routes/baseRouter');
+const BaseRouter = require('../../../shared/routes/baseRouter');
 const RentController = require('../controllers/rentController');
 const { ethers } = require('ethers');
 

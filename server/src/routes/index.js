@@ -6,12 +6,14 @@ const tokenRoutes = require('./tokenRoutes');
 const redemptionRoutes = require('./redemptionRoutes');
 const rentRoutes = require('./rentRoutes');
 const propertyRoutes = require('./propertyRoutes');
+const customRoutes = require('./custom');
 
 // 注册路由
 router.use('/tokens', tokenRoutes);
 router.use('/redemptions', redemptionRoutes);
 router.use('/rents', rentRoutes);
-router.use('/properties', propertyRoutes);
+router.use('/properties', customRoutes);
+router.use('/custom', customRoutes);
 
 // 健康检查路由
 router.get('/health', (req, res) => {

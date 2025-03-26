@@ -3,7 +3,7 @@ const router = express.Router();
 const TokenController = require('../controllers/tokenController');
 const { asyncHandler } = require('../middlewares/asyncHandler');
 const { authMiddleware } = require('../middlewares/authMiddleware');
-const BaseRouter = require('../../shared/routes/baseRouter');
+const BaseRouter = require('../../../shared/routes/baseRouter');
 const { ethers } = require('ethers');
 
 /**

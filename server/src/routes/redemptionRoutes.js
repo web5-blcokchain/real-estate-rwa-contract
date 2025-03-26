@@ -1,4 +1,4 @@
-const BaseRouter = require('../../shared/routes/baseRouter');
+const BaseRouter = require('../../../shared/routes/baseRouter');
 const RedemptionController = require('../controllers/redemptionController');
 const { ethers } = require('ethers');
 

@@ -12,6 +12,29 @@ const { getContractAddresses } = require('../../shared/config/contracts');
 // 创建 Express 应用
 const app = express();
 
+// 设置中间件
+app.use(helmet());
+app.use(cors());
+app.use(morgan('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 添加一个简单的测试路由
+app.get('/api/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API测试成功',
+    apiKey: req.query.api_key || '未提供'
+  });
+});
+
+// 挂载API路由
+app.use('/api/v1', routes);
+
+// 错误处理中间件
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 // 启动服务器
 async function start() {
   try {
