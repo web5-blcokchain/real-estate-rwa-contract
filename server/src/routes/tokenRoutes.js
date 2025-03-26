@@ -3,6 +3,8 @@ const router = express.Router();
 const TokenController = require('../controllers/tokenController');
 const { asyncHandler } = require('../middlewares/asyncHandler');
 const { authMiddleware } = require('../middlewares/authMiddleware');
+const BaseRouter = require('../../shared/routes/baseRouter');
+const { ethers } = require('ethers');
 
 /**
  * @swagger
@@ -299,4 +301,183 @@ router.delete('/:tokenAddress/whitelist/batch', authMiddleware(), asyncHandler(T
  */
 router.get('/:tokenAddress/whitelist/:address', asyncHandler(TokenController.isWhitelisted));
 
-module.exports = router; 
+/**
+ * 代币路由类
+ */
+class TokenRouter extends BaseRouter {
+  constructor() {
+    super();
+    this.setupRoutes();
+  }
+
+  /**
+   * 设置路由
+   */
+  setupRoutes() {
+    // 获取所有代币
+    this.get('/', TokenController.getAllTokens);
+
+    // 获取特定房产的代币
+    this.get('/property/:propertyId', TokenController.getRealEstateToken, {
+      validation: {
+        params: {
+          propertyId: {
+            type: 'string',
+            required: true
+          }
+        }
+      }
+    });
+
+    // 获取代币实现合约地址
+    this.get('/implementation', TokenController.getTokenImplementation);
+
+    // 创建新代币
+    this.post('/', TokenController.createToken, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        body: {
+          propertyId: {
+            type: 'string',
+            required: true
+          },
+          name: {
+            type: 'string',
+            required: true,
+            min: 1
+          },
+          symbol: {
+            type: 'string',
+            required: true,
+            min: 1
+          },
+          decimals: {
+            type: 'number',
+            required: false,
+            default: 18,
+            min: 0,
+            max: 18
+          },
+          maxSupply: {
+            type: 'string',
+            required: false,
+            format: 'hex'
+          },
+          initialSupply: {
+            type: 'string',
+            required: true,
+            format: 'hex'
+          },
+          initialHolder: {
+            type: 'address',
+            required: true
+          }
+        }
+      }
+    });
+
+    // 更新代币实现合约地址
+    this.put('/implementation', TokenController.updateTokenImplementation, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        body: {
+          implementation: {
+            type: 'address',
+            required: true
+          }
+        }
+      }
+    });
+
+    // 添加地址到白名单
+    this.post('/:tokenAddress/whitelist', TokenController.addToWhitelist, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        params: {
+          tokenAddress: {
+            type: 'address',
+            required: true
+          }
+        },
+        body: {
+          address: {
+            type: 'address',
+            required: true
+          }
+        }
+      }
+    });
+
+    // 批量添加地址到白名单
+    this.post('/:tokenAddress/whitelist/batch', TokenController.batchAddToWhitelist, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        params: {
+          tokenAddress: {
+            type: 'address',
+            required: true
+          }
+        },
+        body: {
+          addresses: {
+            type: 'array',
+            required: true,
+            min: 1,
+            validate: (value) => value.every(addr => ethers.utils.isAddress(addr))
+          }
+        }
+      }
+    });
+
+    // 从白名单移除地址
+    this.delete('/:tokenAddress/whitelist', TokenController.removeFromWhitelist, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        params: {
+          tokenAddress: {
+            type: 'address',
+            required: true
+          }
+        },
+        body: {
+          address: {
+            type: 'address',
+            required: true
+          }
+        }
+      }
+    });
+
+    // 批量从白名单移除地址
+    this.delete('/:tokenAddress/whitelist/batch', TokenController.batchRemoveFromWhitelist, {
+      auth: true,
+      permissions: ['operator'],
+      validation: {
+        params: {
+          tokenAddress: {
+            type: 'address',
+            required: true
+          }
+        },
+        body: {
+          addresses: {
+            type: 'array',
+            required: true,
+            min: 1,
+            validate: (value) => value.every(addr => ethers.utils.isAddress(addr))
+          }
+        }
+      }
+    });
+  }
+}
+
+// 创建路由实例
+const tokenRouter = new TokenRouter();
+
+module.exports = tokenRouter.getRouter(); 

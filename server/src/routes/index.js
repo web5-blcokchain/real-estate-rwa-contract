@@ -1,26 +1,23 @@
 const express = require('express');
 const router = express.Router();
 
-// 导入子路由
-const propertyRoutes = require('./propertyRoutes');
+// 导入路由
 const tokenRoutes = require('./tokenRoutes');
 const redemptionRoutes = require('./redemptionRoutes');
 const rentRoutes = require('./rentRoutes');
+const propertyRoutes = require('./propertyRoutes');
 
-// 注册子路由
-router.use('/api/properties', propertyRoutes);
-router.use('/api/tokens', tokenRoutes);
-router.use('/api/redemptions', redemptionRoutes);
-router.use('/api/rents', rentRoutes);
+// 注册路由
+router.use('/tokens', tokenRoutes);
+router.use('/redemptions', redemptionRoutes);
+router.use('/rents', rentRoutes);
+router.use('/properties', propertyRoutes);
 
 // 健康检查路由
 router.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    data: {
-      status: 'healthy',
-      timestamp: new Date().toISOString()
-    }
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
   });
 });
 
