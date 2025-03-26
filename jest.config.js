@@ -4,15 +4,15 @@ module.exports = {
   
   // 测试文件匹配模式
   testMatch: [
-    "**/tests/**/*.test.js",
-    "**/tests/**/*.spec.js"
+    "**/server/tests/**/*.test.js",
+    "**/server/tests/**/*.spec.js"
   ],
   
   // 测试覆盖率收集
   collectCoverage: false,
   collectCoverageFrom: [
-    "src/**/*.js",
-    "!src/index.js",
+    "server/src/**/*.js",
+    "!server/src/index.js",
     "!**/node_modules/**",
     "!**/tests/**"
   ],
@@ -24,7 +24,7 @@ module.exports = {
   coverageReporters: ["text", "lcov"],
   
   // 测试前的设置
-  setupFiles: ["./tests/setup.js"],
+  setupFiles: ["./server/tests/setup.js"],
   
   // 测试超时时间
   testTimeout: 10000,

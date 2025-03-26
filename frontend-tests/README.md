@@ -1,178 +1,257 @@
-# 日本房产代币化平台前端测试工具
+# Frontend Tests Documentation
 
-## 项目概述
-
-前端测试工具是一个专门为日本房产代币化平台设计的自动化测试框架，用于验证前端应用与智能合约交互的正确性和可靠性。该工具模拟用户在前端界面上进行的各种操作，通过与区块链网络上的智能合约直接交互，测试整个系统的功能完整性。
-
-### 主要功能
-
-- **完整业务流程测试** - 测试从房产注册到代币化的全流程
-- **代币交易测试** - 验证代币的创建、买卖、转让等交易功能
-- **租金分配测试** - 测试租金分配和领取流程
-- **角色权限测试** - 验证不同角色（管理员、运营者、财务等）的权限控制
-- **边界条件测试** - 测试各种异常情况和边界条件下的系统行为
-
-## 技术架构
-
-前端测试工具基于以下技术和组件构建：
-
-- **Ethers.js** - 用于与以太坊网络交互
-- **共享工具库** - 利用项目中的共享工具（如合约服务、交易处理等）
-- **模块化测试** - 测试用例按功能模块分离，便于维护和扩展
-- **配置驱动设计** - 通过配置文件定制测试参数和环境设置
+## 背景
+前端测试目录包含了所有与前端交互相关的测试用例,包括用户界面测试、功能测试和集成测试。这些测试确保系统的用户界面和交互功能按预期工作。
 
 ## 目录结构
-
 ```
 frontend-tests/
-├── config/              # 测试配置文件
-│   └── index.js         # 配置入口文件
-├── scripts/             # 测试脚本和工具
-│   ├── contractService.js  # 合约服务
-│   ├── run-single-test.js  # 单个测试执行脚本
-│   └── run-tests.js     # 测试执行入口
-├── tests/               # 测试用例
-│   ├── property-flow.test.js   # 房产流程测试
-│   ├── token-trading.test.js   # 代币交易测试
-│   ├── rent-distribution.test.js # 租金分配测试
-│   ├── redemption-flow.test.js   # 赎回流程测试
-│   └── token-holder-query.test.js # 代币持有人查询测试
-└── README.md            # 文档说明
+├── tests/                # 测试用例目录
+│   ├── propertyFlow.js   # 房产流程测试
+│   └── tokenOperations.js # 代币操作测试
+├── scripts/             # 测试脚本目录
+├── config/              # 测试配置目录
+└── README.md            # 测试文档
 ```
 
-## 安装与配置
+## 测试类型
 
-### 前提条件
+### 1. 功能测试
+功能测试验证系统的核心功能是否正常工作:
 
-- Node.js (v14.x 或更高版本)
-- yarn 或 npm 包管理器
-- 本地运行的以太坊节点（Hardhat网络、Ganache等）或测试网连接
+#### 房产流程测试 (propertyFlow.js)
+```javascript
+describe('Property Flow Tests', () => {
+  test('should register new property', async () => {
+    const property = await registerProperty({
+      id: 'PROP001',
+      country: 'JP',
+      metadataURI: 'ipfs://...'
+    });
+    expect(property.status).toBe('pending');
+  });
 
-### 安装步骤
+  test('should approve property', async () => {
+    const result = await approveProperty('PROP001');
+    expect(result.status).toBe('approved');
+  });
+});
+```
 
-1. 克隆项目仓库
-   ```bash
-   git clone <项目仓库URL>
-   cd japan-rwa
-   ```
+#### 代币操作测试 (tokenOperations.js)
+```javascript
+describe('Token Operation Tests', () => {
+  test('should create new token', async () => {
+    const token = await createToken({
+      propertyId: 'PROP001',
+      name: 'Test Token',
+      symbol: 'TEST'
+    });
+    expect(token.address).toBeDefined();
+  });
 
-2. 安装依赖
-   ```bash
-   yarn install
-   # 或
-   npm install
-   ```
+  test('should manage whitelist', async () => {
+    await addToWhitelist(tokenAddress, userAddress);
+    const isWhitelisted = await checkWhitelist(tokenAddress, userAddress);
+    expect(isWhitelisted).toBe(true);
+  });
+});
+```
 
-3. 设置环境变量
-   - 复制 `.env.example` 文件为 `.env`
-   - 根据需要修改环境变量，特别是区块链网络连接和测试账户信息
+### 2. 集成测试
+集成测试验证不同组件之间的交互:
 
-### 配置说明
+```javascript
+describe('Integration Tests', () => {
+  test('should complete property tokenization flow', async () => {
+    // 1. 注册房产
+    const property = await registerProperty(propertyData);
+    
+    // 2. 批准房产
+    await approveProperty(property.id);
+    
+    // 3. 创建代币
+    const token = await createToken({
+      propertyId: property.id,
+      ...tokenData
+    });
+    
+    // 4. 验证结果
+    expect(token.propertyId).toBe(property.id);
+    expect(token.status).toBe('active');
+  });
+});
+```
 
-测试工具的配置位于 `frontend-tests/config/index.js` 文件中，主要配置项包括：
+### 3. 用户界面测试
+UI测试验证界面元素和交互:
 
-- **网络配置** - 区块链网络连接参数
-- **合约地址** - 智能合约地址（从共享配置导入）
-- **测试账户** - 不同角色的账户私钥
-- **测试数据** - 测试用的房产信息、代币参数、租金金额等
-- **超时设置** - 测试操作的超时时间
-- **日志级别** - 测试日志的详细程度
+```javascript
+describe('UI Tests', () => {
+  test('should display property details', async () => {
+    const { getByText } = render(<PropertyDetails property={testProperty} />);
+    expect(getByText(testProperty.name)).toBeInTheDocument();
+  });
 
-可以通过修改该配置文件或设置环境变量来定制测试行为。
+  test('should handle form submission', async () => {
+    const { getByRole } = render(<PropertyForm onSubmit={handleSubmit} />);
+    await userEvent.click(getByRole('button', { name: /submit/i }));
+    expect(handleSubmit).toHaveBeenCalled();
+  });
+});
+```
 
-## 测试执行
+## 测试工具
 
-### 运行所有测试
+### 1. Jest
+- 测试运行器
+- 断言库
+- 模拟功能
 
+### 2. React Testing Library
+- 组件渲染
+- 用户交互模拟
+- 可访问性测试
+
+### 3. Cypress
+- 端到端测试
+- 网络请求模拟
+- 浏览器自动化
+
+## 测试数据
+
+### 1. 测试数据生成
+```javascript
+const generateTestProperty = () => ({
+  id: `PROP${Date.now()}`,
+  country: 'JP',
+  metadataURI: `ipfs://${generateHash()}`,
+  status: 'pending'
+});
+```
+
+### 2. 模拟数据
+```javascript
+const mockProperty = {
+  id: 'PROP001',
+  country: 'JP',
+  metadataURI: 'ipfs://QmTest',
+  status: 'approved'
+};
+```
+
+## 测试配置
+
+### 1. Jest配置
+```javascript
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+  setupFilesAfterEnv: ['<rootDir>/setupTests.ts'],
+  moduleNameMapper: {
+    '\\.(css|less|scss|sass)$': 'identity-obj-proxy'
+  }
+};
+```
+
+### 2. 测试环境变量
+```env
+TEST_API_URL=http://localhost:3000
+TEST_WEB3_PROVIDER=http://localhost:8545
+TEST_CONTRACT_ADDRESS=0x...
+```
+
+## 测试流程
+
+### 1. 运行测试
 ```bash
-yarn test:frontend
-# 或
-npm run test:frontend
+# 运行所有测试
+pnpm test
+
+# 运行特定测试文件
+pnpm test propertyFlow
+
+# 运行特定测试用例
+pnpm test -t "should register new property"
+
+# 监视模式
+pnpm test --watch
 ```
 
-### 运行单个测试
-
+### 2. 测试覆盖率
 ```bash
-node frontend-tests/scripts/run-single-test.js [测试文件路径]
-# 例如
-node frontend-tests/scripts/run-single-test.js property-flow
+# 生成覆盖率报告
+pnpm test --coverage
+
+# 设置覆盖率阈值
+pnpm test --coverageThreshold
 ```
-
-## 测试流程详解
-
-### 1. 房产注册与代币化流程
-
-房产注册到代币化的完整流程测试（`property-flow.test.js`）包括以下步骤：
-
-1. 运营人员注册房产信息
-2. 管理员审核并批准房产
-3. 创建房产对应的代币
-4. 将指定用户添加到代币白名单
-
-### 2. 代币交易流程
-
-代币交易测试（`token-trading.test.js`）验证以下功能：
-
-1. 在交易市场创建代币卖单
-2. 用户购买代币
-3. 验证用户代币余额
-
-### 3. 租金分配流程
-
-租金分配测试（`rent-distribution.test.js`）包括：
-
-1. 财务人员分配租金到代币合约
-2. 代币持有者（用户）领取租金
-3. 验证租金分配的正确性
-
-### 4. 赎回流程（待实现）
-
-赎回流程测试（`redemption-flow.test.js`）将测试：
-
-1. 发起赎回请求
-2. 代币持有者投票
-3. 执行赎回操作
-
-### 5. 代币持有人查询（待实现）
-
-代币持有人查询测试（`token-holder-query.test.js`）将测试：
-
-1. 查询特定代币的持有人列表
-2. 查询持有人的代币余额
-3. 验证数据的准确性
-
-## 扩展与定制
-
-### 添加新测试
-
-1. 在 `tests/` 目录下创建新的测试文件
-2. 导入必要的模块和服务
-3. 实现测试逻辑
-4. 导出测试函数
-5. 在 `run-tests.js` 中添加新测试的引用和执行代码
-
-### 修改测试数据
-
-可以通过更新 `config/index.js` 文件中的 `testData` 对象来修改测试使用的数据。
-
-## 常见问题
-
-### 测试执行失败
-
-- 检查区块链网络连接是否正常
-- 确认合约地址是否正确
-- 验证测试账户是否有足够的ETH余额
-- 检查角色权限是否正确设置
-
-### 合约交互错误
-
-- 确保合约已正确部署
-- 验证ABI文件是否最新
-- 检查交易参数是否正确
 
 ## 最佳实践
 
-- 在开发新功能后，同时更新或添加相应的测试用例
-- 定期运行测试套件，确保系统稳定性
-- 在测试后清理测试数据，避免影响其他测试
-- 使用独立的测试网络或每次测试前重置本地网络状态 
+### 1. 测试组织
+- 按功能模块组织测试
+- 使用描述性的测试名称
+- 遵循AAA模式(Arrange-Act-Assert)
+
+### 2. 测试隔离
+- 每个测试用例独立运行
+- 使用beforeEach和afterEach清理
+- 避免测试间的依赖
+
+### 3. 测试可维护性
+- 提取公共测试逻辑
+- 使用测试辅助函数
+- 保持测试代码简洁
+
+## 常见问题
+
+### 1. 测试失败
+- 检查测试环境配置
+- 验证测试数据
+- 检查异步操作处理
+
+### 2. 性能问题
+- 优化测试执行时间
+- 减少不必要的渲染
+- 使用适当的模拟策略
+
+### 3. 维护问题
+- 定期更新测试用例
+- 重构重复代码
+- 保持测试文档更新
+
+## 持续集成
+
+### 1. CI配置
+```yaml
+name: Frontend Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+      - run: pnpm install
+      - run: pnpm test
+```
+
+### 2. 测试报告
+- 测试结果统计
+- 失败用例详情
+- 覆盖率报告
+
+## 文档维护
+
+### 1. 测试文档
+- 测试用例说明
+- 测试数据说明
+- 测试环境配置
+
+### 2. 更新日志
+- 记录测试变更
+- 记录问题修复
+- 记录新功能测试 

@@ -1,71 +1,68 @@
-const { ethers } = require('ethers');
-const sharedContractService = require('../../shared/utils/contractService');
-const { testAccounts } = require('../config');
-const { contractAddresses } = require('../config');
+const BaseContractService = require('../../shared/services/BaseContractService');
+const { configManager } = require('../../shared/config');
+const logger = require('../../shared/utils/logger');
 
 /**
- * 初始化共享合约服务
+ * 前端测试合约服务类
+ * 继承自BaseContractService，提供测试特定的功能
  */
-sharedContractService.initialize(contractAddresses, testAccounts);
-
-/**
- * 为前端测试提供附加功能的合约服务
- */
-class FrontendTestContractService {
+class FrontendTestContractService extends BaseContractService {
   constructor() {
-    this.sharedService = sharedContractService;
-    this.signers = {};
-    
-    // 从sharedService获取签名者
-    Object.keys(testAccounts).forEach(role => {
-      Object.defineProperty(this.signers, role, {
-        get: () => this.sharedService.signers[role]
-      });
-    });
+    super('FrontendTestContract', 'frontendTestContract');
   }
-  
+
   /**
-   * 代理到共享服务的方法调用
+   * 初始化服务
    */
-  getContract(contractName, address, role) {
-    return this.sharedService.getContract(contractName, address, role);
+  async initialize() {
+    try {
+      // 初始化配置
+      await configManager.initialize();
+      
+      // 设置签名者
+      const privateKeys = configManager.getPrivateKeys();
+      this.setSigner('admin', privateKeys.admin);
+      this.setSigner('operator', privateKeys.operator);
+      this.setSigner('user', privateKeys.user);
+      
+      logger.info('FrontendTestContractService initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize FrontendTestContractService:', error);
+      throw error;
+    }
   }
-  
-  getRoleManager(role) {
-    return this.sharedService.getRoleManager(role);
+
+  /**
+   * 测试合约方法
+   * @param {string} methodName 方法名称
+   * @param {Array} args 方法参数
+   * @param {string} [role='admin'] 操作角色
+   * @returns {Promise<any>} 方法返回值
+   */
+  async testMethod(methodName, args = [], role = 'admin') {
+    try {
+      const contract = this.getContractWithSigner(role);
+      logger.info(`Testing method ${methodName} with args:`, args);
+      
+      const result = await contract[methodName](...args);
+      logger.info(`Test method ${methodName} completed successfully`);
+      
+      return result;
+    } catch (error) {
+      logger.error(`Test method ${methodName} failed: ${error.message}`);
+      throw error;
+    }
   }
-  
-  getPropertyRegistry(role) {
-    return this.sharedService.getPropertyRegistry(role);
-  }
-  
-  getTokenFactory(role) {
-    return this.sharedService.getTokenFactory(role);
-  }
-  
-  getToken(tokenAddress, role) {
-    return this.sharedService.getToken(tokenAddress, role);
-  }
-  
-  getRedemptionManager(role) {
-    return this.sharedService.getRedemptionManager(role);
-  }
-  
-  getRentDistributor(role) {
-    return this.sharedService.getRentDistributor(role);
-  }
-  
-  getMarketplace(role) {
-    return this.sharedService.getMarketplace(role);
-  }
-  
-  getFeeManager(role) {
-    return this.sharedService.getFeeManager(role);
-  }
-  
-  getRealEstateSystem(role) {
-    return this.sharedService.getRealEstateSystem(role);
+
+  /**
+   * 获取合约实例
+   * @param {string} contractName 合约名称
+   * @param {string} [role] 可选的角色
+   * @returns {ethers.Contract} 合约实例
+   */
+  getContract(contractName, role) {
+    return this.getContractWithSigner(role);
   }
 }
 
-module.exports = new FrontendTestContractService(); 
+module.exports = FrontendTestContractService; 

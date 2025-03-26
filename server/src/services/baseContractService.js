@@ -1,11 +1,13 @@
 const { ethers } = require('ethers');
 const { getContractAddresses } = require('../../../shared/config/contracts');
-const { provider, getSigner } = require('../../../shared/utils/blockchain');
+const { getProvider, getSigner } = require('../../../shared/utils/blockchain');
 const { getAbi } = require('../../../shared/utils/getAbis');
 const logger = require('../utils/logger');
+const { ApiError } = require('../middlewares/errorHandler');
+const { getContractAddress, getContractAbi } = require('../../../shared/utils/paths');
 
-// 开发环境中使用模拟模式
-const USE_MOCK = process.env.NODE_ENV === 'development' && !process.env.DISABLE_MOCK;
+// 更改为强制禁用模拟模式
+const USE_MOCK = false;
 
 // 操作权限配置 - 定义每种操作需要的角色
 const operationRoles = {
@@ -45,8 +47,9 @@ class BaseContractService {
   constructor(contractName, addressKey) {
     this.contractName = contractName;
     this.addressKey = addressKey || contractName.charAt(0).toLowerCase() + contractName.slice(1);
-    this._contract = null;
-    this._contractWithSigner = {};
+    this.provider = null;
+    this.signer = null;
+    this.contract = null;
     this._useMock = USE_MOCK;
     
     if (this._useMock) {
@@ -55,45 +58,81 @@ class BaseContractService {
   }
   
   /**
-   * 获取合约地址
-   * @returns {string} 合约地址
+   * 初始化合约
+   * @param {ethers.providers.Provider} provider 以太坊提供者
+   * @param {ethers.Signer} signer 签名者
    */
-  getContractAddress() {
-    const addresses = getContractAddresses();
-    const address = addresses[this.addressKey];
-    
-    if (!address) {
-      if (this._useMock) {
-        // 在模拟模式下，返回一个假地址
-        const mockAddress = `0x${'1'.repeat(40)}`;
-        logger.warn(`在模拟模式下使用地址: ${mockAddress} 用于 ${this.addressKey}`);
-        return mockAddress;
+  async initialize(provider, signer) {
+    try {
+      if (!provider || !signer) {
+        throw new ApiError(500, '缺少必要的区块链连接参数');
       }
-      throw new Error(`Contract address not found for ${this.addressKey}`);
+      
+      this.provider = provider;
+      this.signer = signer;
+      
+      // 获取合约地址和ABI
+      const address = await this.getContractAddress();
+      const abi = await this.getContractAbi();
+      
+      // 创建合约实例
+      this.contract = new ethers.Contract(address, abi, this.signer);
+      
+      logger.info(`合约初始化成功 - contract: ${this.contractName}, address: ${address}`);
+    } catch (error) {
+      logger.error(`合约初始化失败 - contract: ${this.contractName}, error: ${error.message}`);
+      throw new ApiError(500, '合约初始化失败', error.message);
     }
-    
-    return address;
+  }
+  
+  /**
+   * 获取合约地址
+   * @returns {Promise<string>} 合约地址
+   */
+  async getContractAddress() {
+    try {
+      const address = await getContractAddress(this.addressKey);
+      if (!address) {
+        if (this._useMock) {
+          // 在模拟模式下，返回一个假地址
+          const mockAddress = `0x${'1'.repeat(40)}`;
+          logger.warn(`在模拟模式下使用地址: ${mockAddress} 用于 ${this.addressKey}`);
+          return mockAddress;
+        }
+        throw new ApiError(500, `未找到合约地址 - contract: ${this.contractName}`);
+      }
+      
+      return address;
+    } catch (error) {
+      logger.error(`获取合约地址失败 - contract: ${this.contractName}, error: ${error.message}`);
+      throw new ApiError(500, '获取合约地址失败', error.message);
+    }
   }
   
   /**
    * 获取合约ABI
-   * @returns {object} 合约ABI
+   * @returns {Promise<Array>} 合约ABI
    */
-  getContractAbi() {
+  async getContractAbi() {
     try {
-      return getAbi(this.contractName);
-    } catch (error) {
-      if (this._useMock) {
-        // 在模拟模式下，返回一个简单的 ABI
-        logger.warn(`在模拟模式下使用默认 ABI 用于 ${this.contractName}`);
-        return [];
+      const abi = await getContractAbi(this.contractName);
+      if (!abi) {
+        if (this._useMock) {
+          // 在模拟模式下，返回一个简单的 ABI
+          logger.warn(`在模拟模式下使用默认 ABI 用于 ${this.contractName}`);
+          return [];
+        }
+        throw new ApiError(500, `未找到合约ABI - contract: ${this.contractName}`);
       }
-      throw error;
+      return abi;
+    } catch (error) {
+      logger.error(`获取合约ABI失败 - contract: ${this.contractName}, error: ${error.message}`);
+      throw new ApiError(500, '获取合约ABI失败', error.message);
     }
   }
   
   /**
-   * 获取只读合约实例
+   * 获取合约实例
    * @returns {ethers.Contract} 合约实例
    */
   getContract() {
@@ -103,37 +142,28 @@ class BaseContractService {
       return this._getMockContract();
     }
     
-    if (!this._contract) {
-      const address = this.getContractAddress();
-      const abi = this.getContractAbi();
-      
-      this._contract = new ethers.Contract(address, abi, provider);
+    if (!this.contract) {
+      throw new ApiError(500, '合约未初始化');
     }
     
-    return this._contract;
+    return this.contract;
   }
   
   /**
    * 获取带签名者的合约实例
-   * @param {string} [operationName] 操作名称，用于确定使用哪个角色
    * @returns {ethers.Contract} 带签名者的合约实例
    */
-  getContractWithSigner(operationName) {
+  getContractWithSigner() {
     if (this._useMock) {
       // 在模拟模式下，返回模拟合约实例
       return this._getMockContract();
     }
     
-    const requiredRole = operationRoles[operationName];
-    
-    if (!requiredRole) {
-      throw new Error(`No role defined for operation: ${operationName}`);
+    if (!this.contract || !this.signer) {
+      throw new ApiError(500, '合约或签名者未初始化');
     }
     
-    const contract = this.getContract();
-    const signer = getSigner();
-    
-    return contract.connect(signer);
+    return this.contract.connect(this.signer);
   }
   
   /**
@@ -185,10 +215,23 @@ class BaseContractService {
     }
     
     try {
-      const contract = this.getContractWithSigner(methodName);
+      const contract = this.getContractWithSigner();
       logger.info(`Executing write method ${methodName} with args:`, args);
       
-      const tx = await contract[methodName](...args, options);
+      if (!contract[methodName]) {
+        throw new ApiError(500, `合约方法不存在 - method: ${methodName}`);
+      }
+      
+      const gasPrice = await this.provider.getGasPrice();
+      logger.info(`Current gas price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei`);
+      
+      const txOptions = {
+        gasLimit: options.gasLimit || 3000000,
+        gasPrice: gasPrice.mul(12).div(10),
+        ...options
+      };
+      
+      const tx = await contract[methodName](...args, txOptions);
       logger.info(`Write method ${methodName} transaction sent: ${tx.hash}`);
       
       const receipt = await this.waitForTransaction(tx, options.confirmations);
@@ -196,8 +239,23 @@ class BaseContractService {
       
       return receipt;
     } catch (error) {
-      logger.error(`Write method ${methodName} failed: ${error.message}`);
-      throw error;
+      logger.error(`Write method ${methodName} failed:`, error);
+      
+      if (error.code === 'NETWORK_ERROR') {
+        throw new ApiError(503, '网络连接失败', error.message);
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        throw new ApiError(400, '余额不足', error.message);
+      } else if (error.code === 'NONCE_EXPIRED') {
+        throw new ApiError(400, '交易nonce已过期', error.message);
+      } else if (error.code === 'REPLACEMENT_TRANSACTION_UNDERPRICED') {
+        throw new ApiError(400, '替换交易价格过低', error.message);
+      } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+        throw new ApiError(400, '无法预测gas限制', error.message);
+      } else if (error.code === 'ACTION_REJECTED') {
+        throw new ApiError(400, '交易被拒绝', error.message);
+      }
+      
+      throw new ApiError(500, '交易执行失败', error.message);
     }
   }
   
@@ -210,6 +268,7 @@ class BaseContractService {
   async executeRead(methodName, args = []) {
     if (this._useMock) {
       // 在模拟模式下，返回模拟数据
+      logger.info(`[模拟] 执行读取方法 ${methodName} 参数:`, args);
       return this._getMockReadResult(methodName, args);
     }
     
@@ -217,13 +276,24 @@ class BaseContractService {
       const contract = this.getContract();
       logger.info(`Executing read method ${methodName} with args:`, args);
       
+      if (!contract[methodName]) {
+        throw new ApiError(500, `合约方法不存在 - method: ${methodName}`);
+      }
+      
       const result = await contract[methodName](...args);
       logger.info(`Read method ${methodName} completed successfully`);
       
       return result;
     } catch (error) {
-      logger.error(`Read method ${methodName} failed: ${error.message}`);
-      throw error;
+      logger.error(`Read method ${methodName} failed:`, error);
+      
+      if (error.code === 'NETWORK_ERROR') {
+        throw new ApiError(503, '网络连接失败', error.message);
+      } else if (error.code === 'CALL_EXCEPTION') {
+        throw new ApiError(400, '合约调用失败', error.message);
+      }
+      
+      throw new ApiError(500, '合约调用失败', error.message);
     }
   }
   
@@ -234,7 +304,11 @@ class BaseContractService {
    */
   _getMockContract() {
     return {
-      // 模拟的合约方法，根据实际需要添加
+      // 添加模拟方法
+      registerProperty: async () => ({ hash: '0x' + 'a'.repeat(64) }),
+      getProperty: async () => ({ exists: true, country: 'JP', metadataURI: 'ipfs://...' }),
+      getAllProperties: async () => ['PROP001', 'PROP002'],
+      // ... 其他模拟方法
     };
   }
   

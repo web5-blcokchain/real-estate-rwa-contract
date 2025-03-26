@@ -1,7 +1,7 @@
+const { initializeAbis, contractAbis } = require('./getAbis');
+const { getContractAddresses } = require('../config/contracts');
+const { loadConfig } = require('../config');
 const { ethers } = require('ethers');
-const { getProvider, getSigner } = require('./web3Provider');
-const { getAbi } = require('./getAbis');
-const { logger } = require('./logger');
 
 /**
  * 合约服务类
@@ -9,207 +9,134 @@ const { logger } = require('./logger');
  */
 class ContractService {
   constructor() {
-    this.contractInstances = {};
-    this.signers = {};
     this.provider = null;
+    this.abis = null;
+    this.contractAddresses = null;
     this.initialized = false;
   }
 
-  /**
-   * 初始化合约服务
-   * @param {Object} contractAddresses 合约地址配置
-   * @param {Object} [signerConfig] 签名者配置
-   */
-  initialize(contractAddresses, signerConfig = {}) {
+  async initialize() {
+    if (this.initialized) {
+      console.log('合约服务已经初始化');
+      return;
+    }
+
+    console.log('初始化共享合约服务...');
+    
     try {
-      this.provider = getProvider();
-      this.contractAddresses = contractAddresses;
+      // 加载配置
+      console.log('加载配置...');
+      const config = await loadConfig();
+      console.log('配置加载完成');
+
+      // 创建以太坊提供者
+      console.log('创建以太坊提供者...');
+      const network = config.networkConfig;
+      console.log(`使用网络: ${network.name}`);
       
-      // 如果提供了签名者配置，则初始化签名者
-      if (signerConfig && Object.keys(signerConfig).length > 0) {
-        Object.entries(signerConfig).forEach(([role, privateKey]) => {
-          if (privateKey) {
-            this.signers[role] = getSigner(privateKey);
-          }
-        });
-        logger.info(`已初始化 ${Object.keys(this.signers).length} 个签名者`);
-      }
+      // 使用 ethers 的网络配置
+      this.provider = new ethers.JsonRpcProvider(network.rpcUrl);
       
+      // 验证网络连接
+      const connectedNetwork = await this.provider.getNetwork();
+      console.log('已连接到网络:', {
+        name: connectedNetwork.name,
+        chainId: connectedNetwork.chainId
+      });
+
+      // 加载合约地址
+      console.log('加载合约地址...');
+      this.contractAddresses = config.contractAddresses;
+      console.log('合约地址加载成功:', this.contractAddresses);
+
+      // 加载ABI
+      console.log('加载ABI...');
+      await initializeAbis();
+      this.abis = contractAbis;
+      console.log('ABI加载成功，已加载合约:', Object.keys(this.abis));
+
       this.initialized = true;
-      logger.info('合约服务初始化完成');
-      return true;
+      console.log('合约服务初始化完成');
     } catch (error) {
-      logger.error(`合约服务初始化失败: ${error.message}`);
-      return false;
+      console.error('合约服务初始化失败:', error);
+      console.error('错误堆栈:', error.stack);
+      throw error;
     }
   }
 
-  /**
-   * 检查是否已初始化
-   * @private
-   */
   _checkInitialized() {
     if (!this.initialized) {
       throw new Error('合约服务尚未初始化，请先调用 initialize() 方法');
     }
   }
 
-  /**
-   * 获取合约实例
-   * @param {string} contractName 合约名称
-   * @param {string} [address] 可选的合约地址，默认使用配置中的地址
-   * @param {string} [role] 可选的角色，用于获取带签名者的合约
-   * @returns {ethers.Contract} 合约实例
-   */
-  getContract(contractName, address, role) {
+  getContract(contractName, signerKey) {
     this._checkInitialized();
     
-    // 创建合约实例的缓存键
-    const cacheKey = `${contractName}-${address || 'default'}-${role || 'default'}`;
+    const abi = this.abis[contractName];
+    const address = this.contractAddresses[contractName];
     
-    // 如果已缓存，则返回缓存的实例
-    if (this.contractInstances[cacheKey]) {
-      return this.contractInstances[cacheKey];
+    if (!abi || !address) {
+      throw new Error(`找不到合约 ${contractName} 的 ABI 或地址`);
     }
+
+    return new ethers.Contract(address, abi, this.provider);
+  }
+
+  // 获取合约实例
+  getRoleManager(signerKey) {
+    return this.getContract('RoleManager', signerKey);
+  }
+
+  getPropertyRegistry(signerKey) {
+    return this.getContract('PropertyRegistry', signerKey);
+  }
+
+  getTokenFactory(signerKey) {
+    return this.getContract('TokenFactory', signerKey);
+  }
+
+  getToken(tokenAddress, signerKey) {
+    this._checkInitialized();
     
-    // 获取合约地址
-    const contractAddress = address || this.contractAddresses[contractName.charAt(0).toLowerCase() + contractName.slice(1)];
-    
-    if (!contractAddress) {
-      throw new Error(`未找到 ${contractName} 合约地址`);
+    const abi = this.abis['RealEstateToken'];
+    if (!abi) {
+      throw new Error('找不到 RealEstateToken 的 ABI');
     }
-    
-    try {
-      // 获取合约ABI
-      const abi = getAbi(contractName);
-      
-      // 创建合约实例
-      let contract;
-      if (role && this.signers[role]) {
-        contract = new ethers.Contract(contractAddress, abi, this.signers[role]);
-      } else {
-        contract = new ethers.Contract(contractAddress, abi, this.provider);
-      }
-      
-      // 缓存合约实例
-      this.contractInstances[cacheKey] = contract;
-      
-      return contract;
-    } catch (error) {
-      logger.error(`获取合约 ${contractName} 实例失败: ${error.message}`);
-      throw new Error(`获取合约 ${contractName} 实例失败: ${error.message}`);
-    }
+
+    return new ethers.Contract(tokenAddress, abi, this.provider);
   }
 
-  /**
-   * 清除合约实例缓存
-   */
-  clearContractCache() {
-    this.contractInstances = {};
-    logger.info('已清除合约实例缓存');
+  getRedemptionManager(signerKey) {
+    return this.getContract('RedemptionManager', signerKey);
   }
 
-  /**
-   * 添加或更新签名者
-   * @param {string} role 角色名称
-   * @param {string} privateKey 私钥
-   */
-  addSigner(role, privateKey) {
-    if (!role || !privateKey) {
-      throw new Error('角色名称和私钥不能为空');
-    }
-    
-    try {
-      this.signers[role] = getSigner(privateKey);
-      logger.info(`已添加或更新签名者 ${role}`);
-    } catch (error) {
-      logger.error(`添加签名者失败: ${error.message}`);
-      throw new Error(`添加签名者失败: ${error.message}`);
-    }
+  getRentDistributor(signerKey) {
+    return this.getContract('RentDistributor', signerKey);
   }
 
-  /**
-   * 获取RoleManager合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} RoleManager合约实例
-   */
-  getRoleManager(role) {
-    return this.getContract('RoleManager', null, role);
+  getFeeManager(signerKey) {
+    return this.getContract('FeeManager', signerKey);
   }
 
-  /**
-   * 获取PropertyRegistry合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} PropertyRegistry合约实例
-   */
-  getPropertyRegistry(role) {
-    return this.getContract('PropertyRegistry', null, role);
+  getMarketplace(signerKey) {
+    return this.getContract('Marketplace', signerKey);
   }
 
-  /**
-   * 获取TokenFactory合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} TokenFactory合约实例
-   */
-  getTokenFactory(role) {
-    return this.getContract('TokenFactory', null, role);
+  getTokenHolderQuery(signerKey) {
+    return this.getContract('TokenHolderQuery', signerKey);
   }
 
-  /**
-   * 获取RealEstateToken合约
-   * @param {string} tokenAddress 代币合约地址
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} RealEstateToken合约实例
-   */
-  getToken(tokenAddress, role) {
-    return this.getContract('RealEstateToken', tokenAddress, role);
-  }
-
-  /**
-   * 获取RedemptionManager合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} RedemptionManager合约实例
-   */
-  getRedemptionManager(role) {
-    return this.getContract('RedemptionManager', null, role);
-  }
-
-  /**
-   * 获取RentDistributor合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} RentDistributor合约实例
-   */
-  getRentDistributor(role) {
-    return this.getContract('RentDistributor', null, role);
-  }
-
-  /**
-   * 获取Marketplace合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} Marketplace合约实例
-   */
-  getMarketplace(role) {
-    return this.getContract('Marketplace', null, role);
-  }
-
-  /**
-   * 获取FeeManager合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} FeeManager合约实例
-   */
-  getFeeManager(role) {
-    return this.getContract('FeeManager', null, role);
-  }
-
-  /**
-   * 获取RealEstateSystem合约
-   * @param {string} [role] 可选的角色
-   * @returns {ethers.Contract} RealEstateSystem合约实例
-   */
-  getRealEstateSystem(role) {
-    return this.getContract('RealEstateSystem', null, role);
+  getRealEstateSystem(signerKey) {
+    return this.getContract('RealEstateSystem', signerKey);
   }
 }
 
-// 导出单例实例
-module.exports = new ContractService(); 
+// 创建单例实例
+const contractService = new ContractService();
+
+// 导出单例实例和类
+module.exports = {
+  contractService,
+  ContractService
+}; 

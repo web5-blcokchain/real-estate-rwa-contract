@@ -8,6 +8,7 @@ const logger = require('./utils/logger');
 const { baseConfig, initializeConfig } = require('./config');
 const { initializeAbis } = require('../../shared/utils/getAbis');
 const { getContractAddresses } = require('../../shared/config/contracts');
+const { initializeBlockchain } = require('../../shared/utils/blockchain');
 
 // 创建 Express 应用
 const app = express();
@@ -42,7 +43,7 @@ async function start() {
     
     // 初始化配置
     const contractAddresses = initializeConfig();
-    logger.info('Configuration initialized',contractAddresses);
+    logger.info('Configuration initialized', contractAddresses);
     
     // 加载合约地址
     const addresses = getContractAddresses();
@@ -51,6 +52,10 @@ async function start() {
     // 初始化合约 ABIs
     await initializeAbis(logger);
     logger.info('Contract ABIs initialized');
+    
+    // 初始化区块链连接
+    await initializeBlockchain();
+    logger.info('Blockchain connection initialized');
     
     // 启动服务器
     app.listen(baseConfig.port, () => {

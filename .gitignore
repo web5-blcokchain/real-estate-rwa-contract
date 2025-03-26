@@ -40,6 +40,7 @@ yarn-error.log*
 *.swp
 *.swo
 *.log
+*.json
 # 合约验证
 /flatten
 

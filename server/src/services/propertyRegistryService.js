@@ -30,7 +30,7 @@ class PropertyRegistryService extends BaseContractService {
       return properties;
     } catch (error) {
       logger.error(`获取所有房产失败: ${error.message}`);
-      throw error;
+      throw new ApiError(500, '获取房产列表失败', error.message);
     }
   }
   
@@ -41,6 +41,10 @@ class PropertyRegistryService extends BaseContractService {
    */
   async getProperty(propertyId) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
       const propertyData = await this.executeRead('properties', [propertyId]);
       const { exists, country, metadataURI, status, createdAt, updatedAt } = propertyData;
       
@@ -60,7 +64,7 @@ class PropertyRegistryService extends BaseContractService {
       };
     } catch (error) {
       logger.error(`获取房产信息失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      throw new ApiError(500, '获取房产信息失败', error.message);
     }
   }
   
@@ -73,6 +77,16 @@ class PropertyRegistryService extends BaseContractService {
    */
   async registerProperty(propertyId, country, metadataURI) {
     try {
+      if (!propertyId || !country || !metadataURI) {
+        throw new ApiError(400, '缺少必要参数');
+      }
+      
+      // 检查房产是否已存在
+      const existingProperty = await this.getProperty(propertyId);
+      if (existingProperty) {
+        throw new ApiError(409, '房产已存在');
+      }
+      
       const receipt = await this.executeWrite(
         'registerProperty',
         [propertyId, country, metadataURI],
@@ -83,7 +97,10 @@ class PropertyRegistryService extends BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`房产注册失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '房产注册失败', error.message);
     }
   }
   
@@ -94,6 +111,21 @@ class PropertyRegistryService extends BaseContractService {
    */
   async approveProperty(propertyId) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
+      // 检查房产是否存在
+      const property = await this.getProperty(propertyId);
+      if (!property) {
+        throw new ApiError(404, '房产不存在');
+      }
+      
+      // 检查房产状态
+      if (property.status === 1) {
+        throw new ApiError(400, '房产已批准');
+      }
+      
       const receipt = await this.executeWrite(
         'setPropertyStatus',
         [propertyId, 1], // status 1 = Approved
@@ -104,7 +136,10 @@ class PropertyRegistryService extends BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`房产批准失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '房产批准失败', error.message);
     }
   }
   
@@ -115,6 +150,21 @@ class PropertyRegistryService extends BaseContractService {
    */
   async rejectProperty(propertyId) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
+      // 检查房产是否存在
+      const property = await this.getProperty(propertyId);
+      if (!property) {
+        throw new ApiError(404, '房产不存在');
+      }
+      
+      // 检查房产状态
+      if (property.status === 2) {
+        throw new ApiError(400, '房产已拒绝');
+      }
+      
       const receipt = await this.executeWrite(
         'setPropertyStatus',
         [propertyId, 2], // status 2 = Rejected
@@ -125,7 +175,10 @@ class PropertyRegistryService extends BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`房产拒绝失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '房产拒绝失败', error.message);
     }
   }
   
@@ -136,6 +189,21 @@ class PropertyRegistryService extends BaseContractService {
    */
   async delistProperty(propertyId) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
+      // 检查房产是否存在
+      const property = await this.getProperty(propertyId);
+      if (!property) {
+        throw new ApiError(404, '房产不存在');
+      }
+      
+      // 检查房产状态
+      if (property.status === 3) {
+        throw new ApiError(400, '房产已下架');
+      }
+      
       const receipt = await this.executeWrite(
         'setPropertyStatus',
         [propertyId, 3], // status 3 = Delisted
@@ -146,7 +214,10 @@ class PropertyRegistryService extends BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`房产下架失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '房产下架失败', error.message);
     }
   }
   
@@ -158,6 +229,20 @@ class PropertyRegistryService extends BaseContractService {
    */
   async setPropertyStatus(propertyId, status) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
+      if (status < 0 || status > 3) {
+        throw new ApiError(400, '无效的状态码');
+      }
+      
+      // 检查房产是否存在
+      const property = await this.getProperty(propertyId);
+      if (!property) {
+        throw new ApiError(404, '房产不存在');
+      }
+      
       const receipt = await this.executeWrite(
         'setPropertyStatus',
         [propertyId, status],
@@ -168,7 +253,10 @@ class PropertyRegistryService extends BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`房产状态设置失败 - propertyId: ${propertyId}, status: ${status}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '房产状态设置失败', error.message);
     }
   }
   
@@ -179,16 +267,23 @@ class PropertyRegistryService extends BaseContractService {
    */
   async getPropertyStatus(propertyId) {
     try {
+      if (!propertyId) {
+        throw new ApiError(400, '房产ID不能为空');
+      }
+      
       const property = await this.executeRead('properties', [propertyId]);
       
       if (!property.exists) {
-        throw new Error(`房产不存在 - propertyId: ${propertyId}`);
+        throw new ApiError(404, '房产不存在');
       }
       
       return Number(property.status);
     } catch (error) {
       logger.error(`获取房产状态失败 - propertyId: ${propertyId}, error: ${error.message}`);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, '获取房产状态失败', error.message);
     }
   }
 }

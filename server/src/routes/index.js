@@ -6,14 +6,12 @@ const tokenRoutes = require('./tokenRoutes');
 const redemptionRoutes = require('./redemptionRoutes');
 const rentRoutes = require('./rentRoutes');
 const propertyRoutes = require('./propertyRoutes');
-const customRoutes = require('./custom');
 
-// 注册路由
+// 注册路由 - 使用真实的区块链服务
 router.use('/tokens', tokenRoutes);
 router.use('/redemptions', redemptionRoutes);
 router.use('/rents', rentRoutes);
-router.use('/properties', customRoutes);
-router.use('/custom', customRoutes);
+router.use('/properties', propertyRoutes);
 
 // 健康检查路由
 router.get('/health', (req, res) => {

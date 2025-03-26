@@ -3,12 +3,13 @@
  * 提供统一的日志记录功能
  */
 const winston = require('winston');
-const path = require('path');
+const { getLogPath, validatePath } = require('./paths');
 const fs = require('fs');
+const path = require('path');
 
 // 默认日志配置
 const loggingConfig = {
-  directory: path.join(process.cwd(), 'logs'),
+  directory: getLogPath(),
   filename: 'app.log',
   level: 'info',
   maxSize: 5242880, // 5MB
@@ -20,6 +21,7 @@ const loggingConfig = {
 const logDir = loggingConfig.directory;
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
+  console.log(`Created log directory: ${logDir}`);
 }
 
 // 创建日期格式化器
@@ -50,76 +52,57 @@ const consoleTransport = new winston.transports.Console({
 
 // 创建文件日志传输器
 const fileTransport = new winston.transports.File({
-  filename: path.join(logDir, loggingConfig.filename),
-  level: loggingConfig.level,
+  filename: path.join(loggingConfig.directory, loggingConfig.filename),
+  maxsize: loggingConfig.maxSize,
+  maxFiles: loggingConfig.maxFiles,
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     json()
-  ),
-  maxsize: loggingConfig.maxSize,
-  maxFiles: loggingConfig.maxFiles,
-  tailable: true,
-  zippedArchive: true
+  )
 });
 
-// 创建基础日志记录器
-const baseLogger = winston.createLogger({
+// 创建日志记录器
+const logger = winston.createLogger({
   level: loggingConfig.level,
-  transports: [
-    consoleTransport,
-    fileTransport
-  ],
-  exceptionHandlers: [
-    new winston.transports.File({ 
-      filename: path.join(logDir, 'exceptions.log'),
-      maxsize: loggingConfig.maxSize,
-      maxFiles: loggingConfig.maxFiles
-    })
-  ],
-  exitOnError: false
+  format: combine(
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    myFormat
+  ),
+  transports: [consoleTransport, fileTransport]
 });
 
 /**
- * 创建带有模块名的日志记录器
+ * 获取指定模块的日志记录器
  * @param {string} moduleName 模块名称
- * @returns {Object} 日志记录器对象
+ * @returns {Object} 日志记录器
  */
 function getLogger(moduleName) {
   return {
-    info: (message, meta = {}) => {
-      baseLogger.info(message, { module: moduleName, ...meta });
-    },
-    warn: (message, meta = {}) => {
-      baseLogger.warn(message, { module: moduleName, ...meta });
-    },
-    error: (message, meta = {}) => {
-      baseLogger.error(message, { module: moduleName, ...meta });
-    },
-    debug: (message, meta = {}) => {
-      baseLogger.debug(message, { module: moduleName, ...meta });
-    },
-    log: (level, message, meta = {}) => {
-      baseLogger.log(level, message, { module: moduleName, ...meta });
-    }
+    error: (message, ...args) => logger.error(message, { module: moduleName, ...args }),
+    warn: (message, ...args) => logger.warn(message, { module: moduleName, ...args }),
+    info: (message, ...args) => logger.info(message, { module: moduleName, ...args }),
+    debug: (message, ...args) => logger.debug(message, { module: moduleName, ...args }),
+    log: (message, ...args) => logger.info(message, { module: moduleName, ...args })
   };
 }
-
-// 默认日志记录器
-const logger = getLogger('system');
 
 /**
  * 设置日志级别
  * @param {string} level 日志级别
  */
 function setLogLevel(level) {
-  baseLogger.level = level;
-  consoleTransport.level = level;
-  fileTransport.level = level;
+  if (['error', 'warn', 'info', 'debug'].includes(level)) {
+    logger.level = level;
+    consoleTransport.level = level;
+  }
 }
 
-// 导出日志模块
 module.exports = {
-  logger,
   getLogger,
-  setLogLevel
+  setLogLevel,
+  error: (message, ...args) => logger.error(message, ...args),
+  warn: (message, ...args) => logger.warn(message, ...args),
+  info: (message, ...args) => logger.info(message, ...args),
+  debug: (message, ...args) => logger.debug(message, ...args),
+  log: (message, ...args) => logger.info(message, ...args)
 }; 

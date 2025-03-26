@@ -102,43 +102,140 @@ const notFoundHandler = (req, res, next) => {
 };
 
 /**
- * 全局错误处理中间件
- * @param {Error} err 错误对象
- * @param {object} req 请求对象
- * @param {object} res 响应对象
- * @param {function} next 下一个中间件
+ * 错误处理中间件
+ * 统一处理API错误
  */
 const errorHandler = (err, req, res, next) => {
-  let error = err;
-  
-  // 如果不是ApiError实例，则转换为ApiError
-  if (!(error instanceof ApiError)) {
-    const statusCode = error.statusCode || 500;
-    const message = error.message || '发生了未知错误';
-    error = new ApiError(statusCode, message, false, err.stack);
-  }
-  
-  // 记录错误日志
-  logger.error(
-    `[${req.method}] ${req.path} >> StatusCode: ${error.statusCode}, Message: ${error.message}`,
-    error.stack
-  );
-  
-  // 发送响应
-  const response = {
-    success: false,
-    error: {
-      status: error.statusCode,
-      message: error.message
+  try {
+    // 记录错误
+    logger.error(`API错误 - ${err.message}`, {
+      error: err,
+      request: {
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        query: req.query,
+        params: req.params
+      }
+    });
+    
+    // 处理API错误
+    if (err instanceof ApiError) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          message: err.message,
+          details: err.details,
+          timestamp: err.timestamp
+        }
+      });
     }
-  };
-  
-  // 在开发环境中添加错误堆栈
-  if (process.env.NODE_ENV === 'development' && error.stack) {
-    response.error.stack = error.stack;
+    
+    // 处理验证错误
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: '验证错误',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    // 处理JWT错误
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: '无效的令牌',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: '令牌已过期',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    // 处理数据库错误
+    if (err.name === 'MongoError') {
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: '数据库错误',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    // 处理区块链错误
+    if (err.code === 'NETWORK_ERROR') {
+      return res.status(503).json({
+        success: false,
+        error: {
+          message: '网络连接失败',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    if (err.code === 'INSUFFICIENT_FUNDS') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: '余额不足',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    if (err.code === 'CALL_EXCEPTION') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: '合约调用失败',
+          details: err.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    // 处理其他错误
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: '服务器内部错误',
+        details: process.env.NODE_ENV === 'development' ? err.message : null,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    // 处理错误处理过程中的错误
+    logger.error('错误处理失败', {
+      originalError: err,
+      handlerError: error
+    });
+    
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: '服务器内部错误',
+        timestamp: new Date().toISOString()
+      }
+    });
   }
-  
-  res.status(error.statusCode).json(response);
 };
 
 /**

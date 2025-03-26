@@ -3,8 +3,8 @@
  * 集中管理所有配置项目
  */
 
-require('dotenv').config({ path: '../../.env' });
 const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 const { web3Provider } = require('../../../shared/utils/web3Provider');
 const { contractService } = require('../../../shared/utils/contractService');
 const { getContractAddresses } = require('../../../shared/config/contracts');

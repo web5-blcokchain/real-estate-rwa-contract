@@ -1,75 +1,66 @@
 /**
  * 合约地址管理模块
- * 从部署状态文件和环境变量中加载合约地址
+ * 从部署状态文件加载合约地址
  */
 const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+const { getContractAbiPath, getDeployStatePath, validatePath } = require('../utils/paths');
+const logger = require('../utils/logger');
+const { ethers } = require('ethers');
 
-// 初始空配置
-let contractAddresses = {
-  roleManager: '',
-  propertyRegistry: '',
-  tokenFactory: '',
-  redemptionManager: '',
-  rentDistributor: '',
-  feeManager: '',
-  marketplace: '',
-  tokenHolderQuery: '',
-  realEstateSystem: ''
+// 合约地址配置
+const contractAddresses = {
+  propertyRegistry: process.env.PROPERTY_REGISTRY_ADDRESS,
+  realEstateToken: process.env.REAL_ESTATE_TOKEN_ADDRESS,
+  roleManager: process.env.ROLE_MANAGER_ADDRESS,
+  redemptionManager: process.env.REDEMPTION_MANAGER_ADDRESS
 };
 
-// 部署状态文件路径
-const DEPLOY_STATE_FILE = path.join(process.cwd(), 'deploy-state.json');
+// 从deploy-state.json加载合约地址
+try {
+  const deployStatePath = getDeployStatePath();
+  if (validatePath(deployStatePath)) {
+    const deployState = JSON.parse(fs.readFileSync(deployStatePath, 'utf8'));
+    logger.info('Loading contract addresses from deploy-state.json');
+    
+    if (deployState && deployState.contracts) {
+      // 将合约地址映射到小写键名
+      Object.keys(deployState.contracts).forEach(key => {
+        const lowerKey = key.charAt(0).toLowerCase() + key.slice(1);
+        if (!contractAddresses[lowerKey] || contractAddresses[lowerKey] === '') {
+          contractAddresses[lowerKey] = deployState.contracts[key];
+          logger.info(`Loaded contract address for ${key}: ${deployState.contracts[key]}`);
+        }
+      });
+    }
+  }
+} catch (error) {
+  logger.warn(`Failed to load deploy state: ${error.message}`);
+}
 
 /**
- * 从部署状态文件加载合约地址
- * @returns {Object} 合约地址映射
+ * 验证以太坊地址是否合法
+ * @param {string} address 要验证的地址
+ * @returns {boolean} 是否是合法的以太坊地址
  */
-function loadFromDeployState() {
+function isValidEthereumAddress(address) {
   try {
-    if (fs.existsSync(DEPLOY_STATE_FILE)) {
-      const deployState = JSON.parse(fs.readFileSync(DEPLOY_STATE_FILE, 'utf8'));
-      if (deployState.contracts) {
-        // 转换合约名格式: RoleManager => roleManager
-        Object.entries(deployState.contracts).forEach(([name, address]) => {
-          const camelCaseName = name.charAt(0).toLowerCase() + name.slice(1);
-          contractAddresses[camelCaseName] = address;
-        });
-        return deployState.contracts;
-      }
-    }
-    return {};
+    return ethers.isAddress(address);
   } catch (error) {
-    console.warn(`Warning: Could not load contract addresses from deploy-state.json: ${error.message}`);
-    return {};
+    return false;
   }
 }
 
 /**
- * 从环境变量加载合约地址
- * 优先使用环境变量中的地址
+ * 获取合约地址
+ * @param {string} contractName 合约名称
+ * @returns {string} 合约地址
  */
-function loadFromEnv() {
-  // 环境变量名映射
-  const envMapping = {
-    roleManager: 'ROLE_MANAGER_ADDRESS',
-    propertyRegistry: 'PROPERTY_REGISTRY_ADDRESS',
-    tokenFactory: 'TOKEN_FACTORY_ADDRESS',
-    redemptionManager: 'REDEMPTION_MANAGER_ADDRESS',
-    rentDistributor: 'RENT_DISTRIBUTOR_ADDRESS',
-    feeManager: 'FEE_MANAGER_ADDRESS',
-    marketplace: 'MARKETPLACE_ADDRESS',
-    tokenHolderQuery: 'TOKEN_HOLDER_QUERY_ADDRESS',
-    realEstateSystem: 'REAL_ESTATE_SYSTEM_ADDRESS'
-  };
-
-  // 从环境变量加载地址
-  Object.entries(envMapping).forEach(([configKey, envKey]) => {
-    if (process.env[envKey]) {
-      contractAddresses[configKey] = process.env[envKey];
-    }
-  });
+function getContractAddress(contractName) {
+  const address = contractAddresses[contractName];
+  if (!address) {
+    throw new Error(`Contract address not found for: ${contractName}`);
+  }
+  return address;
 }
 
 /**
@@ -81,62 +72,78 @@ function getContractAddresses() {
 }
 
 /**
- * 更新合约地址
- * @param {string} name 合约名称 (camelCase格式)
- * @param {string} address 合约地址
+ * 获取合约ABI
+ * @param {string} contractName 合约名称
+ * @returns {Array} 合约ABI
  */
-function updateContractAddress(name, address) {
-  if (contractAddresses.hasOwnProperty(name)) {
-    contractAddresses[name] = address;
+function getAbi(contractName) {
+  try {
+    const abiPath = getContractAbiPath(contractName);
+    if (!validatePath(abiPath)) {
+      throw new Error(`ABI file not found for contract: ${contractName}`);
+    }
+
+    const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+    return artifact.abi;
+  } catch (error) {
+    logger.error(`Failed to load ABI for contract: ${contractName}`, error);
+    throw error;
   }
 }
 
 /**
- * 保存合约地址到部署状态文件
+ * 获取合约字节码
+ * @param {string} contractName 合约名称
+ * @returns {string} 合约字节码
  */
-function saveToDeployState() {
+function getBytecode(contractName) {
   try {
-    // 如果文件存在，读取现有状态
-    let deployState = {};
-    if (fs.existsSync(DEPLOY_STATE_FILE)) {
-      deployState = JSON.parse(fs.readFileSync(DEPLOY_STATE_FILE, 'utf8'));
+    const abiPath = getContractAbiPath(contractName);
+    if (!validatePath(abiPath)) {
+      throw new Error(`Bytecode file not found for contract: ${contractName}`);
     }
 
-    // 转换合约名格式: roleManager => RoleManager
-    const contracts = {};
-    Object.entries(contractAddresses).forEach(([name, address]) => {
-      if (address) {
-        const pascalCaseName = name.charAt(0).toUpperCase() + name.slice(1);
-        // Convert BigInt to string if needed
-        contracts[pascalCaseName] = typeof address === 'bigint' ? address.toString() : address;
-      }
-    });
-
-    // 更新合约地址
-    deployState.contracts = contracts;
-    
-    // 保存文件，使用自定义replacer处理BigInt
-    const replacer = (key, value) => {
-      if (typeof value === 'bigint') {
-        return value.toString();
-      }
-      return value;
-    };
-    
-    fs.writeFileSync(DEPLOY_STATE_FILE, JSON.stringify(deployState, replacer, 2));
-    console.log('Contract addresses saved to deploy-state.json');
+    const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+    return artifact.bytecode;
   } catch (error) {
-    console.error(`Error saving contract addresses: ${error.message}`);
+    logger.error(`Failed to load bytecode for contract: ${contractName}`, error);
+    throw error;
   }
 }
 
-// 初始化 - 加载合约地址
-loadFromDeployState();
-loadFromEnv();
+/**
+ * 更新合约地址
+ * @param {string} contractName 合约名称
+ * @param {string} address 合约地址
+ */
+function updateContractAddress(contractName, address) {
+  if (isValidEthereumAddress(address)) {
+    contractAddresses[contractName] = address;
+  }
+}
+
+/**
+ * 保存部署状态
+ */
+function saveToDeployState() {
+  try {
+    const deployStatePath = getDeployStatePath();
+    fs.writeFileSync(
+      deployStatePath,
+      JSON.stringify({ contracts: contractAddresses }, null, 2)
+    );
+    logger.info('Deploy state saved successfully');
+  } catch (error) {
+    logger.error('Failed to save deploy state:', error);
+    throw error;
+  }
+}
 
 module.exports = {
-  addresses: contractAddresses,
+  getContractAddress,
   getContractAddresses,
+  getAbi,
+  getBytecode,
   updateContractAddress,
   saveToDeployState
 }; 

@@ -1,6 +1,5 @@
 const { ethers } = require('ethers');
 const { networkConfig } = require('../config');
-const { logger } = require('./logger');
 
 // 提供者缓存
 let providerCache = null;
@@ -34,7 +33,7 @@ const getProvider = (customRpcUrl) => {
     
     return provider;
   } catch (error) {
-    logger.error(`创建以太坊提供者失败: ${error.message}`);
+    console.error(`创建以太坊提供者失败: ${error.message}`);
     throw new Error(`创建以太坊提供者失败: ${error.message}`);
   }
 };
@@ -55,7 +54,7 @@ const getSigner = (privateKey, customProvider) => {
   try {
     return new ethers.Wallet(privateKey, provider);
   } catch (error) {
-    logger.error(`创建签名者失败: ${error.message}`);
+    console.error(`创建签名者失败: ${error.message}`);
     throw new Error(`创建签名者失败: ${error.message}`);
   }
 };
@@ -83,7 +82,7 @@ const getNetworkInfo = async () => {
     
     return networkInfo;
   } catch (error) {
-    logger.error(`获取网络信息失败: ${error.message}`);
+    console.error(`获取网络信息失败: ${error.message}`);
     throw new Error(`获取网络信息失败: ${error.message}`);
   }
 };
@@ -94,7 +93,7 @@ const getNetworkInfo = async () => {
 const clearProviderCache = () => {
   providerCache = null;
   networkInfo = null;
-  logger.info('已清除提供者缓存');
+  console.log('已清除提供者缓存');
 };
 
 /**
@@ -106,10 +105,10 @@ const testConnection = async () => {
     const provider = getProvider();
     await provider.getBlockNumber();
     const network = await getNetworkInfo();
-    logger.info(`网络连接测试成功，链接到 ${network.name} (Chain ID: ${network.chainId})`);
+    console.log(`网络连接测试成功，链接到 ${network.name} (Chain ID: ${network.chainId})`);
     return true;
   } catch (error) {
-    logger.error(`网络连接测试失败: ${error.message}`);
+    console.error(`网络连接测试失败: ${error.message}`);
     return false;
   }
 };

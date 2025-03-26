@@ -13,6 +13,7 @@
 - [合约升级问题](#合约升级问题)
 - [安全相关问题](#安全相关问题)
 - [密钥管理问题](#密钥管理问题)
+- [合约地址配置](#合约地址配置)
 
 ## 部署相关问题
 
@@ -509,4 +510,66 @@ A: 遵循以下最佳实践确保私钥安全：
 
 ### Q: 如果我在`.env`文件和加密存储中都设置了私钥，哪个会被使用？
 
-A: 系统优先使用`.env`文件中的`PRIVATE_KEY`。如果`.env`文件中没有设置此变量，才会尝试从加密存储中获取私钥。这种优先级设计允许开发者在特定情况下临时覆盖已加密存储的私钥。 
+A: 系统优先使用`.env`文件中的`PRIVATE_KEY`。如果`.env`文件中没有设置此变量，才会尝试从加密存储中获取私钥。这种优先级设计允许开发者在特定情况下临时覆盖已加密存储的私钥。
+
+## 合约地址配置
+
+### 合约地址的来源和优先级
+
+合约地址可以从两个来源获取：
+1. 环境变量（.env 文件）
+2. 部署状态文件（deploy-state.json）
+
+地址加载的优先级规则：
+1. 优先使用环境变量中的地址（如果地址是合法的以太坊地址）
+2. 如果环境变量中的地址不合法，则使用部署状态文件中的地址（如果地址合法）
+3. 如果两个地址都不合法，使用空字符串并输出警告
+
+### 如何配置合约地址
+
+1. 在 `.env` 文件中配置：
+```bash
+ROLE_MANAGER_ADDRESS=0x...
+PROPERTY_REGISTRY_ADDRESS=0x...
+TOKEN_FACTORY_ADDRESS=0x...
+REDEMPTION_MANAGER_ADDRESS=0x...
+RENT_DISTRIBUTOR_ADDRESS=0x...
+FEE_MANAGER_ADDRESS=0x...
+MARKETPLACE_ADDRESS=0x...
+TOKEN_HOLDER_QUERY_ADDRESS=0x...
+REAL_ESTATE_SYSTEM_ADDRESS=0x...
+```
+
+2. 或者通过部署脚本生成 `deploy-state.json` 文件：
+```bash
+npx hardhat run scripts/deploy-unified.js --network localhost
+```
+
+### 合约地址的使用
+
+在代码中使用合约地址：
+```javascript
+const { getContractAddresses } = require('../../../shared/config/contracts');
+const contractAddresses = getContractAddresses();
+```
+
+### 更新合约地址
+
+1. 更新单个合约地址：
+```javascript
+const { updateContractAddress } = require('../../../shared/config/contracts');
+updateContractAddress('roleManager', '0x...');
+```
+
+2. 保存到部署状态文件：
+```javascript
+const { saveToDeployState } = require('../../../shared/config/contracts');
+saveToDeployState();
+```
+
+### 注意事项
+
+1. 所有合约地址必须是合法的以太坊地址（0x开头的42位十六进制字符串）
+2. 环境变量中的地址优先级最高，但必须确保地址合法
+3. 如果环境变量中的地址不合法，系统会自动使用部署状态文件中的地址
+4. 建议在开发环境中使用 `deploy-state.json`，在生产环境中使用环境变量配置 
