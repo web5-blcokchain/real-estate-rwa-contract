@@ -126,21 +126,55 @@ class ContractService {
    */
   getContractAddress(contractName) {
     try {
-      // 从部署状态中获取地址
-      if (deploymentState && deploymentState.contracts && deploymentState.contracts[contractName]) {
-        return deploymentState.contracts[contractName].address;
+      // 首先从部署状态中获取地址
+      if (deploymentState && deploymentState.contracts) {
+        // 尝试直接通过名称获取
+        if (deploymentState.contracts[contractName]) {
+          const address = deploymentState.contracts[contractName];
+          logger.debug(`从部署状态找到合约 ${contractName} 的地址: ${address}`);
+          return address;
+        }
+        
+        // 如果没有找到，尝试首字母大写版本
+        const capitalizedName = contractName.charAt(0).toUpperCase() + contractName.slice(1);
+        if (deploymentState.contracts[capitalizedName]) {
+          const address = deploymentState.contracts[capitalizedName];
+          logger.debug(`从部署状态找到合约 ${capitalizedName} 的地址: ${address}`);
+          return address;
+        }
+        
+        // 如果仍然没有找到，尝试全部小写版本
+        const lowercaseName = contractName.toLowerCase();
+        if (deploymentState.contracts[lowercaseName]) {
+          const address = deploymentState.contracts[lowercaseName];
+          logger.debug(`从部署状态找到合约 ${lowercaseName} 的地址: ${address}`);
+          return address;
+        }
       }
       
       // 尝试从getContractAddresses获取
       const addresses = getContractAddresses();
-      if (addresses && addresses[contractName]) {
-        return addresses[contractName];
+      logger.debug(`从配置获取所有合约地址: ${JSON.stringify(addresses)}`);
+      
+      // 尝试多种可能的键名格式
+      const possibleKeys = [
+        contractName,
+        contractName.charAt(0).toLowerCase() + contractName.slice(1),
+        contractName.charAt(0).toUpperCase() + contractName.slice(1),
+        contractName.toLowerCase()
+      ];
+      
+      for (const key of possibleKeys) {
+        if (addresses && addresses[key]) {
+          logger.debug(`找到合约 ${contractName} 的地址 (键名=${key}): ${addresses[key]}`);
+          return addresses[key];
+        }
       }
       
-      logger.warn(`Contract address not found for: ${contractName}`);
+      logger.error(`找不到合约 ${contractName} 的地址`);
       throw new Error(`Contract address not found for: ${contractName}`);
     } catch (error) {
-      logger.error(`Failed to get contract address for ${contractName}:`, error);
+      logger.error(`获取合约 ${contractName} 地址失败: ${error.message}`);
       throw error;
     }
   }
@@ -152,8 +186,14 @@ class ContractService {
    * @returns {ethers.Contract} 合约实例
    */
   async getContractByName(contractName, useSigner = true) {
-    const address = this.getContractAddress(contractName);
-    return this.getContract(contractName, address, useSigner);
+    try {
+      const address = this.getContractAddress(contractName);
+      logger.debug(`获取合约 ${contractName} 的地址: ${address}`);
+      return this.getContract(contractName, address, useSigner);
+    } catch (error) {
+      logger.error(`获取合约 ${contractName} 失败: ${error.message}`);
+      throw new Error(`Failed to get contract instance: ${error.message}`);
+    }
   }
   
   /**

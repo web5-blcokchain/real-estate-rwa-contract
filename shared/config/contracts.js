@@ -6,6 +6,7 @@ const fs = require('fs');
 const { getContractAbiPath, getDeployStatePath, validatePath } = require('../utils/paths');
 const logger = require('../utils/logger');
 const { ethers } = require('ethers');
+const { getAbi: getContractAbi } = require('../contracts/getAbis');
 
 // 合约地址配置
 const contractAddresses = {
@@ -78,13 +79,7 @@ function getContractAddresses() {
  */
 function getAbi(contractName) {
   try {
-    const abiPath = getContractAbiPath(contractName);
-    if (!validatePath(abiPath)) {
-      throw new Error(`ABI file not found for contract: ${contractName}`);
-    }
-
-    const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-    return artifact.abi;
+    return getContractAbi(contractName);
   } catch (error) {
     logger.error(`Failed to load ABI for contract: ${contractName}`, error);
     throw error;
