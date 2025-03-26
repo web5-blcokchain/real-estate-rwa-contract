@@ -1,6 +1,7 @@
 const ethers = require('ethers');
 const logger = require('./logger');
 const config = require('../config');
+const { createEventListener, removeEventListener, clearAllEventListeners } = require('../../../shared/utils/eventListener');
 
 class EventListener {
   constructor(provider, contracts) {
@@ -32,7 +33,7 @@ class EventListener {
       for (const [name, contract] of Object.entries(this.contracts)) {
         logger.info(`Setting up listeners for contract: ${name}`);
         
-        // 为每个事件定义设置特定监听器，这比通配符'*'更可靠
+        // 获取合约的所有事件定义
         const contractABI = contract.interface.fragments.filter(f => f.type === 'event');
         
         if (contractABI.length === 0) {
@@ -44,25 +45,22 @@ class EventListener {
         for (const eventFragment of contractABI) {
           const eventName = eventFragment.name;
           
-          // 创建事件特定的监听器
-          const listener = (...args) => {
-            // 最后一个参数是事件对象
-            const event = args[args.length - 1];
-            this.handleEvent(name, contract.address, event);
-          };
-          
-          // 添加监听器
-          contract.on(eventName, listener);
-          
-          // 保存监听器引用以便later移除
-          this.listeners.push({
-            contractName: name,
-            contract: contract,
-            eventName: eventName,
-            listener: listener
-          });
-          
-          logger.info(`Listener established for ${name}.${eventName}`);
+          try {
+            // 创建事件处理回调
+            const eventCallback = (eventData, ...args) => {
+              this.handleEvent(name, contract.address, args[args.length - 1]);
+            };
+            
+            // 使用共享事件监听器创建监听
+            const listenerId = createEventListener(contract, eventName, eventCallback);
+            
+            // 保存监听器引用以便later移除
+            this.listeners.push(listenerId);
+            
+            logger.info(`Listener established for ${name}.${eventName}`);
+          } catch (error) {
+            logger.error(`Failed to create listener for ${name}.${eventName}: ${error.message}`);
+          }
         }
       }
       
@@ -90,7 +88,7 @@ class EventListener {
     // 每30秒检查一次连接
     this.connectionCheckInterval = setInterval(() => {
       this.checkConnection();
-    }, 30000);
+    }, config.connection.connectionCheckInterval || 30000);
   }
   
   // 检查WebSocket连接状态
@@ -102,12 +100,21 @@ class EventListener {
       logger.error(`WebSocket connection error: ${error.message}`);
       logger.info('Attempting to reconnect event listeners...');
       
-      // 重新启动监听器
-      this.stopListening();
-      setTimeout(() => {
-        this.startListening();
-      }, 5000);
+      // 通知父服务需要重连
+      this.emit('connectionError', error);
     }
+  }
+
+  // 触发事件
+  emit(eventName, data) {
+    if (eventName === 'connectionError' && this.onConnectionError) {
+      this.onConnectionError(data);
+    }
+  }
+  
+  // 设置连接错误处理函数
+  setConnectionErrorHandler(handler) {
+    this.onConnectionError = handler;
   }
 
   // 停止所有事件监听
@@ -117,7 +124,7 @@ class EventListener {
       return;
     }
 
-    logger.info('Stopping all event listeners');
+    logger.info(`Stopping ${this.listeners.length} event listeners`);
     
     // 停止连接检查
     if (this.connectionCheckInterval) {
@@ -125,20 +132,13 @@ class EventListener {
       this.connectionCheckInterval = null;
     }
     
-    // 遍历并移除所有监听器
-    for (const item of this.listeners) {
+    // 移除所有监听器
+    for (const listenerId of this.listeners) {
       try {
-        // 移除特定事件的监听器
-        if (item.eventName) {
-          item.contract.removeListener(item.eventName, item.listener);
-          logger.info(`Removed listener for ${item.contractName}.${item.eventName}`);
-        } else {
-          // 移除所有监听器 (后备)
-          item.contract.removeAllListeners();
-          logger.info(`Removed all listeners for contract: ${item.contractName}`);
-        }
+        removeEventListener(listenerId);
+        logger.debug(`Removed listener: ${listenerId}`);
       } catch (error) {
-        logger.error(`Error removing listeners for ${item.contractName}: ${error.message}`);
+        logger.error(`Error removing listener ${listenerId}: ${error.message}`);
       }
     }
     
@@ -198,29 +198,28 @@ class EventListener {
       
       // 记录到日志
       logger.info(`Real-time event detected: ${formattedEvent.eventName}`, {
-        contract: `${formattedEvent.contractName}(${formattedEvent.contractAddress})`,
-        block: formattedEvent.blockNumber,
+        contract: contractName,
+        address: contractAddress,
         tx: formattedEvent.transactionHash,
-        args: formattedEvent.args
+        block: formattedEvent.blockNumber
       });
     } catch (error) {
-      logger.error(`Error handling event: ${error.message}`, { event });
+      logger.error(`Error handling event: ${error.message}`);
     }
   }
 
-  // 打印事件到控制台
+  // 打印事件详情到控制台
   printEvent(event) {
-    const contractInfo = `${event.contractName}(${event.contractAddress})`;
-    const eventInfo = `${event.eventName}`;
-    const blockInfo = `Block: ${event.blockNumber}`;
-    const txInfo = `Tx: ${event.transactionHash}`;
+    if (!config.logging.consoleDetailedEvents) {
+      return;
+    }
     
-    console.log(`\n[${event.timestamp}] 🔔 REAL-TIME EVENT DETECTED:`);
-    console.log(`- Contract: ${contractInfo}`);
-    console.log(`- Event: ${eventInfo}`);
-    console.log(`- ${blockInfo} | ${txInfo}`);
-    console.log(`- Args: ${JSON.stringify(event.args, null, 2)}`);
-    console.log('===========================================');
+    console.log(`\n[${event.timestamp}] 🔴 REAL-TIME EVENT:`);
+    console.log(`- Contract: ${event.contractName}(${event.contractAddress})`);
+    console.log(`- Event: ${event.eventName}`);
+    console.log(`- Block: ${event.blockNumber} | Tx: ${event.transactionHash}`);
+    console.log(`- Args:`, JSON.stringify(event.args, null, 2));
+    console.log('-------------------------------------------');
   }
 }
 

@@ -15,6 +15,7 @@ const {
   transaction, 
   contractService 
 } = require("../shared/utils");
+const { closeLoggers } = require("../shared/utils/logger");
 const config = require("../shared/config");
 const contracts = require("../shared/config/contracts");
 
@@ -336,8 +337,14 @@ async function main() {
 
 // 执行部署
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    deployLogger.info("部署成功完成，关闭日志记录器");
+    closeLoggers();
+    process.exit(0);
+  })
   .catch((error) => {
-    deployLogger.error(error);
+    deployLogger.error(`部署失败: ${error}`);
+    deployLogger.error("关闭日志记录器");
+    closeLoggers();
     process.exit(1);
   });

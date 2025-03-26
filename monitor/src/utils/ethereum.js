@@ -2,7 +2,7 @@ const ethers = require('ethers');
 const config = require('../config');
 const logger = require('./logger');
 const EventListener = require('./eventListener');
-const contractABIs = require('../contracts'); // 导入合约ABI定义
+const { getAbi, initializeAbis } = require('../../../shared/utils/getAbis');
 
 class EthereumService {
   constructor() {
@@ -18,8 +18,20 @@ class EthereumService {
   // 初始化以太坊提供者和合约实例
   async initialize() {
     try {
+      // 初始化配置
+      await config.initializeConfig();
+      
+      // 初始化ABIs
+      await initializeAbis();
+      logger.info('Contract ABIs initialized');
+
       // 创建HTTP提供者
-      this.httpProvider = new ethers.providers.JsonRpcProvider(config.ethRpcUrl);
+      const rpcUrl = config.getRpcUrl();
+      if (!rpcUrl) {
+        throw new Error('RPC URL is not defined. Please check your configuration.');
+      }
+      
+      this.httpProvider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
       // 检查HTTP连接
       const network = await this.httpProvider.getNetwork();
@@ -28,39 +40,44 @@ class EthereumService {
       // 默认使用HTTP提供者
       this.activeProvider = this.httpProvider;
       
-      // 如果配置了WebSocket URL且不同于HTTP URL，则创建WebSocket提供者
-      if (config.ethWsUrl && config.ethWsUrl.startsWith('ws')) {
-        try {
-          this.wsProvider = new ethers.providers.WebSocketProvider(config.ethWsUrl);
-          logger.info('WebSocket provider initialized. Will use for real-time events.');
-          
-          // 为WebSocket提供者添加错误处理
-          if (this.wsProvider._websocket) {
-            this.wsProvider._websocket.on('error', (error) => {
-              logger.error(`WebSocket Error: ${error.message}`);
-            });
+      // 如果启用了WebSocket且有WebSocket URL，则创建WebSocket提供者
+      if (config.connection.enableWebsocket) {
+        const wsUrl = config.getWsUrl();
+        if (wsUrl && wsUrl.startsWith('ws')) {
+          try {
+            this.wsProvider = new ethers.providers.WebSocketProvider(wsUrl);
+            logger.info('WebSocket provider initialized. Will use for real-time events.');
             
-            this.wsProvider._websocket.on('close', (code) => {
-              logger.error(`WebSocket Connection Closed. Code: ${code}`);
-              this.reconnectWebSocket();
-            });
+            // 为WebSocket提供者添加错误处理
+            if (this.wsProvider._websocket) {
+              this.wsProvider._websocket.on('error', (error) => {
+                logger.error(`WebSocket Error: ${error.message}`);
+              });
+              
+              this.wsProvider._websocket.on('close', (code) => {
+                logger.error(`WebSocket Connection Closed. Code: ${code}`);
+                this.reconnectWebSocket();
+              });
+            }
+            
+            // 确认WebSocket连接
+            await this.wsProvider.getNetwork();
+            logger.info(`Connected to Ethereum network via WebSocket: ${network.name}`);
+            
+            // 对于实时事件，使用WebSocket提供者
+            if (config.monitor.enableRealTimeEvents) {
+              this.activeProvider = this.wsProvider;
+            }
+          } catch (wsError) {
+            logger.error(`Failed to initialize WebSocket provider: ${wsError.message}`);
+            logger.info('Falling back to HTTP provider for all operations');
           }
-          
-          // 确认WebSocket连接
-          await this.wsProvider.getNetwork();
-          logger.info(`Connected to Ethereum network via WebSocket: ${network.name}`);
-          
-          // 对于实时事件，使用WebSocket提供者
-          if (config.monitor.enableRealTimeEvents) {
-            this.activeProvider = this.wsProvider;
-          }
-        } catch (wsError) {
-          logger.error(`Failed to initialize WebSocket provider: ${wsError.message}`);
-          logger.info('Falling back to HTTP provider for all operations');
+        } else {
+          logger.warn('No valid WebSocket URL provided. Using HTTP for all operations.');
+          logger.warn('Real-time event monitoring may be limited with HTTP provider.');
         }
       } else {
-        logger.warn('No WebSocket URL provided. Using HTTP for all operations.');
-        logger.warn('Real-time event monitoring may be limited with HTTP provider.');
+        logger.info('WebSocket connections disabled in configuration. Using HTTP for all operations.');
       }
       
       // 获取当前块高
@@ -76,6 +93,10 @@ class EthereumService {
       
       // 初始化事件监听器
       this.eventListener = new EventListener(this.activeProvider, this.contracts);
+      this.eventListener.setConnectionErrorHandler((error) => {
+        logger.error(`Connection error detected: ${error.message}`);
+        this.reconnectWebSocket();
+      });
       
       return true;
     } catch (error) {
@@ -114,8 +135,14 @@ class EthereumService {
         // 停止当前的事件监听
         this.stopEventListener();
         
+        // 获取WebSocket URL
+        const wsUrl = config.getWsUrl();
+        if (!wsUrl || !wsUrl.startsWith('ws')) {
+          throw new Error('Invalid WebSocket URL');
+        }
+        
         // 创建新的WebSocket提供者
-        this.wsProvider = new ethers.providers.WebSocketProvider(config.ethWsUrl);
+        this.wsProvider = new ethers.providers.WebSocketProvider(wsUrl);
         
         // 添加错误处理
         if (this.wsProvider._websocket) {
@@ -158,15 +185,21 @@ class EthereumService {
     // 清除现有合约
     this.contracts = {};
     
+    // 获取合约地址
+    const contractAddresses = config.getContractAddresses();
+    
     // 遍历配置中的合约地址
-    for (const [name, address] of Object.entries(config.contracts)) {
+    for (const [name, address] of Object.entries(contractAddresses)) {
       if (address && address !== '0x...') {
-        // 如果有ABI定义，则创建合约实例
-        if (contractABIs[name]) {
-          this.contracts[name] = new ethers.Contract(address, contractABIs[name], this.activeProvider);
+        try {
+          // 使用共享的ABI获取函数获取ABI
+          const abi = getAbi(name);
+          
+          // 创建合约实例
+          this.contracts[name] = new ethers.Contract(address, abi, this.activeProvider);
           logger.info(`Initialized contract: ${name} at ${address}`);
-        } else {
-          logger.warn(`No ABI found for contract: ${name}`);
+        } catch (error) {
+          logger.warn(`Failed to initialize contract ${name}: ${error.message}`);
         }
       }
     }

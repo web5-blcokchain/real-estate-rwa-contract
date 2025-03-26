@@ -4,6 +4,11 @@ const path = require('path');
 const config = require('./config');
 const logger = require('./utils/logger');
 const ethereumService = require('./utils/ethereum');
+const { closeLoggers } = require('../../shared/utils/logger');
+const { initializeEnvironment } = require('../../shared/config/environment');
+
+// 确保环境已初始化
+initializeEnvironment();
 
 // 确保日志目录存在
 const setupLogDirectory = () => {
@@ -67,6 +72,15 @@ const main = async () => {
   // 设置日志目录
   setupLogDirectory();
   
+  // 初始化共享配置
+  try {
+    await config.initializeConfig();
+    logger.info('Shared configuration initialized');
+  } catch (error) {
+    logger.error(`Failed to initialize shared configuration: ${error.message}`);
+    logger.warn('Will continue with local configuration only');
+  }
+  
   // 初始化以太坊服务
   const initialized = await ethereumService.initialize();
   if (!initialized) {
@@ -99,33 +113,60 @@ const main = async () => {
   console.log("\n✅ MONITOR RUNNING - PRESS CTRL+C TO EXIT\n");
 };
 
+// 优雅关闭函数
+const gracefulShutdown = () => {
+  logger.info('Shutting down gracefully...');
+  
+  // 设置强制关闭定时器，防止卡住
+  const forceExit = setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 5000);
+  
+  try {
+    // 停止事件监听
+    ethereumService.stopEventListener();
+    logger.info('Event listener stopped');
+    
+    // 关闭日志记录器
+    closeLoggers();
+    logger.info('Loggers closed');
+    
+    // 取消强制退出的定时器
+    clearTimeout(forceExit);
+    console.log("\n👋 GOODBYE! EVENT MONITOR STOPPED.\n");
+    
+    // 正常退出
+    process.exit(0);
+  } catch (error) {
+    logger.error(`Error during shutdown: ${error.message}`);
+    clearTimeout(forceExit);
+    process.exit(1);
+  }
+};
+
 // 处理程序退出
 process.on('SIGINT', () => {
-  logger.info('Received SIGINT. Shutting down...');
-  // 停止事件监听
-  ethereumService.stopEventListener();
-  console.log("\n👋 GOODBYE! EVENT MONITOR STOPPED.\n");
-  process.exit(0);
+  logger.info('Received SIGINT signal');
+  gracefulShutdown();
 });
 
 process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM. Shutting down...');
-  // 停止事件监听
-  ethereumService.stopEventListener();
-  process.exit(0);
+  logger.info('Received SIGTERM signal');
+  gracefulShutdown();
 });
 
 // 处理未捕获的异常
 process.on('uncaughtException', (error) => {
   logger.error(`Uncaught Exception: ${error.message}`, { stack: error.stack });
-  // 停止事件监听
-  ethereumService.stopEventListener();
-  process.exit(1);
+  gracefulShutdown();
 });
 
 // 处理未处理的Promise拒绝
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Promise Rejection', { reason });
+  // 对于未处理的Promise拒绝，我们记录但不立即关闭
+  // 因为这可能只是一个暂时性问题
 });
 
 // 启动程序
