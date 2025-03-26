@@ -5,7 +5,12 @@
  * 使用方法: node scripts/check-contracts.js
  */
 
-require('dotenv').config();
+const { getEnvPath } = require('../../shared/utils/paths');
+const dotenv = require('dotenv');
+
+// 加载环境变量
+dotenv.config({ path: getEnvPath() });
+
 const ethers = require('ethers');
 const contractABIs = require('../src/contracts');
 

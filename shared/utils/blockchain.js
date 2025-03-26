@@ -1,17 +1,36 @@
-const { ethers } = require('ethers');
+const ethers = require('ethers');
 const { configManager } = require('../config');
 const logger = require('./logger');
 
 let provider = null;
 let signer = null;
+let initialized = false;
+
+/**
+ * 确保区块链服务已初始化
+ * @throws {Error} 如果初始化失败则抛出错误
+ */
+async function ensureInitialized() {
+  if (!initialized) {
+    await initializeBlockchain();
+  }
+}
 
 /**
  * 初始化区块链连接
  */
 async function initializeBlockchain() {
+  if (initialized) {
+    logger.info('Blockchain already initialized');
+    return;
+  }
+  
   try {
+    logger.info('Starting blockchain initialization...');
+    
     // 确保配置管理器已初始化
     if (!configManager.isInitialized()) {
+      logger.info('Initializing configuration manager...');
       await configManager.initialize();
     }
 
@@ -41,6 +60,7 @@ async function initializeBlockchain() {
     const signerAddress = await signer.getAddress();
     logger.info(`Initialized signer with address: ${signerAddress}`);
     
+    initialized = true;
     logger.info('Blockchain connection initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize blockchain connection:', error);
@@ -52,10 +72,8 @@ async function initializeBlockchain() {
  * 获取provider实例
  * @returns {ethers.providers.JsonRpcProvider} provider实例
  */
-function getProvider() {
-  if (!provider) {
-    throw new Error('Blockchain provider not initialized. Call initializeBlockchain() first.');
-  }
+async function getProvider() {
+  await ensureInitialized();
   return provider;
 }
 
@@ -63,15 +81,26 @@ function getProvider() {
  * 获取signer实例
  * @returns {ethers.Wallet} signer实例
  */
-function getSigner() {
-  if (!signer) {
-    throw new Error('Blockchain signer not initialized. Call initializeBlockchain() first.');
-  }
+async function getSigner() {
+  await ensureInitialized();
   return signer;
+}
+
+/**
+ * 重置区块链连接
+ * 用于测试或在网络配置变更后重新初始化
+ */
+function resetBlockchain() {
+  provider = null;
+  signer = null;
+  initialized = false;
+  logger.info('Blockchain connection reset');
 }
 
 module.exports = {
   initializeBlockchain,
   getProvider,
-  getSigner
+  getSigner,
+  ensureInitialized,
+  resetBlockchain
 }; 

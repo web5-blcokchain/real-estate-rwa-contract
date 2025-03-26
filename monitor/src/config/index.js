@@ -1,4 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+const { getEnvPath, getMonitorLogPath } = require('../../../shared/utils/paths');
+const dotenv = require('dotenv');
+
+// 加载环境变量
+dotenv.config({ path: getEnvPath() });
 
 const config = {
   // 以太坊节点配置
@@ -28,7 +33,7 @@ const config = {
   // 日志配置
   logging: {
     level: process.env.LOG_LEVEL || 'info',
-    directory: './logs',
+    directory: getMonitorLogPath(),
     filename: 'events-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',

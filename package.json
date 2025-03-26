@@ -9,6 +9,11 @@
     "server:test:api": "ts-node server/scripts/test-api.ts",
     "server:test:flow": "node server/scripts/test-flow.js",
     "frontend:test": "node frontend-tests/scripts/run-tests.js",
+    "monitor:start": "node monitor/src/index.js",
+    "monitor:dev": "nodemon monitor/src/index.js",
+    "monitor:check": "node monitor/scripts/check-contracts.js",
+    "monitor:update-abis": "node monitor/scripts/update-abis.js",
+    "monitor:update-abis:full": "node monitor/scripts/update-abis.js --full",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
     "contracts:update-abis": "node scripts/update-abis.js",
@@ -35,7 +40,9 @@
     "jsonwebtoken": "^9.0.0",
     "bcrypt": "^5.1.0",
     "moment": "^2.29.4",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "node-cron": "^3.0.2"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
@@ -55,6 +62,7 @@
     "@types/jsonwebtoken": "^9.0.1",
     "@types/uuid": "^9.0.0",
     "@types/web3": "^1.2.2",
+    "@types/node-cron": "^3.0.7",
     "eslint": "^8.57.0",
     "ethereum-waffle": "^4.0.10",
     "hardhat": "^2.19.5",

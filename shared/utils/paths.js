@@ -26,6 +26,11 @@ const FRONTEND_TESTS_DIR = path.resolve(ROOT_DIR, 'frontend-tests');
 const SERVER_DIR = path.resolve(ROOT_DIR, 'server');
 
 /**
+ * 监控目录
+ */
+const MONITOR_DIR = path.resolve(ROOT_DIR, 'monitor');
+
+/**
  * 日志目录
  */
 const LOG_DIR = path.resolve(ROOT_DIR, 'logs');
@@ -151,12 +156,29 @@ function getContractAbi(contractName) {
   }
 }
 
+/**
+ * 获取监控配置路径
+ * @returns {string} 监控配置路径
+ */
+function getMonitorConfigPath() {
+  return path.resolve(MONITOR_DIR, 'src', 'config');
+}
+
+/**
+ * 获取监控日志路径
+ * @returns {string} 监控日志路径
+ */
+function getMonitorLogPath() {
+  return path.resolve(MONITOR_DIR, 'logs');
+}
+
 module.exports = {
   ROOT_DIR,
   SHARED_DIR,
   CONTRACTS_DIR,
   FRONTEND_TESTS_DIR,
   SERVER_DIR,
+  MONITOR_DIR,
   LOG_DIR,
   getLogPath,
   getContractAbiPath,
@@ -170,5 +192,7 @@ module.exports = {
   getNetworkConfigPath,
   validatePath,
   getContractAddress,
-  getContractAbi
+  getContractAbi,
+  getMonitorConfigPath,
+  getMonitorLogPath
 }; 
