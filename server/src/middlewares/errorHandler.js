@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const { ApiError, BaseError } = require('@shared/utils/errors');
 
 /**
  * API错误类
@@ -98,7 +99,11 @@ class ApiError extends Error {
  * @param {function} next 下一个中间件
  */
 const notFoundHandler = (req, res, next) => {
-  next(ApiError.notFound(`找不到路由: ${req.originalUrl}`));
+  next(new ApiError({
+    message: `找不到路由: ${req.originalUrl}`,
+    statusCode: 404,
+    code: 'ROUTE_NOT_FOUND'
+  }));
 };
 
 /**
@@ -125,6 +130,24 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: err.message,
+          code: err.code,
+          details: err.details,
+          timestamp: err.timestamp
+        }
+      });
+    }
+    
+    // 处理其他BaseError
+    if (err instanceof BaseError) {
+      const statusCode = err.code === 'NETWORK_ERROR' ? 503 : 
+                         err.code === 'VALIDATION_ERROR' ? 400 : 
+                         err.code === 'CONTRACT_ERROR' ? 400 : 500;
+      
+      return res.status(statusCode).json({
+        success: false,
+        error: {
+          message: err.message,
+          code: err.code,
           details: err.details,
           timestamp: err.timestamp
         }
@@ -137,6 +160,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '验证错误',
+          code: 'VALIDATION_ERROR',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -149,6 +173,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '无效的令牌',
+          code: 'INVALID_TOKEN',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -160,18 +185,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '令牌已过期',
-          details: err.message,
-          timestamp: new Date().toISOString()
-        }
-      });
-    }
-    
-    // 处理数据库错误
-    if (err.name === 'MongoError') {
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: '数据库错误',
+          code: 'TOKEN_EXPIRED',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -184,6 +198,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '网络连接失败',
+          code: 'NETWORK_ERROR',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -195,6 +210,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '余额不足',
+          code: 'INSUFFICIENT_FUNDS',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -206,6 +222,7 @@ const errorHandler = (err, req, res, next) => {
         success: false,
         error: {
           message: '合约调用失败',
+          code: 'CALL_EXCEPTION',
           details: err.message,
           timestamp: new Date().toISOString()
         }
@@ -217,6 +234,7 @@ const errorHandler = (err, req, res, next) => {
       success: false,
       error: {
         message: '服务器内部错误',
+        code: 'INTERNAL_SERVER_ERROR',
         details: process.env.NODE_ENV === 'development' ? err.message : null,
         timestamp: new Date().toISOString()
       }
@@ -232,6 +250,7 @@ const errorHandler = (err, req, res, next) => {
       success: false,
       error: {
         message: '服务器内部错误',
+        code: 'INTERNAL_SERVER_ERROR',
         timestamp: new Date().toISOString()
       }
     });
@@ -248,9 +267,69 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// 创建标准化的API错误辅助函数
+const createAPIError = {
+  badRequest: (message, details = {}) => new ApiError({
+    message, 
+    statusCode: 400, 
+    code: 'BAD_REQUEST', 
+    details
+  }),
+  
+  unauthorized: (message = '未提供有效的认证信息', details = {}) => new ApiError({
+    message, 
+    statusCode: 401, 
+    code: 'UNAUTHORIZED', 
+    details
+  }),
+  
+  forbidden: (message = '您没有权限执行此操作', details = {}) => new ApiError({
+    message, 
+    statusCode: 403, 
+    code: 'FORBIDDEN', 
+    details
+  }),
+  
+  notFound: (message = '请求的资源不存在', details = {}) => new ApiError({
+    message, 
+    statusCode: 404, 
+    code: 'NOT_FOUND', 
+    details
+  }),
+  
+  unprocessableEntity: (message, details = {}) => new ApiError({
+    message, 
+    statusCode: 422, 
+    code: 'UNPROCESSABLE_ENTITY', 
+    details
+  }),
+  
+  internal: (message = '服务器内部错误', details = {}) => new ApiError({
+    message, 
+    statusCode: 500, 
+    code: 'INTERNAL_SERVER_ERROR', 
+    details
+  }),
+  
+  serviceUnavailable: (message = '服务暂时不可用', details = {}) => new ApiError({
+    message, 
+    statusCode: 503, 
+    code: 'SERVICE_UNAVAILABLE', 
+    details
+  }),
+  
+  contractError: (message, details = {}) => new ApiError({
+    message: `区块链操作失败: ${message}`, 
+    statusCode: 500, 
+    code: 'CONTRACT_ERROR', 
+    details
+  })
+};
+
 module.exports = {
   ApiError,
   notFoundHandler,
   errorHandler,
-  asyncHandler
+  asyncHandler,
+  createAPIError
 }; 

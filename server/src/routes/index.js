@@ -6,12 +6,24 @@ const tokenRoutes = require('./tokenRoutes');
 const redemptionRoutes = require('./redemptionRoutes');
 const rentRoutes = require('./rentRoutes');
 const propertyRoutes = require('./propertyRoutes');
+const metricsRoutes = require('./metricsRoutes');
+const cacheRoutes = require('./cacheRoutes');
+const transactionRoutes = require('./transactionRoutes');
 
 // 注册路由 - 使用真实的区块链服务
 router.use('/tokens', tokenRoutes);
 router.use('/redemptions', redemptionRoutes);
 router.use('/rents', rentRoutes);
 router.use('/properties', propertyRoutes);
+
+// 性能指标路由
+router.use('/metrics', metricsRoutes);
+
+// 缓存管理路由
+router.use('/cache', cacheRoutes);
+
+// 交易管理路由
+router.use('/transactions', transactionRoutes);
 
 // 健康检查路由
 router.get('/health', (req, res) => {

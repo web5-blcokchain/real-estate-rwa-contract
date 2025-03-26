@@ -4,26 +4,9 @@
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
-const { web3Provider } = require('../../../shared/utils/web3Provider');
-const { contractService } = require('../../../shared/utils/contractService');
-const { getContractAddresses } = require('../../../shared/config/contracts');
+const { configManager } = require('../../../shared/config');
+const { getLogPath } = require('../../../shared/utils/paths');
 const logger = require('../utils/logger');
-
-// 基础配置
-const baseConfig = {
-  port: process.env.SERVER_PORT || 3000,
-  environment: process.env.NODE_ENV || 'development',
-  logLevel: process.env.LOG_LEVEL || 'info',
-  corsOrigin: process.env.CORS_ORIGIN || '*'
-};
-
-// 区块链网络配置
-const networkConfig = {
-  rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
-  chainId: parseInt(process.env.CHAIN_ID || '31337'),
-  privateKey: process.env.ADMIN_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000000'
-};
 
 // 操作权限配置 - 定义每种操作需要的角色
 const operationRoles = {
@@ -56,44 +39,46 @@ const operationRoles = {
 };
 
 /**
- * 将 camelCase 转换为 PascalCase
- * @param {string} str camelCase 字符串
- * @returns {string} PascalCase 字符串
+ * 初始化配置
+ * @returns {Promise<Object>} 配置对象
  */
-function camelToPascalCase(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+const initializeConfig = async () => {
+  try {
+    if (!configManager.isInitialized()) {
+      await configManager.initialize();
+      logger.info('Shared configuration manager initialized');
+    }
+    
+    // 验证合约地址
+    const addresses = configManager.getContractAddresses();
+    if (!addresses) {
+      logger.warn('No contract addresses found in configuration');
+    } else {
+      logger.info(`Loaded ${Object.keys(addresses).length} contract addresses`);
+    }
+    
+    return configManager;
+  } catch (error) {
+    logger.error('Failed to initialize configuration:', error);
+    throw error;
+  }
+};
 
 /**
- * 初始化配置
- * @returns {Object} 配置对象
+ * 获取基础配置
+ * @returns {Object} 基础配置对象
  */
-function initializeConfig() {
-  logger.info('Starting configuration initialization...');
-  
-  // 加载合约地址
-  const addresses = getContractAddresses();
-  
-  // 验证合约地址
-  Object.entries(addresses).forEach(([name, address]) => {
-    const contractName = camelToPascalCase(name);
-    if (!address) {
-      logger.warn(`Warning: Contract address for ${contractName} is not configured`);
-    } else {
-      logger.info(`Loaded contract address for ${contractName}: ${address}`);
-    }
-  });
-  
-  logger.info('Configuration initialized successfully');
-  return addresses;
-}
+const getBaseConfig = () => ({
+  port: process.env.SERVER_PORT || 3000,
+  environment: process.env.NODE_ENV || 'development',
+  logLevel: process.env.LOG_LEVEL || 'info',
+  corsOrigin: process.env.CORS_ORIGIN || '*'
+});
 
 // 导出配置
 module.exports = {
-  baseConfig,
-  networkConfig,
+  getBaseConfig,
   operationRoles,
-  web3Provider,
-  contractService,
-  initializeConfig
+  initializeConfig,
+  configManager
 };

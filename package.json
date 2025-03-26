@@ -8,6 +8,10 @@
     "server:test": "jest",
     "server:test:api": "ts-node server/scripts/test-api.ts",
     "server:test:flow": "node server/scripts/test-flow.js",
+    "server:test:optimization": "node server/scripts/test-server-optimization.js",
+    "server:perf": "node server/scripts/performance-test.js",
+    "server:perf:stress": "node server/scripts/performance-test.js --mode=stress --duration=60",
+    "server:perf:concurrent": "node server/scripts/performance-test.js --mode=concurrent --requests=1000 --concurrency=50",
     "frontend:test": "node frontend-tests/scripts/run-tests.js",
     "monitor:start": "node monitor/src/index.js",
     "monitor:dev": "nodemon monitor/src/index.js",
@@ -27,6 +31,11 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
+  "_moduleAliases": {
+    "@shared": "./shared",
+    "@server": "./server/src",
+    "@monitor": "./monitor/src"
+  },
   "dependencies": {
     "axios": "^1.6.7",
     "cors": "^2.8.5",
@@ -34,7 +43,9 @@
     "express": "^4.18.3",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
+    "module-alias": "^2.2.3",
     "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^4.7.1",
     "ethers": "^5.7.2",
@@ -43,7 +54,9 @@
     "bcrypt": "^5.1.0",
     "moment": "^2.29.4",
     "uuid": "^9.0.0",
-    "node-cron": "^3.0.2"
+    "node-cron": "^3.0.2",
+    "yargs": "^17.7.2",
+    "table": "^6.8.1"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",

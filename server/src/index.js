@@ -1,15 +1,19 @@
+// 首先初始化模块别名
+require('../../shared/utils/moduleAlias').initializeAliases();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
+const { performanceMonitor } = require('./middlewares/performanceMonitor');
+const { routeRateLimiter } = require('./middlewares/rateLimiter');
 const logger = require('./utils/logger');
-const { baseConfig, initializeConfig } = require('./config');
-const { initializeAbis } = require('../../shared/utils/getAbis');
-const { getContractAddresses } = require('../../shared/config/contracts');
-const { initializeBlockchain, resetBlockchain } = require('../../shared/utils/blockchain');
-const { closeLoggers } = require('../../shared/utils/logger');
+const { getBaseConfig, initializeConfig } = require('./config');
+const { initializeAbis } = require('@shared/utils/getAbis');
+const { initializeBlockchain, resetBlockchain } = require('@shared/utils/blockchain');
+const { closeLoggers } = require('@shared/utils/logger');
 
 // 创建 Express 应用
 const app = express();
@@ -21,6 +25,12 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 添加性能监控中间件
+app.use(performanceMonitor);
+
+// 添加速率限制中间件
+app.use(routeRateLimiter());
 
 // 添加一个简单的测试路由
 app.get('/api/test', (req, res) => {
@@ -44,12 +54,8 @@ async function start() {
     logger.info('Starting server initialization...');
     
     // 初始化配置
-    const contractAddresses = initializeConfig();
-    logger.info('Configuration initialized', contractAddresses);
-    
-    // 加载合约地址
-    const addresses = getContractAddresses();
-    logger.info('Contract addresses loaded:', addresses);
+    await initializeConfig();
+    logger.info('Configuration initialized');
     
     // 初始化合约 ABIs
     await initializeAbis(logger);
@@ -58,6 +64,9 @@ async function start() {
     // 初始化区块链连接
     await initializeBlockchain();
     logger.info('Blockchain connection initialized');
+    
+    // 获取基础配置
+    const baseConfig = getBaseConfig();
     
     // 启动服务器
     server = app.listen(baseConfig.port, () => {

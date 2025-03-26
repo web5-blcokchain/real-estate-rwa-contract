@@ -1,15 +1,18 @@
-const TokenFactoryService = require('../../../shared/services/tokenFactoryService');
-const PropertyRegistryService = require('../../../shared/services/propertyRegistryService');
-const RealEstateTokenService = require('../../../shared/services/realEstateTokenService');
-const logger = require('../utils/logger');
+/**
+ * 导出shared目录下的合约服务
+ * 这个文件作为兼容性层，以便在不破坏现有代码的情况下过渡到共享服务
+ */
 
-// 创建服务实例
-const tokenFactoryService = new TokenFactoryService();
-const propertyRegistryService = new PropertyRegistryService();
+const { contractService, ContractService } = require('@shared/utils/contractService');
+const { logger } = require('@shared/utils/logger');
 
-// 导出服务实例
+// 导出单例实例
 module.exports = {
-  tokenFactory: tokenFactoryService,
-  propertyRegistry: propertyRegistryService,
-  getToken: (tokenAddress) => new RealEstateTokenService(tokenAddress)
+  tokenFactory: contractService.getTokenFactory(),
+  propertyRegistry: contractService.getPropertyRegistry(),
+  getToken: (tokenAddress) => contractService.getToken(tokenAddress),
+  
+  // 为向后兼容性暴露整个contractService实例
+  contractService,
+  ContractService
 }; 

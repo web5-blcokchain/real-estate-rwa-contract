@@ -1,10 +1,12 @@
+// 首先初始化模块别名
+require('../../shared/utils/moduleAlias').initializeAliases();
+
 const { ethers } = require('ethers');
-const { getNetworkConfig } = require('../../shared/utils/network');
-const { getContractAddresses } = require('../../shared/config/contracts');
-const { getAbi } = require('../../shared/utils/getAbis');
-const { ApiError } = require('../src/middlewares/errorHandler');
-const logger = require('../src/utils/logger');
-const { initializeBlockchain } = require('../../shared/utils/blockchain');
+const { contractService } = require('@shared/utils/contractService');
+const { configManager } = require('@shared/config');
+const { ApiError, handleError } = require('@shared/utils/errors');
+const logger = require('@server/utils/logger');
+const { initializeBlockchain, resetBlockchain } = require('@shared/utils/blockchain');
 
 // 测试流程
 async function testFlow() {
@@ -13,31 +15,27 @@ async function testFlow() {
     console.log('注意：这些测试将连接真实区块链网络，并提交实际的交易！\n');
 
     // 初始化区块链连接
-    const { provider, signer } = await initializeBlockchain();
+    await initializeBlockchain();
     
-    // 获取合约地址
-    const addresses = await getContractAddresses();
-    if (!addresses) {
-      throw new ApiError(500, '未找到合约地址配置');
+    // 初始化合约服务
+    if (!contractService.initialized) {
+      await contractService.initialize();
     }
-
+    const addresses = configManager.getContractAddresses();
+    
     // 测试房产流程
     console.log('===== 测试房产流程 =====\n');
     
     try {
       console.log('注册新房产...');
-      const propertyRegistry = new ethers.Contract(
-        addresses.propertyRegistry,
-        await getAbi('PropertyRegistry'),
-        signer
-      );
+      const propertyRegistry = contractService.getPropertyRegistry();
       
-      const tx = await propertyRegistry.registerProperty(
+      const tx = await propertyRegistry.executeWrite('registerProperty', [
         'PROP123',
         'JP',
         'ipfs://test-uri'
-      );
-      await tx.wait();
+      ], { operationName: 'registerProperty' });
+      
       console.log('房产注册成功！\n');
     } catch (error) {
       console.log('注册房产失败 (这可能是因为房产已存在或区块链连接问题)');
@@ -54,18 +52,14 @@ async function testFlow() {
 
     try {
       console.log('获取房产列表...');
-      const propertyRegistry = new ethers.Contract(
-        addresses.propertyRegistry,
-        await getAbi('PropertyRegistry'),
-        provider
-      );
+      const propertyRegistry = contractService.getPropertyRegistry();
       
-      const count = await propertyRegistry.getPropertyCount();
+      const count = await propertyRegistry.executeRead('getPropertyCount');
       console.log(`找到 ${count.toString()} 个房产\n`);
       
       for (let i = 0; i < count; i++) {
-        const propertyId = await propertyRegistry.propertyIds(i);
-        const property = await propertyRegistry.properties(propertyId);
+        const propertyId = await propertyRegistry.executeRead('propertyIds', [i]);
+        const property = await propertyRegistry.executeRead('properties', [propertyId]);
         console.log(`房产 ${propertyId}:`, property);
       }
       console.log('----------------------------------------\n');
@@ -85,14 +79,14 @@ async function testFlow() {
     
     try {
       console.log('创建新代币...');
-      const tokenFactory = new ethers.Contract(
-        addresses.tokenFactory,
-        await getAbi('TokenFactory'),
-        signer
-      );
+      const tokenFactory = contractService.getTokenFactory();
       
-      const tx = await tokenFactory.createToken('PROP123', 'Test Token', 'TEST');
-      await tx.wait();
+      const tx = await tokenFactory.executeWrite('createToken', [
+        'PROP123', 
+        'Test Token', 
+        'TEST'
+      ], { operationName: 'createToken' });
+      
       console.log('代币创建成功！\n');
     } catch (error) {
       console.log('创建代币失败 (这可能是因为该房产已有代币或权限问题)');
@@ -109,13 +103,9 @@ async function testFlow() {
 
     try {
       console.log('获取代币列表...');
-      const tokenFactory = new ethers.Contract(
-        addresses.tokenFactory,
-        await getAbi('TokenFactory'),
-        provider
-      );
+      const tokenFactory = contractService.getTokenFactory();
       
-      const tokens = await tokenFactory.getAllTokens();
+      const tokens = await tokenFactory.executeRead('getAllTokens');
       console.log('代币列表:', tokens);
       console.log('----------------------------------------\n');
     } catch (error) {
@@ -131,13 +121,9 @@ async function testFlow() {
 
     try {
       console.log('获取房产代币信息 (propertyId: PROP123)...');
-      const tokenFactory = new ethers.Contract(
-        addresses.tokenFactory,
-        await getAbi('TokenFactory'),
-        provider
-      );
+      const tokenFactory = contractService.getTokenFactory();
       
-      const tokenAddress = await tokenFactory.getRealEstateToken('PROP123');
+      const tokenAddress = await tokenFactory.executeRead('getRealEstateToken', ['PROP123']);
       console.log('代币地址:', tokenAddress);
       console.log('----------------------------------------\n');
     } catch (error) {
@@ -155,29 +141,20 @@ async function testFlow() {
     console.log('===== 测试租金流程 =====\n');
     
     try {
-      const tokenFactory = new ethers.Contract(
-        addresses.tokenFactory,
-        await getAbi('TokenFactory'),
-        provider
-      );
-      
-      const tokenAddress = await tokenFactory.getRealEstateToken('PROP123');
+      const tokenFactory = contractService.getTokenFactory();
+      const tokenAddress = await tokenFactory.executeRead('getRealEstateToken', ['PROP123']);
       
       if (tokenAddress === ethers.constants.AddressZero) {
         console.log('没有可用的代币地址，无法进行租金分配测试\n');
       } else {
         console.log('创建租金分配...');
-        const rentService = new ethers.Contract(
-          addresses.rentService,
-          await getAbi('RentService'),
-          signer
-        );
+        const rentService = contractService.getRentDistributor();
         
-        const tx = await rentService.createDistribution(
+        const tx = await rentService.executeWrite('createDistribution', [
           tokenAddress,
           ethers.utils.parseEther('1000')
-        );
-        await tx.wait();
+        ], { operationName: 'createDistribution' });
+        
         console.log('租金分配创建成功！\n');
       }
     } catch (error) {
@@ -197,29 +174,20 @@ async function testFlow() {
     console.log('===== 测试赎回流程 =====\n');
     
     try {
-      const tokenFactory = new ethers.Contract(
-        addresses.tokenFactory,
-        await getAbi('TokenFactory'),
-        provider
-      );
-      
-      const tokenAddress = await tokenFactory.getRealEstateToken('PROP123');
+      const tokenFactory = contractService.getTokenFactory();
+      const tokenAddress = await tokenFactory.executeRead('getRealEstateToken', ['PROP123']);
       
       if (tokenAddress === ethers.constants.AddressZero) {
         console.log('没有可用的代币地址，无法进行赎回测试\n');
       } else {
         console.log('创建赎回请求...');
-        const redemptionService = new ethers.Contract(
-          addresses.redemptionService,
-          await getAbi('RedemptionService'),
-          signer
-        );
+        const redemptionService = contractService.getRedemptionManager();
         
-        const tx = await redemptionService.createRedemption(
+        const tx = await redemptionService.executeWrite('createRedemption', [
           tokenAddress,
           ethers.utils.parseEther('100')
-        );
-        await tx.wait();
+        ], { operationName: 'createRedemption' });
+        
         console.log('赎回请求创建成功！\n');
       }
     } catch (error) {
@@ -236,7 +204,10 @@ async function testFlow() {
     }
 
     console.log('真实区块链接口测试完成！');
-    console.log('总体结果: 部分失败\n');
+    
+    // 测试结束后清理资源
+    resetBlockchain();
+    
   } catch (error) {
     console.log('测试流程执行失败');
     console.log('错误:', error.message);
@@ -247,9 +218,18 @@ async function testFlow() {
     } else if (error.code === 'CALL_EXCEPTION') {
       console.log('合约调用失败，可能是合约地址或ABI错误');
     }
+    
+    // 清理资源
+    resetBlockchain();
+    
     process.exit(1);
   }
 }
 
 // 运行测试
-testFlow(); 
+testFlow().catch(error => {
+  console.error('Unhandled error:', error);
+  // 清理资源
+  resetBlockchain();
+  process.exit(1);
+}); 

@@ -5,6 +5,9 @@ const { asyncHandler } = require('../middlewares/asyncHandler');
 const { authMiddleware } = require('../middlewares/authMiddleware');
 const BaseRouter = require('../../../shared/routes/baseRouter');
 const { ethers } = require('ethers');
+const { validators } = require('../middlewares/validator');
+const { param, body, query } = require('express-validator');
+const { validateRequest } = require('../middlewares/validator');
 
 /**
  * @swagger
@@ -315,165 +318,62 @@ class TokenRouter extends BaseRouter {
    */
   setupRoutes() {
     // 获取所有代币
-    this.get('/', TokenController.getAllTokens);
+    this.get('/', validators.paginationValidators, TokenController.getAllTokens);
 
-    // 获取特定房产的代币
-    this.get('/property/:propertyId', TokenController.getRealEstateToken, {
-      validation: {
-        params: {
-          propertyId: {
-            type: 'string',
-            required: true
-          }
-        }
-      }
-    });
-
-    // 获取代币实现合约地址
-    this.get('/implementation', TokenController.getTokenImplementation);
+    // 获取特定代币详情
+    this.get('/:address', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      validateRequest
+    ], TokenController.getTokenByAddress);
 
     // 创建新代币
-    this.post('/', TokenController.createToken, {
+    this.post('/', validators.tokenValidators.create, TokenController.createToken, {
       auth: true,
-      permissions: ['operator'],
-      validation: {
-        body: {
-          propertyId: {
-            type: 'string',
-            required: true
-          },
-          name: {
-            type: 'string',
-            required: true,
-            min: 1
-          },
-          symbol: {
-            type: 'string',
-            required: true,
-            min: 1
-          },
-          decimals: {
-            type: 'number',
-            required: false,
-            default: 18,
-            min: 0,
-            max: 18
-          },
-          maxSupply: {
-            type: 'string',
-            required: false,
-            format: 'hex'
-          },
-          initialSupply: {
-            type: 'string',
-            required: true,
-            format: 'hex'
-          },
-          initialHolder: {
-            type: 'address',
-            required: true
-          }
-        }
-      }
+      permissions: ['operator']
     });
 
-    // 更新代币实现合约地址
-    this.put('/implementation', TokenController.updateTokenImplementation, {
+    // 铸造代币
+    this.post('/:address/mint', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      body('to').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('接收地址格式不正确'),
+      body('amount').isNumeric().withMessage('金额必须是数字'),
+      validateRequest
+    ], TokenController.mintToken, {
       auth: true,
-      permissions: ['operator'],
-      validation: {
-        body: {
-          implementation: {
-            type: 'address',
-            required: true
-          }
-        }
-      }
+      permissions: ['operator']
     });
 
-    // 添加地址到白名单
-    this.post('/:tokenAddress/whitelist', TokenController.addToWhitelist, {
+    // 销毁代币
+    this.post('/:address/burn', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      body('amount').isNumeric().withMessage('金额必须是数字'),
+      validateRequest
+    ], TokenController.burnToken, {
       auth: true,
-      permissions: ['operator'],
-      validation: {
-        params: {
-          tokenAddress: {
-            type: 'address',
-            required: true
-          }
-        },
-        body: {
-          address: {
-            type: 'address',
-            required: true
-          }
-        }
-      }
+      permissions: ['operator']
     });
 
-    // 批量添加地址到白名单
-    this.post('/:tokenAddress/whitelist/batch', TokenController.batchAddToWhitelist, {
-      auth: true,
-      permissions: ['operator'],
-      validation: {
-        params: {
-          tokenAddress: {
-            type: 'address',
-            required: true
-          }
-        },
-        body: {
-          addresses: {
-            type: 'array',
-            required: true,
-            min: 1,
-            validate: (value) => value.every(addr => ethers.utils.isAddress(addr))
-          }
-        }
-      }
-    });
+    // 转移代币
+    this.post('/:address/transfer', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      ...validators.tokenValidators.transfer.filter(v => v !== validateRequest),
+      validateRequest
+    ], TokenController.transferToken);
 
-    // 从白名单移除地址
-    this.delete('/:tokenAddress/whitelist', TokenController.removeFromWhitelist, {
-      auth: true,
-      permissions: ['operator'],
-      validation: {
-        params: {
-          tokenAddress: {
-            type: 'address',
-            required: true
-          }
-        },
-        body: {
-          address: {
-            type: 'address',
-            required: true
-          }
-        }
-      }
-    });
+    // 获取代币余额
+    this.get('/:address/balance/:userAddress', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      param('userAddress').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('用户地址格式不正确'),
+      validateRequest
+    ], TokenController.getBalance);
 
-    // 批量从白名单移除地址
-    this.delete('/:tokenAddress/whitelist/batch', TokenController.batchRemoveFromWhitelist, {
-      auth: true,
-      permissions: ['operator'],
-      validation: {
-        params: {
-          tokenAddress: {
-            type: 'address',
-            required: true
-          }
-        },
-        body: {
-          addresses: {
-            type: 'array',
-            required: true,
-            min: 1,
-            validate: (value) => value.every(addr => ethers.utils.isAddress(addr))
-          }
-        }
-      }
-    });
+    // 获取代币历史
+    this.get('/:address/history', [
+      param('address').matches(/^0x[a-fA-F0-9]{40}$/).withMessage('代币地址格式不正确'),
+      query('from').optional().isInt({ min: 0 }).withMessage('起始块高必须是非负整数'),
+      query('to').optional().isInt({ min: 0 }).withMessage('结束块高必须是非负整数'),
+      validators.paginationValidators
+    ], TokenController.getTokenHistory);
   }
 }
 

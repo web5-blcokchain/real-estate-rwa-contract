@@ -1,6 +1,5 @@
-const RedemptionManagerService = require('../services/redemptionManagerService');
-const RealEstateTokenService = require('../services/realEstateTokenService');
-const { ApiError } = require('../middlewares/errorHandler');
+const { contractService } = require('../services/contractService');
+const { createAPIError } = require('../middlewares/errorHandler');
 const { ethers } = require('ethers');
 
 /**
@@ -21,21 +20,24 @@ class RedemptionController {
       
       // 验证参数
       if (!stablecoin || !amount) {
-        throw new ApiError(400, '缺少必要参数');
+        throw createAPIError.badRequest('缺少必要参数');
       }
       
       // 验证地址格式
       if (!ethers.utils.isAddress(stablecoin)) {
-        throw new ApiError(400, '无效的稳定币地址');
+        throw createAPIError.badRequest('无效的稳定币地址');
       }
+      
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
       
       // 检查稳定币是否被支持
-      const isSupported = await RedemptionManagerService.isSupportedStablecoin(stablecoin);
+      const isSupported = await redemptionService.isSupportedStablecoin(stablecoin);
       if (!isSupported) {
-        throw new ApiError(400, '不支持的稳定币地址');
+        throw createAPIError.badRequest('不支持的稳定币地址');
       }
       
-      const receipt = await RedemptionManagerService.approveRedemption(requestId, stablecoin, amount);
+      const receipt = await redemptionService.approveRedemption(requestId, stablecoin, amount);
       
       res.status(200).json({
         success: true,
@@ -60,7 +62,10 @@ class RedemptionController {
     try {
       const { requestId } = req.params;
       
-      const receipt = await RedemptionManagerService.rejectRedemption(requestId);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const receipt = await redemptionService.rejectRedemption(requestId);
       
       res.status(200).json({
         success: true,
@@ -85,7 +90,10 @@ class RedemptionController {
     try {
       const { requestId } = req.params;
       
-      const receipt = await RedemptionManagerService.completeRedemption(requestId);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const receipt = await redemptionService.completeRedemption(requestId);
       
       res.status(200).json({
         success: true,
@@ -112,10 +120,13 @@ class RedemptionController {
       
       // 验证地址格式
       if (!ethers.utils.isAddress(stablecoin)) {
-        throw new ApiError(400, '无效的稳定币地址');
+        throw createAPIError.badRequest('无效的稳定币地址');
       }
       
-      const receipt = await RedemptionManagerService.addSupportedStablecoin(stablecoin);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const receipt = await redemptionService.addSupportedStablecoin(stablecoin);
       
       res.status(200).json({
         success: true,
@@ -142,10 +153,13 @@ class RedemptionController {
       
       // 验证地址格式
       if (!ethers.utils.isAddress(stablecoin)) {
-        throw new ApiError(400, '无效的稳定币地址');
+        throw createAPIError.badRequest('无效的稳定币地址');
       }
       
-      const receipt = await RedemptionManagerService.removeSupportedStablecoin(stablecoin);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const receipt = await redemptionService.removeSupportedStablecoin(stablecoin);
       
       res.status(200).json({
         success: true,
@@ -172,15 +186,18 @@ class RedemptionController {
       
       // 验证参数
       if (!token || !amount || !to) {
-        throw new ApiError(400, '缺少必要参数');
+        throw createAPIError.badRequest('缺少必要参数');
       }
       
       // 验证地址格式
       if (!ethers.utils.isAddress(token) || !ethers.utils.isAddress(to)) {
-        throw new ApiError(400, '无效的地址');
+        throw createAPIError.badRequest('无效的地址');
       }
       
-      const receipt = await RedemptionManagerService.emergencyWithdraw(token, amount, to);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const receipt = await redemptionService.emergencyWithdraw(token, amount, to);
       
       res.status(200).json({
         success: true,
@@ -207,17 +224,20 @@ class RedemptionController {
     try {
       const { requestId } = req.params;
       
-      const request = await RedemptionManagerService.getRedemptionRequest(requestId);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const request = await redemptionService.getRedemptionRequest(requestId);
       
       if (!request) {
-        throw new ApiError(404, '找不到赎回请求');
+        throw createAPIError.notFound('找不到赎回请求');
       }
       
       // 如果有代币地址，获取代币信息
       let tokenInfo = null;
       if (ethers.utils.isAddress(request.token)) {
         try {
-          const tokenService = new RealEstateTokenService(request.token);
+          const tokenService = contractService.getToken(request.token);
           tokenInfo = await tokenService.getTokenInfo();
         } catch (error) {
           console.warn(`获取代币信息失败: ${error.message}`);
@@ -244,7 +264,10 @@ class RedemptionController {
    */
   static async getAllRedemptionRequests(req, res, next) {
     try {
-      const requests = await RedemptionManagerService.getAllRedemptionRequests();
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const requests = await redemptionService.getAllRedemptionRequests();
       
       // 获取所有代币信息（并行处理）
       const tokenAddresses = [...new Set(requests.map(r => r.token).filter(addr => ethers.utils.isAddress(addr)))];
@@ -253,7 +276,7 @@ class RedemptionController {
       await Promise.all(
         tokenAddresses.map(async (address) => {
           try {
-            const tokenService = new RealEstateTokenService(address);
+            const tokenService = contractService.getToken(address);
             tokenInfoMap[address] = await tokenService.getTokenInfo();
           } catch (error) {
             console.warn(`获取代币 ${address} 信息失败: ${error.message}`);
@@ -288,10 +311,13 @@ class RedemptionController {
       
       // 验证地址格式
       if (!ethers.utils.isAddress(stablecoin)) {
-        throw new ApiError(400, '无效的稳定币地址');
+        throw createAPIError.badRequest('无效的稳定币地址');
       }
       
-      const isSupported = await RedemptionManagerService.isSupportedStablecoin(stablecoin);
+      // 获取赎回服务
+      const redemptionService = contractService.getRedemptionManager();
+      
+      const isSupported = await redemptionService.isSupportedStablecoin(stablecoin);
       
       res.status(200).json({
         success: true,
