@@ -1,186 +1,119 @@
 /**
  * 缓存管理路由
- * 提供API缓存管理的访问端点
+ * 提供API缓存控制功能
  */
 
 const express = require('express');
-const { caches, flushAll, getAllStats } = require('@server/utils/cacheManager');
-const { createAPIError } = require('@server/middlewares/errorHandler');
-const logger = require('@server/utils/logger');
-
 const router = express.Router();
+const { checkAuthentication, checkAuthorization } = require('../middlewares/auth');
+const { getCacheStats, clearCache, getCacheKeys } = require('../utils/cacheManager');
 
 /**
- * @route GET /api/v1/cache/stats
+ * @route GET /cache/stats
  * @desc 获取缓存统计信息
- * @access Private - 仅限管理员访问
+ * @access 需要管理员权限
  */
-router.get('/stats', (req, res, next) => {
-  try {
-    // 检查API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
-    
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw createAPIError.unauthorized('未授权访问缓存统计信息');
+router.get('/stats',
+  checkAuthentication,
+  checkAuthorization(['ADMIN', 'OPERATOR']),
+  (req, res) => {
+    try {
+      const stats = getCacheStats();
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message || '获取缓存统计信息失败'
+      });
     }
-    
-    const stats = getAllStats();
-    
-    // 返回缓存统计信息
-    res.json({
-      success: true,
-      data: {
-        stats,
-        timestamp: Date.now()
-      }
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
- * @route GET /api/v1/cache/:namespace/stats
- * @desc 获取特定命名空间的缓存统计信息
- * @access Private - 仅限管理员访问
+ * @route GET /cache/keys
+ * @desc 获取所有缓存键
+ * @access 需要管理员权限
  */
-router.get('/:namespace/stats', (req, res, next) => {
-  try {
-    // 检查API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
-    
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw createAPIError.unauthorized('未授权访问缓存统计信息');
+router.get('/keys',
+  checkAuthentication,
+  checkAuthorization(['ADMIN', 'OPERATOR']),
+  (req, res) => {
+    try {
+      const keys = getCacheKeys();
+      res.json({
+        success: true,
+        data: {
+          count: keys.length,
+          keys
+        }
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message || '获取缓存键失败'
+      });
     }
-    
-    const { namespace } = req.params;
-    
-    // 检查命名空间是否存在
-    if (!caches[namespace]) {
-      throw createAPIError.notFound(`未找到缓存命名空间：${namespace}`);
-    }
-    
-    const stats = caches[namespace].getStats();
-    
-    // 返回命名空间缓存统计信息
-    res.json({
-      success: true,
-      data: {
-        namespace,
-        stats,
-        timestamp: Date.now()
-      }
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
- * @route GET /api/v1/cache/:namespace/keys
- * @desc 获取特定命名空间的所有缓存键
- * @access Private - 仅限管理员访问
+ * @route POST /cache/clear
+ * @desc 清除全部缓存
+ * @access 仅限管理员
  */
-router.get('/:namespace/keys', (req, res, next) => {
-  try {
-    // 检查API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
-    
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw createAPIError.unauthorized('未授权访问缓存键列表');
+router.post('/clear',
+  checkAuthentication,
+  checkAuthorization(['ADMIN']),
+  (req, res) => {
+    try {
+      clearCache();
+      res.json({
+        success: true,
+        message: '缓存已清除'
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message || '清除缓存失败'
+      });
     }
-    
-    const { namespace } = req.params;
-    
-    // 检查命名空间是否存在
-    if (!caches[namespace]) {
-      throw createAPIError.notFound(`未找到缓存命名空间：${namespace}`);
-    }
-    
-    const keys = caches[namespace].getKeys();
-    
-    // 返回命名空间缓存键
-    res.json({
-      success: true,
-      data: {
-        namespace,
-        keysCount: keys.length,
-        keys,
-        timestamp: Date.now()
-      }
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
- * @route DELETE /api/v1/cache/:namespace
- * @desc 清空特定命名空间的缓存
- * @access Private - 仅限管理员访问
+ * @route POST /cache/clear/:key
+ * @desc 清除特定键的缓存
+ * @access 仅限管理员
  */
-router.delete('/:namespace', (req, res, next) => {
-  try {
-    // 检查API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
-    
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw createAPIError.unauthorized('未授权清空缓存');
-    }
-    
-    const { namespace } = req.params;
-    
-    // 检查命名空间是否存在
-    if (!caches[namespace]) {
-      throw createAPIError.notFound(`未找到缓存命名空间：${namespace}`);
-    }
-    
-    const clearedCount = caches[namespace].clear();
-    
-    logger.info(`已清空命名空间 ${namespace} 的缓存，删除了 ${clearedCount} 个键`);
-    
-    // 返回清空结果
-    res.json({
-      success: true,
-      message: `已清空命名空间 ${namespace} 的缓存`,
-      data: {
-        namespace,
-        clearedCount,
-        timestamp: Date.now()
+router.post('/clear/:key',
+  checkAuthentication,
+  checkAuthorization(['ADMIN']),
+  (req, res) => {
+    try {
+      const { key } = req.params;
+      const result = clearCache(key);
+      
+      if (result) {
+        res.json({
+          success: true,
+          message: `缓存键 ${key} 已清除`
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: `缓存键 ${key} 不存在`
+        });
       }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * @route DELETE /api/v1/cache
- * @desc 清空所有缓存
- * @access Private - 仅限管理员访问
- */
-router.delete('/', (req, res, next) => {
-  try {
-    // 检查API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
-    
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw createAPIError.unauthorized('未授权清空缓存');
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message || '清除指定缓存失败'
+      });
     }
-    
-    flushAll();
-    
-    logger.info('已清空所有缓存');
-    
-    // 返回清空结果
-    res.json({
-      success: true,
-      message: '已清空所有缓存',
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 module.exports = router; 

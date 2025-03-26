@@ -1,15 +1,20 @@
 const { validationResult, body, param, query } = require('express-validator');
-const { BadRequestError } = require('../../shared/utils/errors');
+const { ApiError } = require('../../../shared/utils/errors');
 
 /**
  * 自定义验证错误处理中间件
- * 检查express-validator的验证结果，如果有错误则抛出BadRequestError
+ * 检查express-validator的验证结果，如果有错误则抛出ApiError
  */
 const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     const errorMessages = errors.array().map(error => `${error.param}: ${error.msg}`).join(', ');
-    throw new BadRequestError(`验证失败: ${errorMessages}`);
+    throw new ApiError({
+      message: `验证失败: ${errorMessages}`,
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+      details: { validationErrors: errors.array() }
+    });
   }
   next();
 };

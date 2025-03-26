@@ -1,134 +1,232 @@
-const { initializeAbis, contractAbis } = require('./getAbis');
-const { getContractAddresses } = require('../config/contracts');
-const { loadConfig } = require('../config');
+/**
+ * 合约服务模块
+ * 处理所有与智能合约交互的核心功能
+ */
 const { ethers } = require('ethers');
+const { configManager } = require('../config');
+const logger = require('./logger');
+const { getAbi, getContractAddresses } = require('../config/contracts');
+const deploymentState = require('../../deploy-state.json');
+
+// 合约实例缓存
+const contractInstances = {};
 
 /**
  * 合约服务类
- * 统一管理合约实例的创建和调用
+ * 提供合约实例创建和交互的核心功能
  */
 class ContractService {
   constructor() {
     this.provider = null;
-    this.abis = null;
-    this.contractAddresses = null;
+    this.signer = null;
     this.initialized = false;
+    this.network = null;
   }
 
-  async initialize() {
+  /**
+   * 初始化合约服务
+   * @param {Object} options 初始化选项
+   * @param {boolean} options.useDefaultSigner 是否使用默认签名者
+   * @returns {Promise<void>}
+   */
+  async initialize(options = { useDefaultSigner: true }) {
     if (this.initialized) {
-      console.log('合约服务已经初始化');
+      logger.info('Contract service already initialized');
       return;
     }
 
-    console.log('初始化共享合约服务...');
-    
     try {
-      // 加载配置
-      console.log('加载配置...');
-      const config = await loadConfig();
-      console.log('配置加载完成');
+      if (!configManager.isInitialized()) {
+        logger.info('Initializing configuration manager...');
+        await configManager.initialize();
+      }
 
-      // 创建以太坊提供者
-      console.log('创建以太坊提供者...');
-      const network = config.networkConfig;
-      console.log(`使用网络: ${network.name}`);
+      // 获取网络配置
+      const network = configManager.getNetworkConfig();
+      this.network = network;
+
+      // 初始化provider (使用ethers v5语法)
+      this.provider = new ethers.providers.JsonRpcProvider(network.rpcUrl);
       
-      // 使用 ethers 的网络配置
-      this.provider = new ethers.JsonRpcProvider(network.rpcUrl);
-      
-      // 验证网络连接
-      const connectedNetwork = await this.provider.getNetwork();
-      console.log('已连接到网络:', {
-        name: connectedNetwork.name,
-        chainId: connectedNetwork.chainId
-      });
+      logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
 
-      // 加载合约地址
-      console.log('加载合约地址...');
-      this.contractAddresses = config.contractAddresses;
-      console.log('合约地址加载成功:', this.contractAddresses);
-
-      // 加载ABI
-      console.log('加载ABI...');
-      await initializeAbis();
-      this.abis = contractAbis;
-      console.log('ABI加载成功，已加载合约:', Object.keys(this.abis));
+      // 初始化signer
+      if (options.useDefaultSigner) {
+        try {
+          const privateKey = configManager.getPrivateKey('operator');
+          if (privateKey) {
+            this.signer = new ethers.Wallet(privateKey, this.provider);
+            const address = await this.signer.getAddress();
+            logger.info(`Using operator wallet with address: ${address}`);
+          } else {
+            logger.warn('No operator private key available. Running in read-only mode');
+            this.signer = null;
+          }
+        } catch (error) {
+          logger.warn(`Failed to initialize signer: ${error.message}. Running in read-only mode`);
+          this.signer = null;
+        }
+      }
 
       this.initialized = true;
-      console.log('合约服务初始化完成');
+      logger.info('Contract service initialized successfully');
     } catch (error) {
-      console.error('合约服务初始化失败:', error);
-      console.error('错误堆栈:', error.stack);
+      logger.error('Failed to initialize contract service:', error);
+      throw new Error(`Contract service initialization failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取合约实例
+   * @param {string} contractName 合约名称
+   * @param {string} contractAddress 合约地址
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {ethers.Contract} 合约实例
+   */
+  async getContract(contractName, contractAddress, useSigner = true) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    const cacheKey = `${contractName}_${contractAddress}`;
+
+    // 如果缓存中已有实例，直接返回
+    if (contractInstances[cacheKey]) {
+      return contractInstances[cacheKey];
+    }
+
+    try {
+      // 从配置中获取ABI
+      const abi = getAbi(contractName);
+      if (!abi) {
+        throw new Error(`ABI not found for contract: ${contractName}`);
+      }
+
+      // 创建合约实例 (ethers v6语法)
+      const contract = new ethers.Contract(
+        contractAddress,
+        abi,
+        useSigner && this.signer ? this.signer : this.provider
+      );
+
+      // 缓存合约实例
+      contractInstances[cacheKey] = contract;
+
+      return contract;
+    } catch (error) {
+      logger.error(`Failed to get contract instance for ${contractName}:`, error);
+      throw new Error(`Failed to get contract instance: ${error.message}`);
+    }
+  }
+
+  /**
+   * 根据合约名称获取合约地址
+   * @param {string} contractName 合约名称
+   * @returns {string} 合约地址
+   */
+  getContractAddress(contractName) {
+    try {
+      // 从部署状态中获取地址
+      if (deploymentState && deploymentState.contracts && deploymentState.contracts[contractName]) {
+        return deploymentState.contracts[contractName].address;
+      }
+      
+      // 尝试从getContractAddresses获取
+      const addresses = getContractAddresses();
+      if (addresses && addresses[contractName]) {
+        return addresses[contractName];
+      }
+      
+      logger.warn(`Contract address not found for: ${contractName}`);
+      throw new Error(`Contract address not found for: ${contractName}`);
+    } catch (error) {
+      logger.error(`Failed to get contract address for ${contractName}:`, error);
       throw error;
     }
   }
 
-  _checkInitialized() {
-    if (!this.initialized) {
-      throw new Error('合约服务尚未初始化，请先调用 initialize() 方法');
-    }
+  /**
+   * 根据名称获取合约
+   * @param {string} contractName 合约名称
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {ethers.Contract} 合约实例
+   */
+  async getContractByName(contractName, useSigner = true) {
+    const address = this.getContractAddress(contractName);
+    return this.getContract(contractName, address, useSigner);
+  }
+  
+  /**
+   * 获取RoleManager合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getRoleManager(useSigner = true) {
+    return this.getContractByName('RoleManager', useSigner);
   }
 
-  getContract(contractName, signerKey) {
-    this._checkInitialized();
-    
-    const abi = this.abis[contractName];
-    const address = this.contractAddresses[contractName];
-    
-    if (!abi || !address) {
-      throw new Error(`找不到合约 ${contractName} 的 ABI 或地址`);
-    }
-
-    return new ethers.Contract(address, abi, this.provider);
+  /**
+   * 获取PropertyRegistry合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getPropertyRegistry(useSigner = true) {
+    return this.getContractByName('PropertyRegistry', useSigner);
   }
 
-  // 获取合约实例
-  getRoleManager(signerKey) {
-    return this.getContract('RoleManager', signerKey);
+  /**
+   * 获取TokenFactory合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getTokenFactory(useSigner = true) {
+    return this.getContractByName('TokenFactory', useSigner);
   }
 
-  getPropertyRegistry(signerKey) {
-    return this.getContract('PropertyRegistry', signerKey);
+  /**
+   * 获取Token合约
+   * @param {string} tokenAddress Token合约地址
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getToken(tokenAddress, useSigner = true) {
+    return this.getContract('RealEstateToken', tokenAddress, useSigner);
   }
-
-  getTokenFactory(signerKey) {
-    return this.getContract('TokenFactory', signerKey);
+  
+  /**
+   * 获取RedemptionManager合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getRedemptionManager(useSigner = true) {
+    return this.getContractByName('RedemptionManager', useSigner);
   }
-
-  getToken(tokenAddress, signerKey) {
-    this._checkInitialized();
-    
-    const abi = this.abis['RealEstateToken'];
-    if (!abi) {
-      throw new Error('找不到 RealEstateToken 的 ABI');
-    }
-
-    return new ethers.Contract(tokenAddress, abi, this.provider);
+  
+  /**
+   * 获取RentDistributor合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getRentDistributor(useSigner = true) {
+    return this.getContractByName('RentDistributor', useSigner);
   }
-
-  getRedemptionManager(signerKey) {
-    return this.getContract('RedemptionManager', signerKey);
+  
+  /**
+   * 获取FeeManager合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getFeeManager(useSigner = true) {
+    return this.getContractByName('FeeManager', useSigner);
   }
-
-  getRentDistributor(signerKey) {
-    return this.getContract('RentDistributor', signerKey);
-  }
-
-  getFeeManager(signerKey) {
-    return this.getContract('FeeManager', signerKey);
-  }
-
-  getMarketplace(signerKey) {
-    return this.getContract('Marketplace', signerKey);
-  }
-
-  getTokenHolderQuery(signerKey) {
-    return this.getContract('TokenHolderQuery', signerKey);
-  }
-
-  getRealEstateSystem(signerKey) {
-    return this.getContract('RealEstateSystem', signerKey);
+  
+  /**
+   * 获取Marketplace合约
+   * @param {boolean} useSigner 是否使用签名者
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  async getMarketplace(useSigner = true) {
+    return this.getContractByName('Marketplace', useSigner);
   }
 }
 

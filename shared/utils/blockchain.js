@@ -1,4 +1,4 @@
-const ethers = require('ethers');
+const { ethers } = require('ethers');
 const { configManager } = require('../config');
 const logger = require('./logger');
 
@@ -41,24 +41,26 @@ async function initializeBlockchain() {
       throw new Error('Invalid network configuration: RPC URL is missing');
     }
     
-    // 创建provider
+    // 创建provider - ethers v5
     provider = new ethers.providers.JsonRpcProvider(networkConfig.rpcUrl);
     
     // 测试连接
     const network = await provider.getNetwork();
     logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
     
-    // 创建signer
-    const privateKey = configManager.getPrivateKey('operator');
-    if (!privateKey) {
-      throw new Error('Operator private key not found in configuration');
+    // 创建signer - 如果有私钥
+    try {
+      const privateKey = configManager.getPrivateKey('operator');
+      if (privateKey) {
+        signer = new ethers.Wallet(privateKey, provider);
+        const signerAddress = await signer.getAddress();
+        logger.info(`Initialized signer with address: ${signerAddress}`);
+      } else {
+        logger.warn('Operator private key not found, running in read-only mode');
+      }
+    } catch (error) {
+      logger.warn(`Failed to initialize signer: ${error.message}. Running in read-only mode.`);
     }
-    
-    signer = new ethers.Wallet(privateKey, provider);
-    
-    // 验证签名者
-    const signerAddress = await signer.getAddress();
-    logger.info(`Initialized signer with address: ${signerAddress}`);
     
     initialized = true;
     logger.info('Blockchain connection initialized successfully');
@@ -79,10 +81,13 @@ async function getProvider() {
 
 /**
  * 获取signer实例
- * @returns {ethers.Wallet} signer实例
+ * @returns {ethers.Wallet|null} signer实例，如果未初始化则返回null
  */
 async function getSigner() {
   await ensureInitialized();
+  if (!signer) {
+    logger.warn('Signer not available, running in read-only mode');
+  }
   return signer;
 }
 

@@ -11,9 +11,10 @@ const { performanceMonitor } = require('./middlewares/performanceMonitor');
 const { routeRateLimiter } = require('./middlewares/rateLimiter');
 const logger = require('./utils/logger');
 const { getBaseConfig, initializeConfig } = require('./config');
-const { initializeAbis } = require('@shared/utils/getAbis');
-const { initializeBlockchain, resetBlockchain } = require('@shared/utils/blockchain');
-const { closeLoggers } = require('@shared/utils/logger');
+const { initializeAbis } = require('../../shared/utils/getAbis');
+const { initializeBlockchain, resetBlockchain } = require('../../shared/utils/blockchain');
+const { closeLoggers } = require('../../shared/utils/logger');
+const { contractService } = require('../../shared/utils/contractService');
 
 // 创建 Express 应用
 const app = express();
@@ -64,6 +65,10 @@ async function start() {
     // 初始化区块链连接
     await initializeBlockchain();
     logger.info('Blockchain connection initialized');
+    
+    // 初始化合约服务
+    await contractService.initialize();
+    logger.info('Contract service initialized');
     
     // 获取基础配置
     const baseConfig = getBaseConfig();

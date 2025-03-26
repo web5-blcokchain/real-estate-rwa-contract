@@ -118,6 +118,14 @@ function getNetworkConfigPath(network) {
 }
 
 /**
+ * 获取Hardhat配置文件路径
+ * @returns {string} Hardhat配置文件路径
+ */
+function getHardhatConfigPath() {
+  return path.resolve(ROOT_DIR, 'hardhat.config.js');
+}
+
+/**
  * 验证文件路径
  * @param {string} filePath 文件路径
  * @returns {boolean} 是否有效
@@ -190,6 +198,7 @@ module.exports = {
   getCachePath,
   getMetricsPath,
   getNetworkConfigPath,
+  getHardhatConfigPath,
   validatePath,
   getContractAddress,
   getContractAbi,

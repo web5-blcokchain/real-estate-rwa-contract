@@ -5,6 +5,7 @@
 
 const path = require('path');
 const { configManager } = require('../../../shared/config');
+const { getContractAddresses } = require('../../../shared/config/contracts');
 const { getLogPath } = require('../../../shared/utils/paths');
 const logger = require('../utils/logger');
 
@@ -47,10 +48,14 @@ const initializeConfig = async () => {
     if (!configManager.isInitialized()) {
       await configManager.initialize();
       logger.info('Shared configuration manager initialized');
+      
+      // 输出当前使用的网络配置
+      const networkConfig = configManager.getNetworkConfig();
+      logger.info(`Using network: ${networkConfig.name}, ChainId: ${networkConfig.chainId}, RPC: ${networkConfig.rpcUrl}`);
     }
     
     // 验证合约地址
-    const addresses = configManager.getContractAddresses();
+    const addresses = getContractAddresses();
     if (!addresses) {
       logger.warn('No contract addresses found in configuration');
     } else {

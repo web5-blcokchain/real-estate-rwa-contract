@@ -1,13 +1,13 @@
 const { logger } = require('../../../shared/utils/logger');
 const { ethers } = require('ethers');
-const { getProvider } = require('../../../shared/services/web3Service');
-const CacheManager = require('./cacheManager');
+const { contractService } = require('../../../shared/utils/contractService');
+const { get, set, createNamespace } = require('./cacheManager');
 
 // 创建用于交易队列的缓存实例
-const txCache = CacheManager.createNamespace('transactionQueue', {
-  stdTTL: 86400, // 1 day in seconds
-  checkperiod: 300 // 5 mins
-});
+const txCache = {
+  get: (key) => get(key), 
+  set: (key, value) => set(key, value, 86400) // 1天的TTL
+};
 
 /**
  * 交易状态枚举
@@ -36,24 +36,43 @@ const TX_PRIORITY = {
  */
 class TransactionQueue {
   constructor() {
-    this.provider = getProvider();
+    // 使用contractService获取provider
+    this.provider = null;
     this.pendingTxs = new Map();
     this.confirmationBlocks = 2; // 交易确认所需的区块数
     this.maxRetries = 3; // 交易重试最大次数
     this.checkInterval = 30000; // 交易状态检查间隔（30秒）
     this.gasPriceIncreasePercentage = 10; // 每次重试增加gas价格的百分比
 
-    // 启动交易状态检查定时任务
-    this.checker = setInterval(() => this._checkPendingTransactions(), this.checkInterval);
-    
-    // 从缓存恢复未处理交易
-    this._recoverFromCache();
-    
-    // 为正常退出注册清理函数
-    process.on('SIGTERM', () => this._cleanup());
-    process.on('SIGINT', () => this._cleanup());
-    
-    logger.info('交易队列管理器已初始化');
+    // 异步初始化
+    this._initialize();
+  }
+
+  /**
+   * 异步初始化交易队列
+   */
+  async _initialize() {
+    try {
+      // 确保合约服务已初始化
+      if (!contractService.initialized) {
+        await contractService.initialize();
+      }
+      this.provider = contractService.provider;
+
+      // 启动交易状态检查定时任务
+      this.checker = setInterval(() => this._checkPendingTransactions(), this.checkInterval);
+      
+      // 从缓存恢复未处理交易
+      this._recoverFromCache();
+      
+      // 为正常退出注册清理函数
+      process.on('SIGTERM', () => this._cleanup());
+      process.on('SIGINT', () => this._cleanup());
+      
+      logger.info('交易队列管理器已初始化');
+    } catch (error) {
+      logger.error('初始化交易队列失败:', error);
+    }
   }
 
   /**

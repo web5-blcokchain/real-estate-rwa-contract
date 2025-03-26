@@ -1,4 +1,6 @@
 const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
 const { getEnvPath, validatePath } = require('../utils/paths');
 const logger = require('../utils/logger');
 
@@ -15,21 +17,34 @@ function loadEnvironment() {
   }
   
   try {
+    // 首先尝试从工作目录加载.env
+    const rootEnvPath = path.resolve(process.cwd(), '.env');
     const envPath = getEnvPath();
-    if (!validatePath(envPath)) {
+    
+    // 检查两个可能的位置
+    const paths = [rootEnvPath, envPath];
+    let loaded = false;
+    
+    for (const p of paths) {
+      if (fs.existsSync(p)) {
+        logger.info(`Loading .env from: ${p}`);
+        const result = dotenv.config({ path: p });
+        if (result.error) {
+          logger.warn(`Error loading .env file from ${p}:`, result.error);
+        } else {
+          logger.info(`Environment variables loaded successfully from ${p}`);
+          loaded = true;
+          break;
+        }
+      }
+    }
+    
+    if (!loaded) {
       logger.warn('No .env file found, using default environment variables');
-      initialized = true;
-      return false;
     }
-
-    const result = dotenv.config({ path: envPath });
-    if (result.error) {
-      logger.warn('Error loading .env file:', result.error);
-      return false;
-    } else {
-      logger.info('Environment variables loaded successfully');
-      return true;
-    }
+    
+    initialized = true;
+    return loaded;
   } catch (error) {
     logger.error('Failed to load environment variables:', error);
     throw error;
@@ -41,17 +56,33 @@ function loadEnvironment() {
  * @returns {Array<string>} 缺失的环境变量列表，为空表示所有必需变量都存在
  */
 function validateEnvironment() {
+  // 修改必需的环境变量列表，移除ADMIN/OPERATOR等私钥以允许只读模式
   const requiredEnvVars = [
-    'DEPLOY_NETWORK',
-    'ADMIN_PRIVATE_KEY',
-    'OPERATOR_PRIVATE_KEY',
-    'USER_PRIVATE_KEY'
+    'DEPLOY_NETWORK'
   ];
 
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
   
   if (missingVars.length > 0) {
     logger.warn(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+  
+  // 检查但不报错的私钥
+  const privateKeys = [
+    'ADMIN_PRIVATE_KEY',
+    'OPERATOR_PRIVATE_KEY',
+    'USER_PRIVATE_KEY',
+    'FINANCE_PRIVATE_KEY',
+    'EMERGENCY_PRIVATE_KEY',
+    'DEPLOYER_PRIVATE_KEY',
+    'SUPER_ADMIN_PRIVATE_KEY',
+    'PROPERTY_MANAGER_PRIVATE_KEY',
+    'FEE_COLLECTOR_PRIVATE_KEY'
+  ];
+  
+  const missingKeys = privateKeys.filter(key => !process.env[key]);
+  if (missingKeys.length > 0) {
+    logger.info(`Running in read-only mode for roles: ${missingKeys.map(k => k.replace('_PRIVATE_KEY', '')).join(', ')}`);
   }
   
   return missingVars;
@@ -90,7 +121,10 @@ function getEnvVar(name, defaultValue = null, required = false) {
  * @returns {string} 网络环境
  */
 function getNetworkEnv() {
-  return getEnvVar('DEPLOY_NETWORK', 'bsc_testnet');
+  // 从环境变量获取网络设置，默认为bsc_testnet
+  const networkEnv = getEnvVar('DEPLOY_NETWORK', 'bsc_testnet');
+  logger.info(`使用网络环境: ${networkEnv}`);
+  return networkEnv;
 }
 
 /**

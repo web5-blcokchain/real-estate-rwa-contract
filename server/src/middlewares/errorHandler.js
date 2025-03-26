@@ -1,96 +1,5 @@
-const logger = require('../utils/logger');
-const { ApiError, BaseError } = require('@shared/utils/errors');
-
-/**
- * API错误类
- * 用于标准化API错误响应
- */
-class ApiError extends Error {
-  constructor(statusCode, message, isOperational = true, stack = '') {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = isOperational;
-    
-    if (stack) {
-      this.stack = stack;
-    } else {
-      Error.captureStackTrace(this, this.constructor);
-    }
-  }
-  
-  /**
-   * 创建400错误 - 错误的请求
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static badRequest(message) {
-    return new ApiError(400, message);
-  }
-  
-  /**
-   * 创建401错误 - 未授权
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static unauthorized(message = '未提供有效的认证信息') {
-    return new ApiError(401, message);
-  }
-  
-  /**
-   * 创建403错误 - 禁止访问
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static forbidden(message = '您没有权限执行此操作') {
-    return new ApiError(403, message);
-  }
-  
-  /**
-   * 创建404错误 - 资源未找到
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static notFound(message = '请求的资源不存在') {
-    return new ApiError(404, message);
-  }
-  
-  /**
-   * 创建422错误 - 无法处理的实体
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static unprocessableEntity(message) {
-    return new ApiError(422, message);
-  }
-  
-  /**
-   * 创建500错误 - 服务器内部错误
-   * @param {string} message 错误信息
-   * @param {boolean} isOperational 是否是可操作的错误
-   * @returns {ApiError} ApiError实例
-   */
-  static internal(message = '服务器内部错误', isOperational = true) {
-    return new ApiError(500, message, isOperational);
-  }
-  
-  /**
-   * 创建503错误 - 服务不可用
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static serviceUnavailable(message = '服务暂时不可用') {
-    return new ApiError(503, message);
-  }
-  
-  /**
-   * 创建链上操作错误
-   * @param {string} message 错误信息
-   * @returns {ApiError} ApiError实例
-   */
-  static contractError(message) {
-    return new ApiError(500, `区块链操作失败: ${message}`, true);
-  }
-}
+const logger = require('../../../shared/utils/logger');
+const { ApiError, BaseError, ValidationError, NetworkError, ContractError } = require('../../../shared/utils/errors');
 
 /**
  * 处理404路由错误
@@ -102,7 +11,7 @@ const notFoundHandler = (req, res, next) => {
   next(new ApiError({
     message: `找不到路由: ${req.originalUrl}`,
     statusCode: 404,
-    code: 'ROUTE_NOT_FOUND'
+    code: 'NOT_FOUND'
   }));
 };
 
@@ -124,24 +33,12 @@ const errorHandler = (err, req, res, next) => {
       }
     });
     
-    // 处理API错误
-    if (err instanceof ApiError) {
-      return res.status(err.statusCode).json({
-        success: false,
-        error: {
-          message: err.message,
-          code: err.code,
-          details: err.details,
-          timestamp: err.timestamp
-        }
-      });
-    }
-    
-    // 处理其他BaseError
+    // 处理API错误和BaseError
     if (err instanceof BaseError) {
-      const statusCode = err.code === 'NETWORK_ERROR' ? 503 : 
-                         err.code === 'VALIDATION_ERROR' ? 400 : 
-                         err.code === 'CONTRACT_ERROR' ? 400 : 500;
+      const statusCode = err.statusCode || 
+                        (err.code === 'NETWORK_ERROR' ? 503 : 
+                        err.code === 'VALIDATION_ERROR' ? 400 : 
+                        err.code === 'CONTRACT_ERROR' ? 400 : 500);
       
       return res.status(statusCode).json({
         success: false,
@@ -192,65 +89,30 @@ const errorHandler = (err, req, res, next) => {
       });
     }
     
-    // 处理区块链错误
-    if (err.code === 'NETWORK_ERROR') {
-      return res.status(503).json({
-        success: false,
-        error: {
-          message: '网络连接失败',
-          code: 'NETWORK_ERROR',
-          details: err.message,
-          timestamp: new Date().toISOString()
-        }
-      });
-    }
-    
-    if (err.code === 'INSUFFICIENT_FUNDS') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: '余额不足',
-          code: 'INSUFFICIENT_FUNDS',
-          details: err.message,
-          timestamp: new Date().toISOString()
-        }
-      });
-    }
-    
-    if (err.code === 'CALL_EXCEPTION') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: '合约调用失败',
-          code: 'CALL_EXCEPTION',
-          details: err.message,
-          timestamp: new Date().toISOString()
-        }
-      });
-    }
-    
-    // 处理其他错误
-    return res.status(500).json({
+    // 处理其他所有错误
+    const statusCode = err.statusCode || 500;
+    const errorResponse = {
       success: false,
       error: {
-        message: '服务器内部错误',
-        code: 'INTERNAL_SERVER_ERROR',
-        details: process.env.NODE_ENV === 'development' ? err.message : null,
+        message: statusCode === 500 ? '服务器内部错误' : err.message,
+        code: err.code || 'INTERNAL_ERROR',
         timestamp: new Date().toISOString()
       }
-    });
-  } catch (error) {
-    // 处理错误处理过程中的错误
-    logger.error('错误处理失败', {
-      originalError: err,
-      handlerError: error
-    });
+    };
     
+    if (err.details) {
+      errorResponse.error.details = err.details;
+    }
+    
+    return res.status(statusCode).json(errorResponse);
+  } catch (error) {
+    // 处理错误处理器中的错误
+    logger.error('错误处理器失败:', error);
     return res.status(500).json({
       success: false,
       error: {
         message: '服务器内部错误',
-        code: 'INTERNAL_SERVER_ERROR',
+        code: 'INTERNAL_ERROR',
         timestamp: new Date().toISOString()
       }
     });
@@ -258,78 +120,74 @@ const errorHandler = (err, req, res, next) => {
 };
 
 /**
- * 异步处理包装器
- * 捕获异步中间件中的错误
- * @param {function} fn 异步函数
- * @returns {function} 包装后的函数
+ * 创建常用错误的便捷函数
  */
-const asyncHandler = (fn) => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
-};
-
-// 创建标准化的API错误辅助函数
-const createAPIError = {
+const createError = {
   badRequest: (message, details = {}) => new ApiError({
-    message, 
-    statusCode: 400, 
-    code: 'BAD_REQUEST', 
+    message,
+    statusCode: 400,
+    code: 'BAD_REQUEST',
     details
   }),
   
   unauthorized: (message = '未提供有效的认证信息', details = {}) => new ApiError({
-    message, 
-    statusCode: 401, 
-    code: 'UNAUTHORIZED', 
+    message,
+    statusCode: 401,
+    code: 'UNAUTHORIZED',
     details
   }),
   
   forbidden: (message = '您没有权限执行此操作', details = {}) => new ApiError({
-    message, 
-    statusCode: 403, 
-    code: 'FORBIDDEN', 
+    message,
+    statusCode: 403,
+    code: 'FORBIDDEN',
     details
   }),
   
   notFound: (message = '请求的资源不存在', details = {}) => new ApiError({
-    message, 
-    statusCode: 404, 
-    code: 'NOT_FOUND', 
+    message,
+    statusCode: 404,
+    code: 'NOT_FOUND',
+    details
+  }),
+  
+  conflict: (message, details = {}) => new ApiError({
+    message,
+    statusCode: 409,
+    code: 'CONFLICT',
     details
   }),
   
   unprocessableEntity: (message, details = {}) => new ApiError({
-    message, 
-    statusCode: 422, 
-    code: 'UNPROCESSABLE_ENTITY', 
+    message,
+    statusCode: 422,
+    code: 'UNPROCESSABLE_ENTITY',
     details
   }),
   
   internal: (message = '服务器内部错误', details = {}) => new ApiError({
-    message, 
-    statusCode: 500, 
-    code: 'INTERNAL_SERVER_ERROR', 
+    message,
+    statusCode: 500,
+    code: 'INTERNAL_SERVER_ERROR',
     details
   }),
   
   serviceUnavailable: (message = '服务暂时不可用', details = {}) => new ApiError({
-    message, 
-    statusCode: 503, 
-    code: 'SERVICE_UNAVAILABLE', 
+    message,
+    statusCode: 503,
+    code: 'SERVICE_UNAVAILABLE',
     details
   }),
   
-  contractError: (message, details = {}) => new ApiError({
-    message: `区块链操作失败: ${message}`, 
-    statusCode: 500, 
-    code: 'CONTRACT_ERROR', 
-    details
-  })
+  contractError: (message, details = {}) => new ContractError(message, details),
+  
+  validationError: (message, details = {}) => new ValidationError(message, details),
+  
+  networkError: (message, details = {}) => new NetworkError(message, details)
 };
 
 module.exports = {
-  ApiError,
   notFoundHandler,
   errorHandler,
-  asyncHandler,
-  createAPIError
+  createError
 }; 

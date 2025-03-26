@@ -46,10 +46,9 @@ function loadFromEnv() {
       return;
     }
     
-    // 验证私钥格式
+    // 验证私钥格式，但只发出警告而不阻止使用
     if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
-      logger.error(`私钥格式错误: ${role}`);
-      return;
+      logger.warn(`私钥格式可能不正确: ${role}，但仍将使用它`);
     }
     
     roleKeys[role] = privateKey;
@@ -65,7 +64,8 @@ function loadFromEnv() {
 function getPrivateKey(role) {
   const key = roleKeys[role];
   if (!key) {
-    throw new Error(`Private key not found for role: ${role}`);
+    logger.warn(`未找到角色 ${role} 的私钥，返回空值`);
+    return null; // 返回null而不是抛出错误
   }
   return key;
 }

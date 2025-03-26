@@ -2,7 +2,7 @@
  * 配置模块索引
  * 统一导出所有配置
  */
-const { validatePath } = require('../utils/paths');
+const { validatePath, getHardhatConfigPath } = require('../utils/paths');
 const logger = require('../utils/logger');
 const { initializeEnvironment } = require('./environment');
 const { getNetworkConfig, validateNetworkConfig } = require('./networks');
@@ -88,6 +88,39 @@ class ConfigManager {
       throw new Error('Configuration manager not initialized');
     }
     return this.config.network;
+  }
+
+  /**
+   * 获取Hardhat网络配置
+   * @returns {Object} Hardhat网络配置
+   */
+  getHardhatNetworkConfig() {
+    if (!this.initialized) {
+      throw new Error('Configuration manager not initialized');
+    }
+    return this.config.network.hardhatConfig;
+  }
+
+  /**
+   * 获取网络原始RPC URL
+   * @returns {string} RPC URL
+   */
+  getRpcUrl() {
+    if (!this.initialized) {
+      throw new Error('Configuration manager not initialized');
+    }
+    return this.config.network.rpcUrl;
+  }
+
+  /**
+   * 获取网络链ID
+   * @returns {number} 链ID
+   */
+  getChainId() {
+    if (!this.initialized) {
+      throw new Error('Configuration manager not initialized');
+    }
+    return this.config.network.chainId;
   }
 
   /**

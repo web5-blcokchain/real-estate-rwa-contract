@@ -46,7 +46,7 @@ async function loadConfig() {
     console.log('网络配置:', networkConfig);
 
     // 使用 ethers 的网络配置
-    const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+    const provider = new ethers.providers.JsonRpcProvider(networkConfig.rpcUrl);
     const networkInfo = await provider.getNetwork();
     console.log('网络信息:', {
       name: networkInfo.name,

@@ -3,12 +3,52 @@
  * 限制API请求频率以防止滥用
  */
 
-const { caches } = require('@server/utils/cacheManager');
 const { createAPIError } = require('./errorHandler');
-const logger = require('@server/utils/logger');
+const logger = require('../utils/logger');
 
-// 创建专用的速率限制缓存
-const rateCache = caches.create('rateLimit', { ttl: 60 }); // 1分钟TTL
+// 使用内存对象作为简单缓存
+const rateCache = {
+  cache: new Map(),
+  expiryTimes: new Map(),
+  
+  // 设置缓存值
+  set: function(key, value, ttl) {
+    this.cache.set(key, value);
+    const expiryTime = Date.now() + (ttl * 1000);
+    this.expiryTimes.set(key, expiryTime);
+    return true;
+  },
+  
+  // 获取缓存值
+  get: function(key) {
+    // 检查是否过期
+    const expiryTime = this.expiryTimes.get(key);
+    if (expiryTime && expiryTime < Date.now()) {
+      this.delete(key);
+      return undefined;
+    }
+    return this.cache.get(key);
+  },
+  
+  // 删除缓存项
+  delete: function(key) {
+    this.cache.delete(key);
+    this.expiryTimes.delete(key);
+    return true;
+  },
+  
+  // 获取所有键
+  getKeys: function() {
+    return [...this.cache.keys()];
+  },
+  
+  // 清除所有缓存
+  clear: function() {
+    this.cache.clear();
+    this.expiryTimes.clear();
+    return true;
+  }
+};
 
 /**
  * 基于IP的速率限制中间件
@@ -54,7 +94,7 @@ function ipRateLimiter(options = {}) {
     // 如果超出限制，返回错误
     if (requestCount > max) {
       logger.warn(`Rate limit exceeded for ${key}`);
-      return next(createAPIError.serviceUnavailable(message));
+      return next(createAPIError.tooManyRequests(message));
     }
     
     next();
@@ -119,8 +159,7 @@ function routeRateLimiter(options = {}) {
 function getRateLimitStats() {
   return {
     activeIPs: rateCache.getKeys().length,
-    ipList: rateCache.getKeys(),
-    cacheStats: rateCache.getStats()
+    ipList: rateCache.getKeys()
   };
 }
 

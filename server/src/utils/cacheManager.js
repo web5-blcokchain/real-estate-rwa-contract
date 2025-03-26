@@ -1,263 +1,199 @@
 /**
- * 缓存管理系统
- * 提供多层次缓存功能，支持内存缓存
+ * 缓存管理工具
+ * 提供内存缓存功能，减轻API服务器负载和提高响应速度
  */
 
 const NodeCache = require('node-cache');
 const logger = require('./logger');
 
-// 默认TTL 10分钟 (秒)
-const DEFAULT_TTL = 10 * 60;
-
-// 内存缓存实例
-const memoryCache = new NodeCache({
-  stdTTL: DEFAULT_TTL,
-  checkperiod: 60,
-  useClones: false // 禁用对象克隆以提高性能，但需要开发者注意不要修改从缓存中获取的对象
+// 创建默认缓存实例
+const cache = new NodeCache({
+  stdTTL: 300, // 默认缓存时间为300秒（5分钟）
+  checkperiod: 60, // 定期检查过期项的时间（秒）
+  useClones: false // 不使用深拷贝，提高性能
 });
 
-/**
- * 缓存构造函数
- * @param {string} namespace 缓存命名空间
- * @param {object} options 缓存选项
- */
-class CacheManager {
-  constructor(namespace, options = {}) {
-    this.namespace = namespace;
-    this.options = {
-      ttl: options.ttl || DEFAULT_TTL,
-      debug: options.debug || false
-    };
-    
-    // 统计信息
-    this.stats = {
-      hits: 0,
-      misses: 0,
-      sets: 0,
-      deletes: 0
-    };
-    
-    if (this.options.debug) {
-      logger.debug(`[缓存] 初始化缓存命名空间: ${namespace}`);
-    }
-  }
-  
-  /**
-   * 生成缓存键
-   * @param {string} key 原始键
-   * @returns {string} 带命名空间的缓存键
-   */
-  _getCacheKey(key) {
-    return `${this.namespace}:${key}`;
-  }
-  
-  /**
-   * 从缓存获取值
-   * @param {string} key 缓存键
-   * @returns {*} 缓存的值，如果不存在则返回undefined
-   */
-  get(key) {
-    const cacheKey = this._getCacheKey(key);
-    const value = memoryCache.get(cacheKey);
-    
-    if (value !== undefined) {
-      this.stats.hits++;
-      if (this.options.debug) {
-        logger.debug(`[缓存] 命中: ${cacheKey}`);
-      }
-    } else {
-      this.stats.misses++;
-      if (this.options.debug) {
-        logger.debug(`[缓存] 未命中: ${cacheKey}`);
-      }
-    }
-    
-    return value;
-  }
-  
-  /**
-   * 设置缓存值
-   * @param {string} key 缓存键
-   * @param {*} value 要缓存的值
-   * @param {number} ttl 过期时间(秒)，如果未指定则使用默认TTL
-   * @returns {boolean} 是否成功设置
-   */
-  set(key, value, ttl = this.options.ttl) {
-    const cacheKey = this._getCacheKey(key);
-    
-    if (value === undefined || value === null) {
-      if (this.options.debug) {
-        logger.debug(`[缓存] 尝试缓存undefined/null值: ${cacheKey}`);
-      }
-      return false;
-    }
-    
-    const success = memoryCache.set(cacheKey, value, ttl);
-    
-    if (success) {
-      this.stats.sets++;
-      if (this.options.debug) {
-        logger.debug(`[缓存] 已设置: ${cacheKey}, TTL: ${ttl}秒`);
-      }
-    } else {
-      logger.warn(`[缓存] 设置失败: ${cacheKey}`);
-    }
-    
-    return success;
-  }
-  
-  /**
-   * 删除缓存项
-   * @param {string} key 缓存键
-   * @returns {boolean} 是否成功删除
-   */
-  delete(key) {
-    const cacheKey = this._getCacheKey(key);
-    const success = memoryCache.del(cacheKey);
-    
-    if (success) {
-      this.stats.deletes++;
-      if (this.options.debug) {
-        logger.debug(`[缓存] 已删除: ${cacheKey}`);
-      }
-    }
-    
-    return success;
-  }
-  
-  /**
-   * 检查键是否存在
-   * @param {string} key 缓存键
-   * @returns {boolean} 是否存在
-   */
-  has(key) {
-    const cacheKey = this._getCacheKey(key);
-    return memoryCache.has(cacheKey);
-  }
-  
-  /**
-   * 获取统计信息
-   * @returns {object} 统计信息
-   */
-  getStats() {
-    return {
-      ...this.stats,
-      hitRate: this.stats.hits / (this.stats.hits + this.stats.misses || 1),
-      namespace: this.namespace,
-      keysCount: this.getKeys().length
-    };
-  }
-  
-  /**
-   * 获取当前命名空间下所有的键
-   * @returns {string[]} 键列表
-   */
-  getKeys() {
-    const allKeys = memoryCache.keys();
-    const namespacePrefix = `${this.namespace}:`;
-    
-    return allKeys
-      .filter(key => key.startsWith(namespacePrefix))
-      .map(key => key.slice(namespacePrefix.length));
-  }
-  
-  /**
-   * 清空当前命名空间下的所有缓存
-   */
-  clear() {
-    const keys = this.getKeys();
-    keys.forEach(key => this.delete(key));
-    
-    if (this.options.debug) {
-      logger.debug(`[缓存] 已清空命名空间: ${this.namespace}, 删除了 ${keys.length} 个键`);
-    }
-    
-    return keys.length;
-  }
-  
-  /**
-   * 带有缓存的函数调用包装器
-   * @param {Function} fn 要包装的函数
-   * @param {string|Function} keyGenerator 缓存键生成函数或前缀
-   * @param {object} options 选项
-   * @returns {Function} 包装后的函数
-   */
-  cacheWrapper(fn, keyGenerator, options = {}) {
-    const ttl = options.ttl || this.options.ttl;
-    const self = this;
-    
-    return async function(...args) {
-      // 生成缓存键
-      let cacheKey;
-      if (typeof keyGenerator === 'function') {
-        cacheKey = keyGenerator(...args);
-      } else {
-        cacheKey = `${keyGenerator}:${JSON.stringify(args)}`;
-      }
-      
-      // 尝试从缓存获取结果
-      const cachedResult = self.get(cacheKey);
-      if (cachedResult !== undefined) {
-        return cachedResult;
-      }
-      
-      // 调用原始函数
-      const result = await fn.apply(this, args);
-      
-      // 缓存结果
-      if (result !== undefined && result !== null) {
-        self.set(cacheKey, result, ttl);
-      }
-      
-      return result;
-    };
-  }
-}
-
-// 预创建的常用缓存实例
-const caches = {
-  // 区块链数据缓存，3分钟过期
-  blockchain: new CacheManager('blockchain', { ttl: 180 }),
-  
-  // API响应缓存，2分钟过期
-  api: new CacheManager('api', { ttl: 120 }),
-  
-  // 用户数据缓存，5分钟过期
-  user: new CacheManager('user', { ttl: 300 }),
-  
-  // 系统配置缓存，10分钟过期
-  config: new CacheManager('config', { ttl: 600 }),
-  
-  // 创建自定义缓存实例
-  create: (namespace, options) => new CacheManager(namespace, options)
+// 初始化缓存统计信息
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  keys: 0,
+  lastReset: Date.now()
 };
 
 /**
- * 刷新所有缓存
+ * 从缓存中获取数据
+ * @param {string} key 缓存键
+ * @returns {any} 缓存的数据，如果不存在则返回undefined
  */
-function flushAll() {
-  memoryCache.flushAll();
-  logger.info('所有缓存已清空');
+function get(key) {
+  const value = cache.get(key);
+  
+  if (value === undefined) {
+    cacheStats.misses++;
+    return undefined;
+  }
+  
+  cacheStats.hits++;
+  return value;
 }
 
 /**
- * 获取所有缓存统计信息
+ * 将数据存入缓存
+ * @param {string} key 缓存键
+ * @param {any} value 要缓存的数据
+ * @param {number} [ttl] 缓存过期时间（秒），不指定则使用默认时间
+ * @returns {boolean} 是否成功设置缓存
  */
-function getAllStats() {
-  const stats = {};
+function set(key, value, ttl) {
+  const success = cache.set(key, value, ttl);
   
-  Object.keys(caches).forEach(key => {
-    if (typeof caches[key] === 'object' && caches[key] instanceof CacheManager) {
-      stats[key] = caches[key].getStats();
+  if (success) {
+    cacheStats.keys = cache.keys().length;
+  }
+  
+  return success;
+}
+
+/**
+ * 从缓存中删除数据
+ * @param {string} key 缓存键
+ * @returns {boolean} 是否成功删除缓存
+ */
+function del(key) {
+  const deleted = cache.del(key);
+  
+  if (deleted > 0) {
+    cacheStats.keys = cache.keys().length;
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * 检查缓存键是否存在
+ * @param {string} key 缓存键
+ * @returns {boolean} 缓存键是否存在
+ */
+function has(key) {
+  return cache.has(key);
+}
+
+/**
+ * 生成用于API缓存的键
+ * @param {string} prefix 键前缀
+ * @param {object} params 请求参数
+ * @returns {string} 缓存键
+ */
+function generateCacheKey(prefix, params = {}) {
+  const paramStr = Object.keys(params)
+    .sort()
+    .map(key => `${key}:${params[key]}`)
+    .join('|');
+  
+  return `${prefix}|${paramStr}`;
+}
+
+/**
+ * 清除所有缓存或特定键的缓存
+ * @param {string} [key] 要清除的缓存键，不指定则清除所有缓存
+ * @returns {boolean} 是否成功清除缓存
+ */
+function clearCache(key) {
+  if (key) {
+    return del(key);
+  }
+  
+  cache.flushAll();
+  cacheStats.keys = 0;
+  logger.info('所有缓存已清除');
+  return true;
+}
+
+/**
+ * 获取缓存统计信息
+ * @returns {object} 缓存统计信息
+ */
+function getCacheStats() {
+  const cacheInfo = cache.getStats();
+  
+  return {
+    ...cacheStats,
+    ...cacheInfo,
+    memoryUsage: process.memoryUsage(),
+    uptime: (Date.now() - cacheStats.lastReset) / 1000, // 转换为秒
+    hitRate: cacheStats.hits + cacheStats.misses > 0 
+      ? cacheStats.hits / (cacheStats.hits + cacheStats.misses) 
+      : 0
+  };
+}
+
+/**
+ * 获取所有缓存键
+ * @returns {string[]} 缓存键列表
+ */
+function getCacheKeys() {
+  return cache.keys();
+}
+
+/**
+ * 使用缓存包装API处理程序
+ * @param {Function} handler API处理程序函数
+ * @param {string} keyPrefix 缓存键前缀
+ * @param {number} [ttl] 缓存过期时间（秒）
+ * @returns {Function} 包装后的处理程序
+ */
+function withCache(handler, keyPrefix, ttl) {
+  return async (req, res, next) => {
+    try {
+      // 为GET请求使用缓存
+      if (req.method === 'GET') {
+        // 生成缓存键
+        const cacheKey = generateCacheKey(keyPrefix, {
+          ...req.query,
+          ...req.params,
+          path: req.path
+        });
+        
+        // 检查缓存中是否有数据
+        const cachedData = get(cacheKey);
+        
+        if (cachedData) {
+          // 使用缓存的数据响应请求
+          return res.json(cachedData);
+        }
+        
+        // 修改res.json方法，在返回数据前缓存结果
+        const originalJson = res.json;
+        res.json = function(data) {
+          // 缓存成功的响应
+          if (data && data.success === true) {
+            set(cacheKey, data, ttl);
+          }
+          
+          // 恢复原始json方法并调用
+          res.json = originalJson;
+          return res.json(data);
+        };
+      }
+      
+      // 调用原始处理程序
+      await handler(req, res, next);
+    } catch (error) {
+      next(error);
     }
-  });
-  
-  return stats;
+  };
 }
 
 module.exports = {
-  caches,
-  CacheManager,
-  flushAll,
-  getAllStats
+  get,
+  set,
+  del,
+  has,
+  clearCache,
+  getCacheStats,
+  getCacheKeys,
+  generateCacheKey,
+  withCache
 }; 
