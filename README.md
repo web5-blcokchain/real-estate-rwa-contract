@@ -14,9 +14,9 @@
 
 **2023-03-28**: 完成了监控模块集成任务 [XG0004](./docs/dev/XG0004.md) - 集成监控模块与共享模块，统一了配置管理、ABI获取、区块链连接和事件监听。
 
-**2023-03-30**: 完成服务器模块优化 [XG0005](./docs/dev/XG0005.md) - 减少代码冗余，最大化使用共享模块，统一错误处理，并验证了合约接口覆盖。
+**2023-03-30**: 完成服务器模块优化任务 [XG0005](./docs/dev/XG0005.md) - 减少代码冗余，最大化使用共享模块，统一错误处理，并验证了合约接口覆盖。
 
-**2023-04-02**: 完成API性能优化与测试增强 [XG0006](./docs/dev/XG0006.md) - 实现了性能监控、多层次缓存策略、统一参数验证框架、速率限制和交易队列管理模块，完成了全面性能测试。
+**2023-04-02**: 完成API性能优化与测试增强任务 [XG0006](./docs/dev/XG0006.md) - 实现了性能监控、多层次缓存策略、统一参数验证框架、速率限制和交易队列管理模块，完成了全面性能测试。
 
 ## 主要功能
 
@@ -93,6 +93,24 @@
 
 ## 开始使用
 
+### 环境配置
+
+1. 复制环境变量模板并进行配置：
+
+```bash
+cp .env.example .env
+```
+
+2. 编辑 `.env` 文件，设置必要的环境变量：
+   - `DEPLOY_NETWORK` - 部署网络，可选值：`hardhat`、`testnet`、`mainnet`
+   - 网络配置（根据您选择的网络设置相应变量）:
+     - Hardhat: `HARDHAT_RPC_URL`, `HARDHAT_CHAIN_ID`, `HARDHAT_GAS_PRICE`
+     - Testnet: `TESTNET_RPC_URL`, `TESTNET_CHAIN_ID`, `TESTNET_GAS_PRICE`
+     - Mainnet: `MAINNET_RPC_URL`, `MAINNET_CHAIN_ID`, `MAINNET_GAS_PRICE`
+   - 其他必要的密钥和配置
+
+详细配置说明请参阅 [网络配置文档](./docs/NETWORK_CONFIG.md)。
+
 ### 安装依赖
 
 ```bash
@@ -102,7 +120,33 @@ npm install
 ### 编译合约
 
 ```bash
-npx hardhat compile
+npm run contracts:compile
+```
+
+### 启动本地开发环境
+
+1. 启动 Hardhat 节点（本地区块链）：
+
+```bash
+npm run hardhat:node
+```
+
+2. 在另一个终端窗口部署合约到本地网络：
+
+```bash
+npm run contracts:deploy
+```
+
+3. 启动开发服务器：
+
+```bash
+npm run server:dev
+```
+
+或者使用一键启动命令（同时启动 Hardhat 节点和服务器）：
+
+```bash
+npm run dev
 ```
 
 ### 运行测试
@@ -110,7 +154,7 @@ npx hardhat compile
 运行所有测试：
 
 ```bash
-npx hardhat test
+npm run contracts:test
 ```
 
 运行特定测试：
@@ -119,10 +163,14 @@ npx hardhat test
 npx hardhat test test/E2EFlow.test.js
 ```
 
-### 部署到测试网
+### 部署到测试网/主网
 
 ```bash
-npx hardhat run scripts/deploy.js --network goerli
+# 部署到测试网
+npm run contracts:deploy:testnet
+
+# 部署到主网
+npm run contracts:deploy:mainnet
 ```
 
 ## 合约升级和维护

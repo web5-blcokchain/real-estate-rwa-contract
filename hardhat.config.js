@@ -2,11 +2,9 @@ require('@nomicfoundation/hardhat-ethers');
 require('@nomicfoundation/hardhat-verify');
 require('@openzeppelin/hardhat-upgrades');
 require('dotenv').config();
-const { getPrivateKey } = require('./scripts/utils/secure-key');
 
 // 从环境变量中获取配置
-const PRIVATE_KEY = getPrivateKey() || '0000000000000000000000000000000000000000000000000000000000000000';
-const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || PRIVATE_KEY;
+const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || '';
 
 // 获取各网络配置
@@ -23,7 +21,7 @@ const HARDHAT_CHAIN_ID = parseInt(process.env.HARDHAT_CHAIN_ID || '31337');
 const HARDHAT_GAS_PRICE = parseInt(process.env.HARDHAT_GAS_PRICE || '50000000000');
 
 // 如果没有有效的私钥，输出警告
-if (PRIVATE_KEY === '0000000000000000000000000000000000000000000000000000000000000000') {
+if (DEPLOYER_PRIVATE_KEY === '0000000000000000000000000000000000000000000000000000000000000000') {
   console.warn('警告: 使用默认私钥，请设置有效的私钥');
 }
 
@@ -43,10 +41,14 @@ module.exports = {
   },
   networks: {
     hardhat: {
-      url: HARDHAT_RPC_URL,
       chainId: HARDHAT_CHAIN_ID,
       gasPrice: HARDHAT_GAS_PRICE,
       allowUnlimitedContractSize: true
+    },
+    localhost: {
+      url: HARDHAT_RPC_URL,
+      chainId: HARDHAT_CHAIN_ID,
+      gasPrice: HARDHAT_GAS_PRICE
     },
     bsc_mainnet: {
       url: MAINNET_RPC_URL,

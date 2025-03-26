@@ -50,7 +50,6 @@ hardhat.config.local.js
 
 # 密钥文件
 *.pem
-*.key
 mnemonic.txt
 
 # 中心化数据库备份

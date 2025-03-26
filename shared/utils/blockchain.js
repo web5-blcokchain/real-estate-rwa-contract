@@ -1,6 +1,38 @@
 const { ethers } = require('ethers');
 const { configManager } = require('../config');
 const logger = require('./logger');
+// 加载dotenv，确保环境变量在早期就被加载
+const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
+
+// 确保环境变量已加载
+function ensureEnvLoaded() {
+  try {
+    // 查找项目根目录的.env文件
+    const possiblePaths = [
+      path.resolve(process.cwd(), '.env'),
+      path.resolve(__dirname, '../../../.env')
+    ];
+    
+    for (const envPath of possiblePaths) {
+      if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath });
+        logger.info(`从 ${envPath} 加载了环境变量`);
+        return true;
+      }
+    }
+    
+    logger.warn('未找到.env文件');
+    return false;
+  } catch (error) {
+    logger.warn(`加载环境变量时出错: ${error.message}`);
+    return false;
+  }
+}
+
+// 初始化时确保环境变量已加载
+ensureEnvLoaded();
 
 let provider = null;
 let signer = null;
@@ -36,6 +68,7 @@ async function initializeBlockchain() {
 
     // 获取网络配置
     const networkConfig = configManager.getNetworkConfig();
+    const networkName = configManager.getNetworkEnv();
     
     if (!networkConfig || !networkConfig.rpcUrl) {
       throw new Error('Invalid network configuration: RPC URL is missing');
@@ -44,9 +77,20 @@ async function initializeBlockchain() {
     // 创建provider - ethers v5
     provider = new ethers.providers.JsonRpcProvider(networkConfig.rpcUrl);
     
-    // 测试连接
-    const network = await provider.getNetwork();
-    logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
+    try {
+      // 测试连接
+      const network = await provider.getNetwork();
+      logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
+    } catch (error) {
+      // 如果是Hardhat网络但节点未运行，提供更友好的错误信息
+      if (networkName === 'hardhat') {
+        logger.error('Hardhat网络节点未运行，请使用以下命令启动Hardhat节点：');
+        logger.error('npm run hardhat:node');
+        throw new Error('Hardhat网络节点未运行。请使用 npm run hardhat:node 启动Hardhat节点。');
+      } else {
+        throw error;
+      }
+    }
     
     // 创建signer - 如果有私钥
     try {

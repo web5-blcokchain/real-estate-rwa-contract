@@ -12,7 +12,6 @@
 - [性能和优化问题](#性能和优化问题)
 - [合约升级问题](#合约升级问题)
 - [安全相关问题](#安全相关问题)
-- [密钥管理问题](#密钥管理问题)
 - [合约地址配置](#合约地址配置)
 
 ## 部署相关问题
@@ -445,72 +444,102 @@ A: 管理权限控制：
 4. 所有管理操作都记录事件，便于审计
 5. 定期审查权限分配
 
-## 密钥管理问题
+## 合约地址配置
 
-### Q: 如何安全地管理部署私钥？
+### 合约地址的来源和优先级
 
-A: 系统提供了多种管理部署私钥的方式，按安全性排序：
+合约地址可以从两个来源获取：
+1. 环境变量（.env 文件）
+2. 部署状态文件（deploy-state.json）
 
-1. **使用环境变量（基本安全性）**：
-   - 在`.env`文件中设置`PRIVATE_KEY`变量
-   - 确保`.env`文件被添加到`.gitignore`避免意外提交
-   - 适合开发环境，不推荐用于生产部署
+地址加载的优先级规则：
+1. 优先使用环境变量中的地址（如果地址是合法的以太坊地址）
+2. 如果环境变量中的地址不合法，则使用部署状态文件中的地址（如果地址合法）
+3. 如果两个地址都不合法，使用空字符串并输出警告
 
-2. **使用secure-key.js工具（增强安全性）**：
-   - 系统提供的私钥加密存储工具
-   - 私钥使用单独的加密密钥加密存储
-   - 加密密钥和加密后的私钥分开存储
-   - 适合自动化部署环境
+### 如何配置合约地址
 
-3. **使用硬件钱包（最高安全性）**：
-   - 对于主网部署强烈推荐使用硬件钱包
-   - 私钥永远不会离开硬件设备
-   - 需要物理确认每笔交易
+1. 在 `.env` 文件中配置：
+```bash
+ROLE_MANAGER_ADDRESS=0x...
+PROPERTY_REGISTRY_ADDRESS=0x...
+TOKEN_FACTORY_ADDRESS=0x...
+REDEMPTION_MANAGER_ADDRESS=0x...
+RENT_DISTRIBUTOR_ADDRESS=0x...
+FEE_MANAGER_ADDRESS=0x...
+MARKETPLACE_ADDRESS=0x...
+TOKEN_HOLDER_QUERY_ADDRESS=0x...
+REAL_ESTATE_SYSTEM_ADDRESS=0x...
+```
 
-### Q: 如何使用secure-key.js工具管理私钥？
+2. 或者通过部署脚本生成 `deploy-state.json` 文件：
+```bash
+npx hardhat run scripts/deploy-unified.js --network localhost
+```
 
-A: secure-key.js工具提供了更安全的私钥管理方式：
+### 合约地址的使用
 
-1. **生成加密密钥**：
-   ```bash
-   node scripts/utils/secure-key.js generate
-   ```
-   这会生成一个加密密钥，存储在项目根目录下的`.key`文件中
+在代码中使用合约地址：
+```javascript
+const { getContractAddresses } = require('../../../shared/config/contracts');
+const contractAddresses = getContractAddresses();
+```
 
-2. **设置加密私钥**：
-   ```bash
-   node scripts/utils/secure-key.js setup
-   ```
-   按提示输入您的私钥，工具会加密并存储到`.encrypted_key`文件中
+### 更新合约地址
 
-3. **使用加密私钥**：
-   设置完成后，部署脚本会自动使用加密的私钥。此时不再需要在`.env`文件中设置`PRIVATE_KEY`变量。
+1. 更新单个合约地址：
+```javascript
+const { updateContractAddress } = require('../../../shared/config/contracts');
+updateContractAddress('roleManager', '0x...');
+```
+
+2. 保存到部署状态文件：
+```javascript
+const { saveToDeployState } = require('../../../shared/config/contracts');
+saveToDeployState();
+```
+
+### 注意事项
+
+1. 所有合约地址必须是合法的以太坊地址（0x开头的42位十六进制字符串）
+2. 环境变量中的地址优先级最高，但必须确保地址合法
+3. 如果环境变量中的地址不合法，系统会自动使用部署状态文件中的地址
+4. 建议在开发环境中使用 `deploy-state.json`，在生产环境中使用环境变量配置
+
+## 常见问题（密钥和访问相关）
+
+### Q: 如何设置私钥？
+
+A: 将您的私钥直接设置在 `.env` 文件中：
+
+```bash
+# 角色私钥
+ADMIN_PRIVATE_KEY=0x...
+OPERATOR_PRIVATE_KEY=0x...
+DEPLOYER_PRIVATE_KEY=0x...
+# 其他角色私钥...
+```
 
 ### Q: 私钥管理的最佳实践是什么？
 
 A: 遵循以下最佳实践确保私钥安全：
 
 1. **永远不要**：
-   - 将未加密的私钥提交到代码仓库
+   - 将私钥提交到代码仓库
    - 在代码或日志中硬编码私钥
    - 通过不安全的渠道传输私钥
    - 在共享设备上存储私钥
 
 2. **应该**：
-   - 使用加密存储私钥
    - 限制私钥访问权限
    - 对于主网部署使用临时私钥并在部署后转移管理员权限
    - 部署完成后考虑使用多签钱包替代单一私钥控制
    - 定期轮换部署私钥
 
 3. **文件权限**：
-   - secure-key.js会自动为密钥文件设置600权限（仅所有者可读写）
+   - 确保 `.env` 文件的权限设置为600（仅所有者可读写）
    - 确保项目目录位于安全的文件系统上
-   - 避免在共享服务器上存储密钥文件
-
-### Q: 如果我在`.env`文件和加密存储中都设置了私钥，哪个会被使用？
-
-A: 系统优先使用`.env`文件中的`PRIVATE_KEY`。如果`.env`文件中没有设置此变量，才会尝试从加密存储中获取私钥。这种优先级设计允许开发者在特定情况下临时覆盖已加密存储的私钥。
+   - 避免在共享服务器上存储含有私钥的文件
 
 ## 合约地址配置
 

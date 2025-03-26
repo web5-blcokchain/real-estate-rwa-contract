@@ -4,10 +4,51 @@
  */
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 const logger = require('../utils/logger');
 
+// 找到项目根目录
+function findRootDir() {
+  let currentDir = process.cwd();
+  
+  // 向上查找，直到找到包含.env文件的目录，或者到达文件系统根目录
+  while (currentDir !== path.parse(currentDir).root) {
+    if (fs.existsSync(path.join(currentDir, '.env'))) {
+      return currentDir;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+  
+  // 找不到.env文件，返回当前目录
+  return process.cwd();
+}
+
+const rootDir = findRootDir();
+const envPath = path.join(rootDir, '.env');
+
 // 加载环境变量
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+let envLoaded = false;
+if (fs.existsSync(envPath)) {
+  try {
+    const result = dotenv.config({ path: envPath });
+    if (!result.error) {
+      logger.info(`成功从 ${envPath} 加载环境变量`);
+      envLoaded = true;
+    } else {
+      logger.warn(`加载.env文件出错: ${result.error.message}`);
+    }
+  } catch (error) {
+    logger.warn(`加载.env文件时异常: ${error.message}`);
+  }
+}
+
+if (!envLoaded) {
+  logger.warn('无法加载.env文件，将使用已存在的环境变量');
+  // 打印所有可能的目录位置，帮助调试
+  logger.info(`当前工作目录: ${process.cwd()}`);
+  logger.info(`尝试的.env路径: ${envPath}`);
+  logger.info(`模块目录: ${__dirname}`);
+}
 
 // 角色私钥映射
 const roleKeys = {
@@ -38,22 +79,39 @@ function loadFromEnv() {
     feeCollector: 'FEE_COLLECTOR_PRIVATE_KEY'
   };
 
+  // 打印所有环境变量，帮助调试
+  if (!envLoaded) {
+    logger.debug('环境变量检查:');
+    Object.values(envMapping).forEach(key => {
+      logger.debug(`${key}: ${process.env[key] ? '已设置' : '未设置'}`);
+    });
+  }
+
+  // 计数加载的私钥数量
+  let loadedCount = 0;
+
   // 直接从环境变量加载私钥
   Object.entries(envMapping).forEach(([role, envKey]) => {
     const privateKey = process.env[envKey];
     if (!privateKey || privateKey.trim() === '') {
-      logger.warn(`环境变量 ${envKey} 未设置或为空`);
+      logger.debug(`环境变量 ${envKey} 未设置或为空`);
       return;
     }
     
-    // 验证私钥格式，但只发出警告而不阻止使用
+    // 验证私钥格式
     if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
-      logger.warn(`私钥格式可能不正确: ${role}，但仍将使用它`);
+      logger.warn(`私钥格式不正确: ${role}，预期格式为0x开头的66位字符`);
     }
     
     roleKeys[role] = privateKey;
-    logger.info(`已从环境变量加载 ${role} 私钥`);
+    loadedCount++;
   });
+  
+  if (loadedCount > 0) {
+    logger.info(`成功加载了 ${loadedCount} 个角色私钥`);
+  } else {
+    logger.warn('未能加载任何角色私钥，系统将以只读模式运行');
+  }
 }
 
 /**
@@ -64,7 +122,6 @@ function loadFromEnv() {
 function getPrivateKey(role) {
   const key = roleKeys[role];
   if (!key) {
-    logger.warn(`未找到角色 ${role} 的私钥，返回空值`);
     return null; // 返回null而不是抛出错误
   }
   return key;

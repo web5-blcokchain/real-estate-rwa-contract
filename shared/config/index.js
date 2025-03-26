@@ -182,6 +182,17 @@ class ConfigManager {
     }
     await saveToDeployState(state);
   }
+
+  /**
+   * 获取网络环境名称
+   * @returns {string} 网络环境名称（如'hardhat', 'bsc_testnet', 'bsc_mainnet'）
+   */
+  getNetworkEnv() {
+    if (!this.initialized) {
+      throw new Error('Configuration manager not initialized');
+    }
+    return process.env.DEPLOY_NETWORK || 'hardhat';
+  }
 }
 
 const configManager = new ConfigManager();
