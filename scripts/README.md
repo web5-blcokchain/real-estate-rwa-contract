@@ -1,143 +1,106 @@
-# Scripts Documentation
+# 部署脚本使用指南
 
-## 背景
-脚本目录包含了各种自动化工具和部署脚本,用于简化开发、测试和部署流程。这些脚本提供了从合约部署到系统维护的完整工具链。
+本文档介绍智能合约部署系统的使用方法和文件结构。
 
 ## 目录结构
+
 ```
 scripts/
-├── deploy/            # 部署相关脚本
-│   ├── deploy-network.sh    # 网络部署脚本
-│   └── deploy-unified.js    # 统一部署脚本
-├── verify/            # 验证相关脚本
-│   ├── verify-contracts.js  # 合约验证脚本
-│   └── verify-deployment.js # 部署验证脚本
-├── upgrade/           # 升级相关脚本
-├── test/             # 测试相关脚本
-├── config/           # 配置相关脚本
-└── README.md         # 文档说明
+├── deploy.sh              # 主部署脚本
+├── deploy.js              # 部署执行脚本
+├── setup-roles.js         # 角色设置脚本
+├── verify.js              # 合约验证脚本
+├── test/                  # 测试脚本目录
+│   └── deployment-test.js # 部署测试脚本
+├── upgrade/               # 合约升级脚本目录
+├── config/                # 部署配置目录
+└── utils/                 # 工具函数目录
 ```
 
-## 核心脚本
+## 快速入门
 
-### 1. 部署脚本 (deploy/)
-
-#### deploy-network.sh
-网络部署脚本,用于在不同网络上部署合约:
+使用一个命令完成部署、角色设置和测试：
 
 ```bash
-#!/bin/bash
+# 部署到本地网络
+./deploy.sh local --strategy=upgradeable
 
-# 设置网络参数
-NETWORK=$1
-RPC_URL=$2
-PRIVATE_KEY=$3
+# 部署到测试网
+./deploy.sh testnet --verify
 
-# 部署合约
-npx hardhat run scripts/deploy-unified.js --network $NETWORK \
-  --rpc-url $RPC_URL \
-  --private-key $PRIVATE_KEY
+# 部署到主网
+./deploy.sh mainnet --verify
 ```
 
-#### deploy-unified.js
-统一部署脚本,处理合约部署和初始化:
+## 部署流程
 
-```javascript
-async function main() {
-  // 部署合约
-  const propertyRegistry = await deployPropertyRegistry();
-  const tokenFactory = await deployTokenFactory();
-  
-  // 初始化合约
-  await initializeContracts(propertyRegistry, tokenFactory);
-  
-  // 保存部署信息
-  await saveDeploymentInfo({
-    propertyRegistry: propertyRegistry.address,
-    tokenFactory: tokenFactory.address
-  });
-}
+简化的部署流程包括以下步骤：
+
+1. **合约部署**：部署所有必要的合约
+2. **角色设置**：自动为部署者授予系统角色
+3. **部署验证**：测试部署结果以确保一切正常
+4. **合约验证**（可选）：在区块链浏览器上验证合约代码
+
+## 命令参数
+
+### deploy.sh
+
+```bash
+./deploy.sh <network> [options]
 ```
 
-### 2. 验证脚本 (verify/)
+#### 网络参数
 
-#### verify-contracts.js
-合约验证脚本,用于在区块浏览器上验证合约:
+- `local`: 部署到本地开发网络
+- `testnet`: 部署到测试网
+- `mainnet`: 部署到主网
 
-```javascript
-async function verifyContracts() {
-  const contracts = [
-    {
-      name: 'PropertyRegistry',
-      address: process.env.PROPERTY_REGISTRY_ADDRESS,
-      constructorArguments: []
-    },
-    {
-      name: 'TokenFactory',
-      address: process.env.TOKEN_FACTORY_ADDRESS,
-      constructorArguments: []
-    }
-  ];
+#### 选项
 
-  for (const contract of contracts) {
-    await verifyContract(contract);
-  }
-}
+- `--strategy=<策略>`: 部署策略（direct、upgradeable、minimal）
+- `--verify`: 部署后验证合约
+- `--help`: 显示帮助信息
+
+## 单独执行各个步骤
+
+如果需要单独执行某个部署步骤，可以直接运行相应的脚本：
+
+```bash
+# 仅部署合约
+npx hardhat run scripts/deploy.js --network localhost
+
+# 仅设置角色
+npx hardhat run scripts/setup-roles.js --network localhost
+
+# 仅测试部署
+npx hardhat run scripts/test/deployment-test.js --network localhost
+
+# 仅验证合约
+npx hardhat run scripts/verify.js --network localhost
 ```
 
-#### verify-deployment.js
-部署验证脚本,检查合约部署状态:
+## 持久化开发环境
 
-```javascript
-async function verifyDeployment() {
-  // 检查合约地址
-  const addresses = await loadDeploymentInfo();
-  
-  // 验证合约代码
-  for (const [name, address] of Object.entries(addresses)) {
-    const code = await provider.getCode(address);
-    if (code === '0x') {
-      throw new Error(`Contract ${name} not deployed`);
-    }
-  }
-}
-```
+使用持久化的Hardhat节点进行开发时，建议按以下步骤操作：
 
-### 3. 升级脚本 (upgrade/)
+1. 启动持久化节点：
+   ```bash
+   npx hardhat node
+   ```
 
-#### upgrade-contracts.js
-合约升级脚本,处理合约升级流程:
+2. 部署合约到本地节点：
+   ```bash
+   ./deploy.sh local
+   ```
 
-```javascript
-async function upgradeContracts() {
-  // 部署新合约
-  const newImplementation = await deployNewImplementation();
-  
-  // 升级代理
-  await upgradeProxy(newImplementation);
-  
-  // 验证升级
-  await verifyUpgrade();
-}
-```
+详细说明请参阅[持久化节点文档](../docs/persistent-node.md)。
 
-### 4. 测试脚本 (test/)
+## 注意事项
 
-#### run-tests.js
-测试运行脚本,执行测试套件:
-
-```javascript
-async function runTests() {
-  // 运行单元测试
-  await runUnitTests();
-  
-  // 运行集成测试
-  await runIntegrationTests();
-  
-  // 生成测试报告
-  await generateTestReport();
-}
-```
+- 部署到主网前，请确保在测试网上充分测试
+- 主网部署会要求确认，以防止意外部署
+- 部署记录会保存在`deployments/`目录下
+- 每次部署都会生成一个带时间戳的记录文件和一个`{network}-latest.json`文件
 
 ## 配置管理
 
@@ -181,38 +144,6 @@ const deploymentConfig = {
     }
   }
 };
-```
-
-## 使用说明
-
-### 1. 部署合约
-```bash
-# 部署到本地网络
-pnpm deploy:local
-
-# 部署到测试网
-pnpm deploy:sepolia
-
-# 部署到主网
-pnpm deploy:mainnet
-```
-
-### 2. 验证合约
-```bash
-# 验证所有合约
-pnpm verify:all
-
-# 验证特定合约
-pnpm verify:contract PropertyRegistry
-```
-
-### 3. 升级合约
-```bash
-# 升级合约实现
-pnpm upgrade:contract PropertyRegistry
-
-# 验证升级
-pnpm verify:upgrade PropertyRegistry
 ```
 
 ## 错误处理

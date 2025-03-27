@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 
 /**
  * 项目根目录
@@ -81,7 +82,32 @@ function getTestAccountsPath() {
  * @returns {string} 部署状态文件路径
  */
 function getDeployStatePath() {
-  return path.resolve(ROOT_DIR, 'deploy-state.json');
+  // 首先尝试scripts/logging/contracts.json
+  const scriptsLoggingPath = path.resolve(ROOT_DIR, 'scripts/logging/contracts.json');
+  if (fs.existsSync(scriptsLoggingPath)) {
+    return scriptsLoggingPath;
+  }
+  
+  // 然后尝试scripts/deployments/contracts.json（旧路径）
+  const scriptsDeployStatePath = path.resolve(ROOT_DIR, 'scripts/deployments/contracts.json');
+  if (fs.existsSync(scriptsDeployStatePath)) {
+    return scriptsDeployStatePath;
+  }
+  
+  // 再尝试根目录下的deploy-state.json
+  const rootDeployStatePath = path.resolve(ROOT_DIR, 'deploy-state.json');
+  if (fs.existsSync(rootDeployStatePath)) {
+    return rootDeployStatePath;
+  }
+  
+  // 最后尝试shared/deployments/contracts.json
+  const sharedDeployStatePath = path.resolve(ROOT_DIR, 'shared/deployments/contracts.json');
+  if (fs.existsSync(sharedDeployStatePath)) {
+    return sharedDeployStatePath;
+  }
+  
+  // 最后返回首选路径（即使它不存在）
+  return scriptsLoggingPath;
 }
 
 /**
@@ -145,8 +171,62 @@ function validatePath(filePath) {
  * @returns {string} 合约地址
  */
 function getContractAddress(contractName) {
-  const addresses = require('../../deploy-state.json');
-  return addresses[contractName];
+  try {
+    // 首先尝试从部署状态文件获取
+    const deployStatePath = getDeployStatePath();
+    if (fs.existsSync(deployStatePath)) {
+      const addresses = require(deployStatePath);
+      if (addresses[contractName]) {
+        return addresses[contractName];
+      } else if (addresses.contracts && addresses.contracts[contractName]) {
+        return addresses.contracts[contractName];
+      }
+    }
+
+    // 然后尝试从scripts/logging目录下的latest文件获取
+    const scriptsLoggingDir = path.resolve(ROOT_DIR, 'scripts/logging');
+    if (fs.existsSync(scriptsLoggingDir)) {
+      const files = fs.readdirSync(scriptsLoggingDir).filter(file => file.includes('latest.json'));
+      for (const file of files) {
+        const filePath = path.resolve(scriptsLoggingDir, file);
+        const deployment = require(filePath);
+        if (deployment.contracts && deployment.contracts[contractName]) {
+          return deployment.contracts[contractName];
+        }
+      }
+    }
+
+    // 然后尝试从scripts/deployments目录下的latest文件获取（旧路径）
+    const scriptsDeploymentsDir = path.resolve(ROOT_DIR, 'scripts/deployments');
+    if (fs.existsSync(scriptsDeploymentsDir)) {
+      const files = fs.readdirSync(scriptsDeploymentsDir).filter(file => file.includes('latest.json'));
+      for (const file of files) {
+        const filePath = path.resolve(scriptsDeploymentsDir, file);
+        const deployment = require(filePath);
+        if (deployment.contracts && deployment.contracts[contractName]) {
+          return deployment.contracts[contractName];
+        }
+      }
+    }
+
+    // 最后尝试从deployments目录下的latest文件获取
+    const deploymentsDir = path.resolve(ROOT_DIR, 'deployments');
+    if (fs.existsSync(deploymentsDir)) {
+      const files = fs.readdirSync(deploymentsDir).filter(file => file.includes('latest.json'));
+      for (const file of files) {
+        const filePath = path.resolve(deploymentsDir, file);
+        const deployment = require(filePath);
+        if (deployment.contracts && deployment.contracts[contractName]) {
+          return deployment.contracts[contractName];
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Error getting contract address for ${contractName}:`, error);
+    return null;
+  }
 }
 
 /**

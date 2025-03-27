@@ -21,14 +21,17 @@ class NetworkConfigManager {
     }
 
     try {
-      // 初始化hardhat网络配置
-      this._initHardhatNetwork();
+      // 初始化本地网络配置
+      this._initLocalNetwork();
       
-      // 初始化BSC主网配置
-      this._initBscMainnet();
+      // 初始化本地测试网络配置
+      this._initLocalhostNetwork();
       
-      // 初始化BSC测试网配置
-      this._initBscTestnet();
+      // 初始化主网配置
+      this._initMainnet();
+      
+      // 初始化测试网配置
+      this._initTestnet();
       
       this.initialized = true;
       logger.info(`成功从环境变量加载了${Object.keys(this.networks).length}个网络配置`);
@@ -42,10 +45,10 @@ class NetworkConfigManager {
    * 初始化本地hardhat网络配置
    * @private
    */
-  _initHardhatNetwork() {
-    const rpcUrl = getEnvVar('HARDHAT_RPC_URL', 'http://127.0.0.1:8545');
-    const chainId = parseInt(getEnvVar('HARDHAT_CHAIN_ID', '31337'));
-    const gasPrice = parseInt(getEnvVar('HARDHAT_GAS_PRICE', '50000000000'));
+  _initLocalNetwork() {
+    const rpcUrl = getEnvVar('LOCAL_RPC_URL', 'http://127.0.0.1:8545');
+    const chainId = parseInt(getEnvVar('LOCAL_CHAIN_ID', '31337'));
+    const gasPrice = parseInt(getEnvVar('LOCAL_GAS_PRICE', '50000000000'));
     
     this.networks.hardhat = {
       rpcUrl: rpcUrl,
@@ -67,26 +70,26 @@ class NetworkConfigManager {
       }
     };
     
-    logger.debug('加载hardhat网络配置成功');
+    logger.debug('加载本地网络配置成功');
   }
 
   /**
-   * 初始化BSC主网配置
+   * 初始化localhost网络配置
    * @private
    */
-  _initBscMainnet() {
-    const rpcUrl = getEnvVar('MAINNET_RPC_URL', 'https://bsc-dataseed.binance.org/');
-    const chainId = parseInt(getEnvVar('MAINNET_CHAIN_ID', '56'));
-    const gasPrice = parseInt(getEnvVar('MAINNET_GAS_PRICE', '5000000000'));
+  _initLocalhostNetwork() {
+    const rpcUrl = getEnvVar('LOCAL_RPC_URL', 'http://127.0.0.1:8545');
+    const chainId = parseInt(getEnvVar('LOCAL_CHAIN_ID', '31337'));
+    const gasPrice = parseInt(getEnvVar('LOCAL_GAS_PRICE', '50000000000'));
     
-    this.networks.bsc_mainnet = {
+    this.networks.localhost = {
       rpcUrl: rpcUrl,
       chainId: chainId,
-      explorerUrl: 'https://bscscan.com',
-      name: 'BSC Mainnet',
+      explorerUrl: '',
+      name: 'Localhost Node',
       nativeCurrency: {
-        name: 'BNB',
-        symbol: 'BNB',
+        name: 'ETH',
+        symbol: 'ETH',
         decimals: 18
       },
       confirmations: 1,
@@ -99,26 +102,58 @@ class NetworkConfigManager {
       }
     };
     
-    logger.debug('加载BSC主网配置成功');
+    logger.debug('加载localhost网络配置成功');
   }
 
   /**
-   * 初始化BSC测试网配置
+   * 初始化主网配置
    * @private
    */
-  _initBscTestnet() {
-    const rpcUrl = getEnvVar('TESTNET_RPC_URL', 'https://data-seed-prebsc-1-s1.binance.org:8545/');
-    const chainId = parseInt(getEnvVar('TESTNET_CHAIN_ID', '97'));
+  _initMainnet() {
+    const rpcUrl = getEnvVar('MAINNET_RPC_URL', 'https://mainnet.infura.io/v3/your-api-key');
+    const chainId = parseInt(getEnvVar('MAINNET_CHAIN_ID', '1'));
+    const gasPrice = parseInt(getEnvVar('MAINNET_GAS_PRICE', '30000000000'));
+    
+    this.networks.mainnet = {
+      rpcUrl: rpcUrl,
+      chainId: chainId,
+      explorerUrl: 'https://etherscan.io',
+      name: 'Mainnet',
+      nativeCurrency: {
+        name: 'ETH',
+        symbol: 'ETH',
+        decimals: 18
+      },
+      confirmations: 2,
+      defaultGasLimit: 3000000,
+      defaultGasPrice: gasPrice / 1000000000,
+      hardhatConfig: {
+        url: rpcUrl,
+        chainId: chainId,
+        gasPrice: gasPrice
+      }
+    };
+    
+    logger.debug('加载主网配置成功');
+  }
+
+  /**
+   * 初始化测试网配置
+   * @private
+   */
+  _initTestnet() {
+    const rpcUrl = getEnvVar('TESTNET_RPC_URL', 'https://sepolia.infura.io/v3/your-api-key');
+    const chainId = parseInt(getEnvVar('TESTNET_CHAIN_ID', '11155111'));
     const gasPrice = parseInt(getEnvVar('TESTNET_GAS_PRICE', '10000000000'));
     
-    this.networks.bsc_testnet = {
+    this.networks.testnet = {
       rpcUrl: rpcUrl,
       chainId: chainId,
-      explorerUrl: 'https://testnet.bscscan.com',
-      name: 'BSC Testnet',
+      explorerUrl: 'https://sepolia.etherscan.io',
+      name: 'Testnet',
       nativeCurrency: {
-        name: 'BNB',
-        symbol: 'BNB',
+        name: 'ETH',
+        symbol: 'ETH',
         decimals: 18
       },
       confirmations: 1,
@@ -131,7 +166,7 @@ class NetworkConfigManager {
       }
     };
     
-    logger.debug('加载BSC测试网配置成功');
+    logger.debug('加载测试网配置成功');
   }
 
   /**

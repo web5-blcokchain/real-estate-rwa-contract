@@ -1,32 +1,49 @@
 /**
- * BSC测试网络配置
+ * BSC测试网配置
  */
+const { DeploymentStrategy } = require('../deployment');
+
+// 部署配置
+const deploymentConfig = {
+  // 使用UUPS代理模式
+  strategy: DeploymentStrategy.UPGRADEABLE,
+  
+  // 事务选项
+  options: {
+    transaction: {
+      gasLimitMultiplier: 2.0,  // BSC测试网需要更高的gas限制
+      waitConfirmations: 3      // 等待更多确认
+    },
+    
+    // 重试选项
+    retry: {
+      maxRetries: 5,           // 增加重试次数
+      initialDelayMs: 10000    // 增加初始延迟
+    },
+    
+    // 验证选项
+    verification: {
+      enabled: true,
+      delay: 90000,            // 在BSCscan上验证前等待更长时间
+      apiKey: process.env.BSCSCAN_API_KEY || ''
+    }
+  }
+};
+
 module.exports = {
-  // BSC测试网RPC URL
-  rpcUrl: process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545',
-  
-  // BSC测试网链ID
+  // 网络特定配置
+  url: process.env.BSC_TESTNET_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545',
   chainId: 97,
+  accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
   
-  // BSC测试网区块浏览器
-  explorerUrl: 'https://testnet.bscscan.com',
+  // gas配置
+  gasPrice: 20000000000,  // 20 Gwei
   
-  // 网络名称
-  name: 'BSC Testnet',
-  
-  // 原生代币符号
-  nativeCurrency: {
-    name: 'BNB',
-    symbol: 'BNB',
-    decimals: 18
+  // 区块浏览器设置
+  etherscan: {
+    apiKey: process.env.BSCSCAN_API_KEY || ''
   },
   
-  // 区块确认数
-  confirmations: 1,
-  
-  // 默认Gas限制
-  defaultGasLimit: 3000000,
-  
-  // 默认Gas价格 (Gwei)
-  defaultGasPrice: 10
+  // 导出部署配置
+  deploymentConfig
 }; 

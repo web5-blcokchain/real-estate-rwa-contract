@@ -123,6 +123,30 @@ npm install
 npm run contracts:compile
 ```
 
+### 持久化开发环境
+
+项目支持使用持久化的Hardhat节点进行开发，这能保持合约部署状态，提高开发效率：
+
+1. 启动持久化Hardhat节点：
+
+```bash
+npx hardhat node
+```
+
+2. 部署合约到持久化节点：
+
+```bash
+./deploy.sh localhost --strategy=upgradeable
+```
+
+3. 验证部署状态：
+
+```bash
+npx hardhat run --network localhost scripts/test/deployment-test.js
+```
+
+详细使用说明请参阅[持久化节点文档](./docs/persistent-node.md)。
+
 ### 启动本地开发环境
 
 1. 启动 Hardhat 节点（本地区块链）：
