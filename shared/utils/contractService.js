@@ -45,10 +45,11 @@ class ContractService {
       const network = configManager.getNetworkConfig();
       this.network = network;
 
-      // 初始化provider (使用ethers v5语法)
-      this.provider = new ethers.providers.JsonRpcProvider(network.rpcUrl);
+      // 初始化provider (使用ethers v6语法)
+      this.provider = new ethers.JsonRpcProvider(network.rpcUrl);
       
-      logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
+      const networkInfo = await this.provider.getNetwork();
+      logger.info(`Connected to network: ${networkInfo.name} (chainId: ${networkInfo.chainId})`);
 
       // 初始化signer
       if (options.useDefaultSigner) {

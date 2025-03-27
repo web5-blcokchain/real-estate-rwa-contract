@@ -201,8 +201,8 @@ async function main() {
   try {
     // 获取网络和部署者信息
     const [signer] = await ethers.getSigners();
-    const chainId = await ethers.provider.getNetwork().then(n => n.chainId);
     const network = await ethers.provider.getNetwork();
+    const chainId = network.chainId;
     const networkName = network.name !== 'unknown' ? network.name : `chain-${chainId}`;
     const balance = ethers.formatEther(await ethers.provider.getBalance(signer.address));
     

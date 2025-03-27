@@ -8,7 +8,7 @@ let networkInfo = null;
 /**
  * 获取以太坊提供者
  * @param {string} [customRpcUrl] 可选的自定义RPC URL
- * @returns {ethers.providers.Provider} 以太坊提供者
+ * @returns {ethers.Provider} 以太坊提供者
  */
 const getProvider = (customRpcUrl) => {
   // 如果已缓存并且没有指定自定义URL，则使用缓存的提供者
@@ -24,7 +24,7 @@ const getProvider = (customRpcUrl) => {
   
   try {
     // 创建新的提供者
-    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
     
     // 如果没有指定自定义URL，则缓存提供者
     if (!customRpcUrl) {
@@ -41,7 +41,7 @@ const getProvider = (customRpcUrl) => {
 /**
  * 获取带签名者的合约实例
  * @param {string} privateKey 私钥
- * @param {ethers.providers.Provider} [customProvider] 可选的自定义提供者
+ * @param {ethers.Provider} [customProvider] 可选的自定义提供者
  * @returns {ethers.Signer} 签名者
  */
 const getSigner = (privateKey, customProvider) => {

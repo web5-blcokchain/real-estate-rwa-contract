@@ -94,7 +94,7 @@ async function estimateGas(contract, method, args, options = {}) {
     // 检查是否超过区块gas限制
     try {
       // 确保我们有有效的provider
-      const provider = contract.provider || await ethers.provider;
+      const provider = contract.runner.provider || await ethers.provider;
       if (!provider) {
         throw new Error('Provider is not available');
       }
@@ -209,7 +209,8 @@ async function executeTransaction(contract, method, args, options = {}) {
     if (options.customGasPrice) {
       txOptions.gasPrice = options.customGasPrice;
     } else if (options.getGasPrice !== false) {
-      txOptions.gasPrice = await getGasPrice(contract.provider);
+      const provider = contract.runner.provider || await ethers.provider;
+      txOptions.gasPrice = await getGasPrice(provider);
     }
     
     // 设置交易优先级
@@ -236,8 +237,8 @@ async function executeTransaction(contract, method, args, options = {}) {
       if (receipt.gasUsed) {
         result.gasUsed = receipt.gasUsed.toString();
       }
-      if (receipt.effectiveGasPrice) {
-        result.effectiveGasPrice = receipt.effectiveGasPrice.toString();
+      if (receipt.gasPrice) {
+        result.effectiveGasPrice = receipt.gasPrice.toString();
       }
       if (receipt.blockNumber) {
         result.blockNumber = receipt.blockNumber;

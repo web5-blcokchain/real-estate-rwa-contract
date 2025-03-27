@@ -41,7 +41,7 @@ describe('Key Manager', () => {
   });
   
   it('should return valid signer for each role', () => {
-    const provider = new ethers.providers.JsonRpcProvider();
+    const provider = new ethers.JsonRpcProvider();
     
     const adminSigner = keyManager.getSigner('admin', provider);
     const operatorSigner = keyManager.getSigner('operator', provider);
@@ -57,8 +57,8 @@ describe('Key Manager', () => {
     const adminAddress = keyManager.getAddress('admin');
     const operatorAddress = keyManager.getAddress('operator');
     
-    expect(ethers.utils.isAddress(adminAddress)).toBe(true);
-    expect(ethers.utils.isAddress(operatorAddress)).toBe(true);
+    expect(ethers.isAddress(adminAddress)).toBe(true);
+    expect(ethers.isAddress(operatorAddress)).toBe(true);
     
     // 检查缓存是否工作
     const cachedAdminAddress = keyManager.getAddress('admin');

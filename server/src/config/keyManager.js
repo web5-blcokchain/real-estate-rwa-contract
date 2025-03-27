@@ -57,7 +57,7 @@ class KeyManager {
   /**
    * 获取指定角色的签名者
    * @param {string} role 角色
-   * @param {ethers.providers.Provider} provider 以太坊提供者
+   * @param {ethers.Provider} provider 以太坊提供者
    * @returns {ethers.Wallet} 签名者钱包
    */
   getSigner(role = 'admin', provider) {

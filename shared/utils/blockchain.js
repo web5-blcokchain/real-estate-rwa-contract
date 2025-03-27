@@ -74,8 +74,8 @@ async function initializeBlockchain() {
       throw new Error('Invalid network configuration: RPC URL is missing');
     }
     
-    // 创建provider - ethers v5
-    provider = new ethers.providers.JsonRpcProvider(networkConfig.rpcUrl);
+    // 创建provider - ethers v6
+    provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
     
     try {
       // 测试连接
@@ -116,7 +116,7 @@ async function initializeBlockchain() {
 
 /**
  * 获取provider实例
- * @returns {ethers.providers.JsonRpcProvider} provider实例
+ * @returns {ethers.JsonRpcProvider} provider实例
  */
 async function getProvider() {
   await ensureInitialized();

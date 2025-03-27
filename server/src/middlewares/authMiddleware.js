@@ -1,4 +1,4 @@
-const { ApiError } = require('./errorHandler');
+const { ApiError } = require('../../../shared/utils/errors');
 const logger = require('../utils/logger');
 
 /**
@@ -26,6 +26,11 @@ const getApiKeyFromRequest = (req) => {
  * 验证API密钥
  */
 const authMiddleware = () => {
+  // 检查当前环境 - 开发环境下使用模拟认证
+  if (process.env.NODE_ENV === 'development') {
+    return mockAuthMiddleware();
+  }
+
   return async (req, res, next) => {
     try {
       // 从环境变量获取API密钥
@@ -35,13 +40,21 @@ const authMiddleware = () => {
       const apiKey = getApiKeyFromRequest(req);
       
       if (!apiKey) {
-        throw ApiError.unauthorized('未提供API密钥');
+        throw new ApiError({
+          message: '未提供API密钥',
+          statusCode: 401,
+          code: 'UNAUTHORIZED'
+        });
       }
       
       // 简单字符串比较验证
       if (apiKey !== validApiKey) {
         logger.warn(`无效的API密钥尝试: ${apiKey}`);
-        throw ApiError.unauthorized('无效的API密钥');
+        throw new ApiError({
+          message: '无效的API密钥',
+          statusCode: 401,
+          code: 'UNAUTHORIZED'
+        });
       }
       
       // 添加用户标识到请求
@@ -72,8 +85,7 @@ const mockAuthMiddleware = () => {
   };
 };
 
-// 根据环境导出适当的中间件
-const isProduction = process.env.NODE_ENV === 'production';
+// 导出中间件
 module.exports = {
-  authMiddleware: isProduction ? authMiddleware : mockAuthMiddleware
+  authMiddleware
 }; 

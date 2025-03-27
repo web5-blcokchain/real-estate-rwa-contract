@@ -1,7 +1,13 @@
 require('@nomicfoundation/hardhat-ethers');
 require('@nomicfoundation/hardhat-verify');
-require('@openzeppelin/hardhat-upgrades');
 require('dotenv').config();
+
+// Import ethers directly for global usage
+const ethers = require('ethers');
+// Make ethers accessible globally
+global.ethers = ethers;
+// Make getAddress accessible globally for compatibility
+global.getAddress = ethers.getAddress;
 
 // 从环境变量中获取配置
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || '0000000000000000000000000000000000000000000000000000000000000000';

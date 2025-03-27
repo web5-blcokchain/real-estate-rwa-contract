@@ -57,7 +57,8 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     if (!provider) {
       throw new Error('Provider is not initialized');
     }
-    logger.info(`使用网络: ${(await provider.getNetwork()).name}`);
+    const network = await provider.getNetwork();
+    logger.info(`使用网络: ${network.name}`);
     
     // 使用ethers的ContractFactory部署合约
     const contract = await factory.deploy(...constructorArgs, deployOptions);
@@ -65,6 +66,7 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       throw new Error('Contract deployment failed');
     }
     
+    // Ethers v6: Get deployment transaction
     const tx = contract.deploymentTransaction();
     if (!tx) {
       throw new Error('Deployment transaction is not available');
@@ -73,7 +75,6 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     logger.info(`${contractName} 部署交易已提交: ${tx.hash}`);
     
     // 等待合约部署确认
-    await contract.waitForDeployment();
     const contractAddress = await contract.getAddress();
     logger.info(`${contractName} 部署成功，合约地址: ${contractAddress}`);
     
@@ -133,7 +134,7 @@ async function verifyContract(contractAddress, contractName, constructorArgs = [
     
     // 根据不同的网络选择验证方式
     switch (chainId) {
-      case 1: // Ethereum Mainnet
+      case 1n: // Ethereum Mainnet
         // 使用 Etherscan API
         await run("verify:verify", {
           address: contractAddress,
@@ -141,7 +142,7 @@ async function verifyContract(contractAddress, contractName, constructorArgs = [
         });
         break;
         
-      case 56: // BSC Mainnet
+      case 56n: // BSC Mainnet
         // 使用 BSCscan API
         await run("verify:verify", {
           address: contractAddress,
@@ -149,7 +150,7 @@ async function verifyContract(contractAddress, contractName, constructorArgs = [
         });
         break;
         
-      case 97: // BSC Testnet
+      case 97n: // BSC Testnet
         // 使用 BSCscan Testnet API
         await run("verify:verify", {
           address: contractAddress,
@@ -197,8 +198,9 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     
     // 部署实现合约
     const contract = await factory.deploy(...constructorArgs);
-    logger.info(`${contractName} 实现合约部署交易已提交: ${contract.deploymentTransaction().hash}`);
-    await contract.waitForDeployment();
+    const deployTx = contract.deploymentTransaction();
+    logger.info(`${contractName} 实现合约部署交易已提交: ${deployTx.hash}`);
+    await deployTx.wait();
     const implementationAddress = await contract.getAddress();
     logger.info(`${contractName} 实现合约部署成功，地址: ${implementationAddress}`);
     
@@ -279,10 +281,11 @@ async function deployLibrary(factory, libraryName, options = {}) {
     
     // 部署库
     const library = await factory.deploy(options);
-    logger.info(`${libraryName} 部署交易已提交: ${library.deploymentTransaction().hash}`);
+    const deployTx = library.deploymentTransaction();
+    logger.info(`${libraryName} 部署交易已提交: ${deployTx.hash}`);
     
     // 等待部署完成
-    await library.waitForDeployment();
+    await deployTx.wait();
     const libraryAddress = await library.getAddress();
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
@@ -291,7 +294,7 @@ async function deployLibrary(factory, libraryName, options = {}) {
       success: true,
       contractAddress: libraryAddress.toString(),
       libraryName,
-      transactionHash: library.deploymentTransaction().hash
+      transactionHash: deployTx.hash
     };
   } catch (error) {
     logger.error(`${libraryName} 库部署失败: ${error.message}`);
