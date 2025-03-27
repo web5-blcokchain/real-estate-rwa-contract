@@ -1,7 +1,6 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
-const abis = require('../contracts/abis');
 
 // 合约ABI缓存
 const contractAbis = {};
@@ -11,6 +10,9 @@ let initialized = false;
 
 // 获取 shared 目录的路径
 const SHARED_DIR = path.join(__dirname, '..');
+
+// 根目录路径
+const ROOT_DIR = path.join(__dirname, '..', '..');
 
 // 缓存文件路径
 const ABI_CACHE_FILE = path.join(SHARED_DIR, 'cache/abi-cache.json');
@@ -22,34 +24,42 @@ const ABI_CACHE_FILE = path.join(SHARED_DIR, 'cache/abi-cache.json');
  */
 const loadAbi = async (contractName) => {
   try {
-    // 从 index.js 中获取 ABI
-    const abi = abis[contractName];
-    if (!abi) {
-      throw new Error(`找不到合约 ${contractName} 的ABI`);
-    }
+    // 从 artifacts 目录加载
+    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    console.log(`尝试从${artifactPath}加载ABI...`);
     
-    // 验证ABI格式
-    if (!Array.isArray(abi)) {
-      throw new Error(`ABI格式错误: ${contractName}`);
-    }
-    
-    // 验证ABI内容
-    if (abi.length === 0) {
-      throw new Error(`ABI为空: ${contractName}`);
-    }
-    
-    // 验证每个ABI项
-    for (const item of abi) {
-      if (!item.type) {
-        throw new Error(`ABI项缺少type字段: ${contractName}`);
+    if (fsSync.existsSync(artifactPath)) {
+      const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8'));
+      if (artifact.abi) {
+        const abi = artifact.abi;
+        console.log(`从artifacts加载了${contractName}的ABI`);
+        
+        // 验证ABI格式
+        if (!Array.isArray(abi)) {
+          throw new Error(`ABI格式错误: ${contractName}`);
+        }
+        
+        // 验证ABI内容
+        if (abi.length === 0) {
+          throw new Error(`ABI为空: ${contractName}`);
+        }
+        
+        // 验证每个ABI项
+        for (const item of abi) {
+          if (!item.type) {
+            throw new Error(`ABI项缺少type字段: ${contractName}`);
+          }
+        }
+        
+        // 缓存ABI
+        contractAbis[contractName] = abi;
+        console.log(`已缓存 ${contractName} 的ABI`);
+        
+        return abi;
       }
     }
     
-    // 缓存ABI
-    contractAbis[contractName] = abi;
-    console.log(`已缓存 ${contractName} 的ABI`);
-    
-    return abi;
+    throw new Error(`找不到合约 ${contractName} 的ABI文件`);
   } catch (error) {
     const errorMsg = `无法加载 ${contractName} 的ABI: ${error.message}`;
     console.error(errorMsg);
@@ -77,21 +87,30 @@ function getAbi(contractName) {
 
 /**
  * 初始化所有ABI
+ * @param {Object} logger 可选的日志对象
  * @returns {Promise<void>}
  */
-async function initializeAbis() {
+async function initializeAbis(logger) {
   if (initialized) {
     console.log('ABI已经初始化');
     return;
   }
 
-  console.log('开始初始化ABI...');
+  const log = (msg) => {
+    if (logger) {
+      logger.info(msg);
+    } else {
+      console.log(msg);
+    }
+  };
+
+  log('开始初始化ABI...');
 
   try {
     // 尝试从缓存加载
-    console.log('尝试从缓存加载ABI...');
+    log('尝试从缓存加载ABI...');
     await loadCachedAbis();
-    console.log(`已从缓存加载 ${Object.keys(contractAbis).length} 个ABI`);
+    log(`已从缓存加载 ${Object.keys(contractAbis).length} 个ABI`);
 
     // 获取需要加载的合约列表
     const requiredContracts = [
@@ -106,32 +125,42 @@ async function initializeAbis() {
       'TokenHolderQuery',
       'RealEstateSystem'
     ];
-    console.log('需要加载的合约:', requiredContracts);
+    log('需要加载的合约: ' + requiredContracts.join(', '));
 
     // 加载每个合约的ABI
     for (const contractName of requiredContracts) {
       try {
         if (!contractAbis[contractName]) {
-          console.log(`加载 ${contractName} 的ABI...`);
+          log(`加载 ${contractName} 的ABI...`);
           await loadAbi(contractName);
-          console.log(`已加载 ${contractName} 的ABI`);
+          log(`已加载 ${contractName} 的ABI`);
         } else {
-          console.log(`${contractName} 的ABI已在缓存中`);
+          log(`${contractName} 的ABI已在缓存中`);
         }
       } catch (error) {
-        console.error(`加载 ${contractName} ABI 失败:`, error.message);
+        const errorMsg = `加载 ${contractName} ABI 失败: ${error.message}`;
+        if (logger) {
+          logger.error(errorMsg);
+        } else {
+          console.error(errorMsg);
+        }
         throw error;
       }
     }
 
     // 保存到缓存
     await saveCachedAbis();
-    console.log('ABI缓存已更新');
+    log('ABI缓存已更新');
 
     initialized = true;
-    console.log('ABI初始化完成');
+    log('ABI初始化完成');
   } catch (error) {
-    console.error('ABI初始化失败:', error.message);
+    const errorMsg = `ABI初始化失败: ${error.message}`;
+    if (logger) {
+      logger.error(errorMsg);
+    } else {
+      console.error(errorMsg);
+    }
     throw error;
   }
 }
@@ -166,7 +195,7 @@ const saveCachedAbis = async () => {
     
     // 确保目录存在
     const cacheDir = path.dirname(ABI_CACHE_FILE);
-    if (!fsSync.existsSync(cacheDir)){
+    if (!fsSync.existsSync(cacheDir)) {
       console.log(`创建缓存目录: ${cacheDir}`);
       fsSync.mkdirSync(cacheDir, { recursive: true });
     }

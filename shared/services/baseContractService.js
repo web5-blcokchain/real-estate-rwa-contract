@@ -1,6 +1,6 @@
 const { ethers } = require('ethers');
 const { getContractAddresses } = require('../config/contracts');
-const { provider, getSigner } = require('../utils/blockchain');
+const { getProvider, getSigner } = require('../utils/blockchain');
 const { getAbi } = require('../utils/getAbis');
 const { logger } = require('../utils/logger');
 const { ApiError } = require('../utils/errors');
@@ -57,7 +57,10 @@ class BaseContractService {
     const address = addresses[this.addressKey];
     
     if (!address) {
-      throw new ApiError(`Contract address not found for ${this.addressKey}`, 'CONTRACT_ADDRESS_NOT_FOUND');
+      throw new ApiError({
+        message: `Contract address not found for ${this.addressKey}`,
+        code: 'CONTRACT_ADDRESS_NOT_FOUND'
+      });
     }
     
     return address;
@@ -71,7 +74,10 @@ class BaseContractService {
   getContractAbi() {
     const abi = getAbi(this.contractName);
     if (!abi) {
-      throw new ApiError(`Contract ABI not found for ${this.contractName}`, 'CONTRACT_ABI_NOT_FOUND');
+      throw new ApiError({
+        message: `Contract ABI not found for ${this.contractName}`,
+        code: 'CONTRACT_ABI_NOT_FOUND'
+      });
     }
     return abi;
   }
@@ -80,10 +86,11 @@ class BaseContractService {
    * 获取只读合约实例
    * @returns {ethers.Contract} 合约实例
    */
-  getContract() {
+  async getContract() {
     if (!this._contract) {
       const address = this.getContractAddress();
       const abi = this.getContractAbi();
+      const provider = await getProvider();
       
       this._contract = new ethers.Contract(address, abi, provider);
     }
@@ -94,27 +101,30 @@ class BaseContractService {
   /**
    * 获取带签名者的合约实例
    * @param {string} [operationName] 操作名称，用于确定使用哪个角色
-   * @returns {ethers.Contract} 带签名者的合约实例
+   * @returns {Promise<ethers.Contract>} 带签名者的合约实例
    * @throws {ApiError} 当操作未定义角色时
    */
-  getContractWithSigner(operationName) {
+  async getContractWithSigner(operationName) {
     const requiredRole = operationRoles[operationName];
     
     if (!requiredRole) {
-      throw new ApiError(`No role defined for operation: ${operationName}`, 'OPERATION_ROLE_NOT_DEFINED');
+      throw new ApiError({
+        message: `No role defined for operation: ${operationName}`,
+        code: 'OPERATION_ROLE_NOT_DEFINED'
+      });
     }
     
-    const contract = this.getContract();
-    const signer = getSigner();
+    const contract = await this.getContract();
+    const signer = await getSigner();
     
     return contract.connect(signer);
   }
   
   /**
    * 等待交易被确认
-   * @param {ethers.providers.TransactionResponse} tx 交易响应
+   * @param {ethers.TransactionResponse} tx 交易响应
    * @param {number} [confirmations=1] 确认区块数
-   * @returns {Promise<ethers.providers.TransactionReceipt>} 交易收据
+   * @returns {Promise<ethers.TransactionReceipt>} 交易收据
    * @throws {ApiError} 当交易失败时
    */
   async waitForTransaction(tx, confirmations = 1) {
@@ -125,7 +135,11 @@ class BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`Transaction ${tx.hash} failed: ${error.message}`);
-      throw new ApiError(`Transaction failed: ${error.message}`, 'TRANSACTION_FAILED', error);
+      throw new ApiError({
+        message: `Transaction failed: ${error.message}`,
+        code: 'TRANSACTION_FAILED',
+        details: error
+      });
     }
   }
   
@@ -137,15 +151,19 @@ class BaseContractService {
    * @param {string} options.operationName 操作名称，用于确定使用哪个角色
    * @param {number} options.gasLimit Gas限制
    * @param {ethers.BigNumber} options.value 发送的以太币数量
-   * @returns {Promise<ethers.providers.TransactionReceipt>} 交易收据
+   * @returns {Promise<ethers.TransactionReceipt>} 交易收据
    * @throws {ApiError} 当方法执行失败时
    */
   async executeWrite(methodName, args = [], options = {}) {
     try {
-      const contract = this.getContractWithSigner(methodName);
+      const contract = await this.getContractWithSigner(options.operationName || methodName);
       logger.info(`Executing write method ${methodName} with args:`, args);
       
-      const tx = await contract[methodName](...args, options);
+      const overrides = {};
+      if (options.gasLimit) overrides.gasLimit = options.gasLimit;
+      if (options.value) overrides.value = options.value;
+      
+      const tx = await contract[methodName](...args, overrides);
       logger.info(`Write method ${methodName} transaction sent: ${tx.hash}`);
       
       const receipt = await this.waitForTransaction(tx, options.confirmations);
@@ -154,7 +172,11 @@ class BaseContractService {
       return receipt;
     } catch (error) {
       logger.error(`Write method ${methodName} failed: ${error.message}`);
-      throw new ApiError(`Write method failed: ${error.message}`, 'WRITE_METHOD_FAILED', error);
+      throw new ApiError({
+        message: `Write method failed: ${error.message}`,
+        code: 'WRITE_METHOD_FAILED',
+        details: error
+      });
     }
   }
   
@@ -167,7 +189,7 @@ class BaseContractService {
    */
   async executeRead(methodName, args = []) {
     try {
-      const contract = this.getContract();
+      const contract = await this.getContract();
       logger.info(`Executing read method ${methodName} with args:`, args);
       
       const result = await contract[methodName](...args);
@@ -176,7 +198,11 @@ class BaseContractService {
       return result;
     } catch (error) {
       logger.error(`Read method ${methodName} failed: ${error.message}`);
-      throw new ApiError(`Read method failed: ${error.message}`, 'READ_METHOD_FAILED', error);
+      throw new ApiError({
+        message: `Read method failed: ${error.message}`,
+        code: 'READ_METHOD_FAILED',
+        details: error
+      });
     }
   }
 
@@ -189,7 +215,10 @@ class BaseContractService {
   validateArgs(args, validators) {
     for (let i = 0; i < args.length; i++) {
       if (validators[i] && !validators[i](args[i])) {
-        throw new ApiError(`Invalid argument at index ${i}`, 'INVALID_ARGUMENT');
+        throw new ApiError({
+          message: `Invalid argument at index ${i}`,
+          code: 'INVALID_ARGUMENT'
+        });
       }
     }
   }

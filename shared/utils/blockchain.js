@@ -50,11 +50,12 @@ async function ensureInitialized() {
 
 /**
  * 初始化区块链连接
+ * @returns {ethers.JsonRpcProvider} provider实例
  */
 async function initializeBlockchain() {
   if (initialized) {
     logger.info('Blockchain already initialized');
-    return;
+    return provider;
   }
   
   try {
@@ -108,6 +109,8 @@ async function initializeBlockchain() {
     
     initialized = true;
     logger.info('Blockchain connection initialized successfully');
+    
+    return provider;
   } catch (error) {
     logger.error('Failed to initialize blockchain connection:', error);
     throw new Error(`Blockchain initialization failed: ${error.message}`);

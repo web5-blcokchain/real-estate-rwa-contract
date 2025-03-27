@@ -3,18 +3,17 @@
  * 从部署状态文件加载合约地址
  */
 const fs = require('fs');
+const path = require('path');
 const { getContractAbiPath, getDeployStatePath, validatePath } = require('../utils/paths');
 const logger = require('../utils/logger');
 const { ethers } = require('ethers');
-const { getAbi: getContractAbi } = require('../contracts/getAbis');
+const { getAbi: getContractAbi } = require('../utils/getAbis');
+
+// 项目根目录
+const ROOT_DIR = path.join(__dirname, '..', '..');
 
 // 合约地址配置
-const contractAddresses = {
-  propertyRegistry: process.env.PROPERTY_REGISTRY_ADDRESS,
-  realEstateToken: process.env.REAL_ESTATE_TOKEN_ADDRESS,
-  roleManager: process.env.ROLE_MANAGER_ADDRESS,
-  redemptionManager: process.env.REDEMPTION_MANAGER_ADDRESS
-};
+const contractAddresses = {};
 
 // 从deploy-state.json加载合约地址
 try {
@@ -24,14 +23,9 @@ try {
     logger.info('Loading contract addresses from deploy-state.json');
     
     if (deployState && deployState.contracts) {
-      // 将合约地址映射到小写键名
-      Object.keys(deployState.contracts).forEach(key => {
-        const lowerKey = key.charAt(0).toLowerCase() + key.slice(1);
-        if (!contractAddresses[lowerKey] || contractAddresses[lowerKey] === '') {
-          contractAddresses[lowerKey] = deployState.contracts[key];
-          logger.info(`Loaded contract address for ${key}: ${deployState.contracts[key]}`);
-        }
-      });
+      // 直接使用deploy-state.json中的合约名称和地址
+      Object.assign(contractAddresses, deployState.contracts);
+      logger.info('Contract addresses loaded successfully');
     }
   }
 } catch (error) {
@@ -79,7 +73,21 @@ function getContractAddresses() {
  */
 function getAbi(contractName) {
   try {
-    return getContractAbi(contractName);
+    // 直接从artifacts加载
+    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    logger.info(`尝试从${artifactPath}加载ABI...`);
+    
+    if (fs.existsSync(artifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+      if (artifact.abi && Array.isArray(artifact.abi)) {
+        logger.info(`从artifacts加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
+        return artifact.abi;
+      } else {
+        throw new Error(`合约 ${contractName} 的ABI格式无效`);
+      }
+    } else {
+      throw new Error(`找不到合约 ${contractName} 的ABI文件: ${artifactPath}`);
+    }
   } catch (error) {
     logger.error(`Failed to load ABI for contract: ${contractName}`, error);
     throw error;
@@ -93,12 +101,12 @@ function getAbi(contractName) {
  */
 function getBytecode(contractName) {
   try {
-    const abiPath = getContractAbiPath(contractName);
-    if (!validatePath(abiPath)) {
+    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    if (!fs.existsSync(artifactPath)) {
       throw new Error(`Bytecode file not found for contract: ${contractName}`);
     }
 
-    const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
     return artifact.bytecode;
   } catch (error) {
     logger.error(`Failed to load bytecode for contract: ${contractName}`, error);
