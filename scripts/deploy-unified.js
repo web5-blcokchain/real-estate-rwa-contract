@@ -69,19 +69,30 @@ async function monitorDeploymentProgress(deployerContract) {
     "授予角色"
   ];
   
-  // 设置事件过滤器
-  const filter = deployerContract.filters.DeploymentProgress();
-  
-  // 监听事件
-  deployerContract.on(filter, (step, contractName, contractAddress) => {
-    deployLogger.info(`步骤 ${step}/${stepNames.length-1}: ${contractName} 部署完成 (${contractAddress})`);
+  try {
+    // 设置事件过滤器 - 兼容ethers v5
+    const filter = deployerContract.filters.DeploymentProgress();
     
-    // 如果是最后一步，停止监听
-    if (Number(step) === stepNames.length - 1) {
-      deployLogger.info("所有合约部署完成！");
-      deployerContract.removeAllListeners();
-    }
-  });
+    // 监听事件
+    deployerContract.on(filter, (step, contractName, contractAddress) => {
+      const stepNumber = Number(step);
+      deployLogger.info(`步骤 ${stepNumber}/${stepNames.length-1}: ${contractName} 部署完成 (${contractAddress})`);
+      
+      // 如果是最后一步，停止监听
+      if (stepNumber === stepNames.length - 1) {
+        deployLogger.info("所有合约部署完成！");
+        deployerContract.removeAllListeners();
+      }
+    });
+    
+    // 兼容性检查：添加错误处理
+    deployerContract.on('error', (error) => {
+      deployLogger.error(`监听部署事件时发生错误: ${error.message}`);
+    });
+  } catch (error) {
+    deployLogger.error(`设置事件监听器时发生错误: ${error.message}`);
+    // 继续执行部署，不因监听器问题中断
+  }
 }
 
 // 保存部署记录
@@ -160,6 +171,11 @@ async function deployStep(deployer_contract, step) {
   deployLogger.info(`部署步骤 ${step}...`);
   
   try {
+    // 检查合约方法是否可用
+    if (typeof deployer_contract.deployStep !== 'function') {
+      throw new Error(`deployStep 方法不可用`);
+    }
+    
     // 使用共享的交易执行工具
     const result = await transaction.executeTransaction(
       deployer_contract,
@@ -231,12 +247,26 @@ async function main() {
         
         try {
           // 使用ethers v5的方法获取网络信息
-          const network = await ethers.provider.getNetwork();
+          console.log('正在获取网络信息...');
+          const provider = ethers.provider;
+          if (!provider) {
+            throw new Error('Provider未初始化');
+          }
+          
+          console.log('Provider类型:', provider.constructor.name);
+          console.log('Provider连接:', provider.connection);
+          
+          // 检查provider的方法
+          console.log('Provider方法:', Object.keys(provider).filter(key => typeof provider[key] === 'function'));
+          
+          const network = await provider.getNetwork();
+          console.log('网络信息:', network);
+          
           const chainId = network.chainId;
           const networkName = network.name !== 'unknown' ? network.name : `chain-${chainId}`;
           
           // 获取余额
-          const balanceWei = await ethers.provider.getBalance(signerAddress);
+          const balanceWei = await provider.getBalance(signerAddress);
           const balance = ethersUtils.formatEther(balanceWei);
           
           // 记录部署信息
@@ -253,7 +283,16 @@ async function main() {
           deployLogger.info("部署库合约...");
           
           // 部署 SystemDeployerLib1
+          deployLogger.info("开始部署 SystemDeployerLib1...");
           const SystemDeployerLib1 = await ethers.getContractFactory('SystemDeployerLib1');
+          
+          // 检查合约工厂实例
+          if (!SystemDeployerLib1 || !SystemDeployerLib1.bytecode) {
+            throw new Error('SystemDeployerLib1合约工厂无效或bytecode为空');
+          }
+          
+          console.log('SystemDeployerLib1工厂创建成功, bytecode长度:', SystemDeployerLib1.bytecode.length);
+          
           const estimatedGas1 = await ethers.provider.estimateGas({
             from: signerAddress,
             data: SystemDeployerLib1.bytecode
@@ -262,9 +301,14 @@ async function main() {
           deployLogger.info(`SystemDeployerLib1 预估 gas: ${estimatedGas1}`);
           deployLogger.info(`SystemDeployerLib1 设置 gas 限制: ${gasLimit1}`);
 
-          const lib1Result = await deployUtils.deployLibrary(SystemDeployerLib1, 'SystemDeployerLib1', {
-            gasLimit: gasLimit1
-          });
+          const lib1Result = await deployUtils.deployContract(
+            SystemDeployerLib1,
+            'SystemDeployerLib1',
+            [],
+            {
+              gasLimit: gasLimit1
+            }
+          );
 
           if (!lib1Result.success) {
             throw new Error(`SystemDeployerLib1 部署失败: ${lib1Result.error.message}`);
@@ -280,9 +324,14 @@ async function main() {
           deployLogger.info(`SystemDeployerLib2 预估 gas: ${estimatedGas2}`);
           deployLogger.info(`SystemDeployerLib2 设置 gas 限制: ${gasLimit2}`);
 
-          const lib2Result = await deployUtils.deployLibrary(SystemDeployerLib2, 'SystemDeployerLib2', {
-            gasLimit: gasLimit2
-          });
+          const lib2Result = await deployUtils.deployContract(
+            SystemDeployerLib2,
+            'SystemDeployerLib2',
+            [],
+            {
+              gasLimit: gasLimit2
+            }
+          );
 
           if (!lib2Result.success) {
             throw new Error(`SystemDeployerLib2 部署失败: ${lib2Result.error.message}`);

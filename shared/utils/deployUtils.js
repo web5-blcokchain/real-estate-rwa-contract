@@ -18,11 +18,11 @@ const { ethers, getAddress, isAddress } = require('./ethers-v5');
  */
 async function getContractAddress(contract) {
   try {
-    // 如果合约有address属性(通常是v6)
+    // 如果合约有address属性(通常是v5)
     if (contract.address) {
       return contract.address;
     }
-    // 如果getAddress是函数(通常是v5)
+    // 如果getAddress是函数(通常是v6)
     else if (typeof contract.getAddress === 'function') {
       return await contract.getAddress();
     }
@@ -94,7 +94,18 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
       throw new Error('Contract deployment failed');
     }
     
-    const tx = contract.deploymentTransaction();
+    // 获取交易，兼容v5和v6
+    let tx;
+    if (contract.deployTransaction) {
+      // ethers v5
+      tx = contract.deployTransaction;
+    } else if (typeof contract.deploymentTransaction === 'function') {
+      // ethers v6
+      tx = contract.deploymentTransaction();
+    } else {
+      throw new Error('无法获取部署交易');
+    }
+    
     if (!tx) {
       throw new Error('Deployment transaction is not available');
     }
@@ -102,7 +113,17 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     logger.info(`${contractName} 部署交易已提交: ${tx.hash}`);
     
     // 等待合约部署确认
-    await contract.waitForDeployment();
+    if (typeof contract.waitForDeployment === 'function') {
+      // ethers v6
+      await contract.waitForDeployment();
+    } else if (typeof contract.deployed === 'function') {
+      // ethers v5
+      await contract.deployed();
+    } else {
+      // 尝试等待交易确认
+      await tx.wait(1);
+    }
+    
     const contractAddress = await getContractAddress(contract);
     logger.info(`${contractName} 部署成功，合约地址: ${contractAddress}`);
     
@@ -323,21 +344,49 @@ async function deployLibrary(factory, libraryName, options = {}) {
   try {
     logger.info(`开始部署库 ${libraryName}...`);
     
-    // 部署库
-    const library = await factory.deploy(options);
+    // 部署库 - ethers v5中factory.deploy()方法支持将options作为覆盖参数传递
+    const library = await factory.deploy({
+      ...options
+    });
+    
     // 兼容 ethers v5 和 v6
-    const deployTx = library.deployTransaction || library.deploymentTransaction();
+    let deployTx;
+    if (library.deployTransaction) {
+      // ethers v5
+      deployTx = library.deployTransaction;
+    } else if (typeof library.deploymentTransaction === 'function') {
+      // ethers v6
+      deployTx = library.deploymentTransaction();
+    } else {
+      throw new Error('无法获取部署交易信息');
+    }
+    
     logger.info(`${libraryName} 部署交易已提交: ${deployTx.hash}`);
     
-    // 等待部署完成
-    if (library.waitForDeployment) {
+    // 等待部署完成 - 兼容不同版本
+    if (typeof library.waitForDeployment === 'function') {
+      // ethers v6
       await library.waitForDeployment();
-    } else if (library.deployed) {
+    } else if (typeof library.deployed === 'function') {
+      // ethers v5
       await library.deployed();
+    } else {
+      // 尝试等待交易确认
+      await deployTx.wait(1);
     }
     
     // 获取合约地址
-    const libraryAddress = await getContractAddress(library);
+    let libraryAddress;
+    if (library.address) {
+      // ethers v5
+      libraryAddress = library.address;
+    } else if (typeof library.getAddress === 'function') {
+      // ethers v6
+      libraryAddress = await library.getAddress();
+    } else {
+      throw new Error('无法获取库合约地址');
+    }
+    
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
     
     // 更新合约地址配置
