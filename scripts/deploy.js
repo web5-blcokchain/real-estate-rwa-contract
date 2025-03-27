@@ -79,7 +79,8 @@ async function main() {
     // 获取部署者账户
     const [deployer] = await ethers.getSigners();
     console.log(`部署者地址: ${deployer.address}`);
-    console.log(`账户余额: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
+    const balance = await ethers.provider.getBalance(deployer.address);
+    logger.info(`部署者余额: ${ethers.formatEther(balance)} ETH`);
     
     // 加载部署配置
     const deployConfig = await loadDeploymentConfig();
@@ -94,8 +95,7 @@ async function main() {
     logger.info(`部署网络: ${networkName} (Chain ID: ${network.chainId})`);
     logger.info(`部署账户: ${deployer.address}`);
     
-    // 检查账户余额
-    const balance = await ethers.provider.getBalance(deployer.address);
+    // 使用之前获取的账户余额，无需重复获取
     logger.info(`账户余额: ${ethers.formatEther(balance)} ETH`);
     
     // 如果强制重新部署，更新部署配置

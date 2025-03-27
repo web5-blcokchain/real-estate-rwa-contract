@@ -15,22 +15,65 @@ const ROOT_DIR = path.join(__dirname, '..', '..');
 // 合约地址配置
 const contractAddresses = {};
 
-// 从deploy-state.json加载合约地址
-try {
-  const deployStatePath = getDeployStatePath();
-  if (validatePath(deployStatePath)) {
-    const deployState = JSON.parse(fs.readFileSync(deployStatePath, 'utf8'));
-    logger.info('Loading contract addresses from deploy-state.json');
-    
-    if (deployState && deployState.contracts) {
-      // 直接使用deploy-state.json中的合约名称和地址
-      Object.assign(contractAddresses, deployState.contracts);
-      logger.info('Contract addresses loaded successfully');
+// 尝试从多个来源加载合约地址
+function loadContractAddresses() {
+  try {
+    // 1. 尝试从scripts/deploy-state.json加载
+    let scriptsDeployState = path.join(ROOT_DIR, 'scripts', 'deploy-state.json');
+    if (fs.existsSync(scriptsDeployState)) {
+      logger.info('Loading contract addresses from scripts/deploy-state.json');
+      const deployState = JSON.parse(fs.readFileSync(scriptsDeployState, 'utf8'));
+      
+      if (deployState) {
+        if (deployState.contracts) {
+          // deploy-state.json中有contracts字段
+          Object.assign(contractAddresses, deployState.contracts);
+        } else {
+          // deploy-state.json直接包含合约地址
+          Object.assign(contractAddresses, deployState);
+        }
+        
+        if (deployState.RealEstateTokenImplementation) {
+          contractAddresses.RealEstateTokenImplementation = deployState.RealEstateTokenImplementation;
+        }
+        
+        logger.info('Contract addresses loaded successfully');
+        return contractAddresses;
+      }
     }
+    
+    // 2. 尝试从scripts/logging/contracts.json加载
+    const loggingContractsPath = path.join(ROOT_DIR, 'scripts', 'logging', 'contracts.json');
+    if (fs.existsSync(loggingContractsPath)) {
+      logger.info('Loading contract addresses from scripts/logging/contracts.json');
+      const contracts = JSON.parse(fs.readFileSync(loggingContractsPath, 'utf8'));
+      Object.assign(contractAddresses, contracts);
+      logger.info('Contract addresses loaded successfully');
+      return contractAddresses;
+    }
+    
+    // 3. 最后尝试从shared/deploy-state.json加载
+    const deployStatePath = getDeployStatePath();
+    if (validatePath(deployStatePath)) {
+      logger.info('Loading contract addresses from shared/deploy-state.json');
+      const deployState = JSON.parse(fs.readFileSync(deployStatePath, 'utf8'));
+      
+      if (deployState && deployState.contracts) {
+        Object.assign(contractAddresses, deployState.contracts);
+        logger.info('Contract addresses loaded successfully');
+        return contractAddresses;
+      }
+    }
+    
+    throw new Error('No contract addresses loaded from any source');
+  } catch (error) {
+    logger.warn(`Failed to load contract addresses: ${error.message}`);
+    return {};
   }
-} catch (error) {
-  logger.warn(`Failed to load deploy state: ${error.message}`);
 }
+
+// 初始加载合约地址
+loadContractAddresses();
 
 /**
  * 验证以太坊地址是否合法
@@ -51,6 +94,11 @@ function isValidEthereumAddress(address) {
  * @returns {string} 合约地址
  */
 function getContractAddress(contractName) {
+  // 如果缓存为空，尝试重新加载
+  if (Object.keys(contractAddresses).length === 0) {
+    loadContractAddresses();
+  }
+  
   const address = contractAddresses[contractName];
   if (!address) {
     throw new Error(`Contract address not found for: ${contractName}`);
@@ -63,6 +111,11 @@ function getContractAddress(contractName) {
  * @returns {Object} 合约地址配置
  */
 function getContractAddresses() {
+  // 如果缓存为空，尝试重新加载
+  if (Object.keys(contractAddresses).length === 0) {
+    loadContractAddresses();
+  }
+  
   return { ...contractAddresses };
 }
 

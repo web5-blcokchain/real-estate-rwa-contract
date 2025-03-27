@@ -1,8 +1,117 @@
-# 日本房地产代币化平台
+# 日本房地产资产代币化系统
 
-## 项目概述
+本项目实现了一个基于区块链的房地产资产代币化系统，支持不动产的数字化、代币化和二级市场交易。
 
-日本房地产代币化平台是一个基于区块链技术的房地产资产数字化解决方案。该平台允许房地产所有者将其物业代币化，投资者可以购买这些代币来获得部分所有权和相应的租金收益。
+## 系统架构
+
+本系统包含以下核心组件:
+
+- **RoleManager**: 角色权限管理
+- **PropertyRegistry**: 房产注册管理
+- **TokenFactory**: 代币创建工厂
+- **RentDistributor**: 租金分配管理
+- **RedemptionManager**: 代币赎回管理
+- **Marketplace**: 二级市场交易
+- **FeeManager**: 费用管理
+- **TokenHolderQuery**: 代币持有者查询
+- **RealEstateSystem**: 系统核心控制合约
+
+## 部署指南
+
+### 准备工作
+
+1. 安装依赖
+```bash
+npm install
+```
+
+2. 配置环境变量
+复制 `.env.example` 文件并重命名为 `.env`，然后填入相应的配置信息。
+
+### 部署流程
+
+本系统支持多种部署方式，适应不同网络环境：
+
+```bash
+# 本地开发环境部署
+./deploy.sh local
+
+# 测试网部署
+./deploy.sh testnet
+
+# 主网部署
+./deploy.sh mainnet
+```
+
+支持的部署选项:
+
+- `--strategy <direct|upgradeable|minimal>`: 部署策略 (默认: upgradeable)
+- `--verify`: 启用合约验证
+- `--force`: 强制重新部署所有合约，解决库合约部署的 gas 问题
+- `--no-roles`: 跳过角色设置
+
+### 部署问题解决
+
+对于大型库合约（如 SystemDeployerLib1, SystemDeployerLib2），可能会遇到 gas 估算失败的问题。这种情况下，建议使用强制部署模式：
+
+```bash
+./deploy.sh local --force
+```
+
+强制部署模式会使用 `force-deploy.js` 脚本，跳过 gas 估算步骤，直接部署合约。
+
+## 测试
+
+系统包含多层次的测试脚本，验证从部署到业务流程的各个环节：
+
+### 部署验证测试
+
+```bash
+npx hardhat run scripts/tests/deployment-test.js --network localhost
+```
+
+此测试验证所有合约是否成功部署，以及合约间关系是否正确配置。
+
+### 基础业务流程测试
+
+```bash
+npx hardhat run scripts/tests/basic-processes-test.js --network localhost
+```
+
+此测试验证系统的基础功能，如角色验证、房产注册和批准、费用管理等。
+
+### 完整业务流程测试
+
+⚠️ 注意：此测试需要先配置 TokenFactory 合约的代币实现地址。
+
+```bash
+npx hardhat run scripts/tests/business-processes-test.js --network localhost
+```
+
+此测试覆盖完整的业务流程，包括代币创建、交易、租金分配和赎回等。
+
+## 开发指南
+
+本项目使用 Hardhat 作为开发框架，遵循 OpenZeppelin 的合约规范和安全最佳实践。
+
+### 代码架构
+
+- `contracts/`: 智能合约代码
+- `scripts/`: 部署和测试脚本
+- `shared/`: 共享工具和配置
+- `test/`: 单元测试
+
+### 注意事项
+
+1. 所有合约都使用可升级的设计模式
+2. 确保库合约在部署前已正确编译
+3. 对于完整业务流程，需要先配置代币实现合约
+
+## 其他资源
+
+- [部署总结](scripts/SUMMARY.md)
+- [部署详情](scripts/DEPLOYMENT.md)
+- [测试策略](scripts/tests/README.md)
 
 ## 重要更新
 
