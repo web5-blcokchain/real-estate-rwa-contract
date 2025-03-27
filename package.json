@@ -24,7 +24,6 @@
     "contracts:verify": "hardhat run scripts/verify-contracts.js",
     "contracts:verify:testnet": "hardhat run scripts/verify-contracts.js --network testnet",
     "contracts:verify:mainnet": "hardhat run scripts/verify-contracts.js --network mainnet",
-    "update-abis": "node shared/utils/updateAbis.js",
     "hardhat:node": "hardhat node --hostname 0.0.0.0 --port 8545",
     "hardhat:node:reset": "hardhat node --hostname 0.0.0.0 --port 8545 --reset",
     "dev": "concurrently \"yarn hardhat:node\" \"yarn server:dev\"",

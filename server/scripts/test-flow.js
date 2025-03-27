@@ -80,7 +80,17 @@ async function executeContractMethod(contract, methodName, args = [], options = 
 // 获取合约实例
 async function getContract(contractName, useSigner = true) {
   try {
-    const address = getContractAddress(contractName);
+    // 获取合约地址
+    const addresses = getContractAddresses();
+    // 直接使用原始合约名称，保持与artifacts目录中的合约名称一致
+    const address = addresses[contractName]; // 不再转换大小写
+    
+    if (!address) {
+      console.warn(`未找到合约 ${contractName} 的地址，检查deploy-state.json...`);
+      console.log('可用合约:', Object.keys(addresses).join(', '));
+      throw new Error('Contract address not found for: ' + contractName);
+    }
+    
     const abi = getAbi(contractName);
     const provider = await initializeBlockchain();
     
@@ -110,8 +120,8 @@ async function analyzeContract(contract, name) {
   console.log(`\n===== 分析合约 ${name} =====`);
   console.log('合约地址:', contract.target);
   
-  // 获取合约ABI
-  const abiPath = path.join(__dirname, '../../contracts/artifacts', `${name}.json`);
+  // 获取合约ABI，使用标准 Hardhat 输出目录
+  const abiPath = path.join(__dirname, '../../artifacts/contracts', `${name}.sol/${name}.json`);
   if (fs.existsSync(abiPath)) {
     const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
     if (artifact.abi && Array.isArray(artifact.abi)) {
@@ -125,7 +135,24 @@ async function analyzeContract(contract, name) {
       }
     }
   } else {
-    console.log(`警告: 找不到合约 ${name} 的ABI文件`);
+    // 尝试旧路径作为后备方案
+    const legacyPath = path.join(__dirname, '../../contracts/artifacts', `${name}.json`);
+    if (fs.existsSync(legacyPath)) {
+      console.log(`警告: 使用旧式ABI文件路径 ${legacyPath}`);
+      const artifact = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+      if (artifact.abi && Array.isArray(artifact.abi)) {
+        const abiFunctions = artifact.abi.filter(item => item.type === 'function');
+        console.log(`合约ABI包含 ${abiFunctions.length} 个函数:`);
+        
+        // 检查函数是否可以直接访问
+        for (const func of abiFunctions) {
+          const isAccessible = func.name in contract;
+          console.log(`- ${func.name}: ${func.stateMutability} (可访问: ${isAccessible})`);
+        }
+      }
+    } else {
+      console.log(`警告: 找不到合约 ${name} 的ABI文件，请确保已编译合约`);
+    }
   }
   
   console.log('\n测试合约函数可用性:');
@@ -151,6 +178,30 @@ async function analyzeContract(contract, name) {
   console.log('============================\n');
 }
 
+// 检查合约初始化状态
+async function checkContractInitialization(contract, name) {
+  try {
+    console.log(`\n检查 ${name} 合约初始化状态...`);
+    
+    // 检查版本号
+    const version = await contract.version();
+    console.log(`${name} 版本号:`, version);
+    
+    // 检查链ID
+    const chainId = await contract.chainId();
+    console.log(`${name} 链ID:`, chainId);
+    
+    // 检查角色管理器
+    const roleManager = await contract.roleManager();
+    console.log(`${name} 角色管理器:`, roleManager);
+    
+    return true;
+  } catch (error) {
+    console.log(`${name} 合约可能未正确初始化:`, error.message);
+    return false;
+  }
+}
+
 // 测试流程
 async function testFlow() {
   try {
@@ -173,19 +224,21 @@ async function testFlow() {
     const addresses = getContractAddresses();
     debug('合约地址:', addresses);
     
-    // 输出ABI文件路径检查
-    const propertyRegistryPath = path.join(__dirname, '../../contracts/artifacts/PropertyRegistry.json');
-    const tokenFactoryPath = path.join(__dirname, '../../contracts/artifacts/TokenFactory.json');
-
-    console.log('检查ABI文件路径:');
-    console.log(`PropertyRegistry ABI 文件路径存在: ${fs.existsSync(propertyRegistryPath)}`);
-    console.log(`TokenFactory ABI 文件路径存在: ${fs.existsSync(tokenFactoryPath)}`);
-
     // 获取并分析合约
     const propertyRegistry = await getContract('PropertyRegistry');
-    await analyzeContract(propertyRegistry, 'PropertyRegistry');
-
     const tokenFactory = await getContract('TokenFactory');
+    
+    // 检查合约初始化状态
+    const propertyRegistryInitialized = await checkContractInitialization(propertyRegistry, 'PropertyRegistry');
+    const tokenFactoryInitialized = await checkContractInitialization(tokenFactory, 'TokenFactory');
+    
+    if (!propertyRegistryInitialized || !tokenFactoryInitialized) {
+      console.log('\n警告：合约可能未正确初始化，请确保已经运行了部署脚本！');
+      return;
+    }
+    
+    // 分析合约
+    await analyzeContract(propertyRegistry, 'PropertyRegistry');
     await analyzeContract(tokenFactory, 'TokenFactory');
     
     // 测试房产流程
@@ -222,23 +275,19 @@ async function testFlow() {
       console.log('获取房产数量...');
       
       // 检查方法
-      checkContractMethod(propertyRegistry, 'allPropertyIds');
+      checkContractMethod(propertyRegistry, 'getAllPropertyIds');
 
-      // 获取数组长度
-      const propertyCount = await propertyRegistry.getPropertyCount();
-      console.log(`找到 ${propertyCount} 个房产\n`);
+      // 直接获取所有房产ID
+      const propertyIds = await propertyRegistry.getAllPropertyIds();
       
-      // 获取所有房产ID
-      const propertyIds = [];
-      for (let i = 0; i < propertyCount; i++) {
-        const propertyId = await propertyRegistry.allPropertyIds(i);
-        propertyIds.push(propertyId);
-      }
-      console.log('房产IDs数组:', propertyIds);
-      
-      // 如果有房产，尝试获取第一个房产的详情
-      if (propertyIds.length > 0) {
-        // 获取第一个ID
+      // 处理空数组情况
+      if (!propertyIds || propertyIds.length === 0) {
+        console.log('当前没有注册的房产\n');
+      } else {
+        console.log('房产IDs数组:', propertyIds);
+        console.log(`找到 ${propertyIds.length} 个房产\n`);
+        
+        // 如果有房产，尝试获取第一个房产的详情
         const propertyId = propertyIds[0];
         console.log(`获取房产 ${propertyId} 的详情...`);
         
@@ -257,6 +306,13 @@ async function testFlow() {
         console.log('网络连接失败，请检查网络配置和连接状态');
       } else if (error.code === 'BAD_DATA') {
         console.log('合约返回数据解码失败，可能是合约状态异常');
+        // 尝试使用 getPropertyCount 作为备选方案
+        try {
+          const count = await propertyRegistry.getPropertyCount();
+          console.log(`使用备选方法获取到房产数量: ${count}`);
+        } catch (countError) {
+          console.log('备选方法也失败:', countError.message);
+        }
       }
       console.log('----------------------------------------\n');
     }
@@ -296,19 +352,12 @@ async function testFlow() {
       console.log('获取代币列表...');
       
       // 检查方法
-      checkContractMethod(tokenFactory, 'allTokens');
+      checkContractMethod(tokenFactory, 'getAllTokens');
 
-      // 获取代币数量
-      const tokenCount = await tokenFactory.getTokenCount();
-      console.log(`找到 ${tokenCount} 个代币\n`);
-      
-      // 获取所有代币地址
-      const tokens = [];
-      for (let i = 0; i < tokenCount; i++) {
-        const tokenAddress = await tokenFactory.allTokens(i);
-        tokens.push(tokenAddress);
-      }
+      // 直接获取所有代币地址
+      const tokens = await tokenFactory.getAllTokens();
       console.log('代币列表:', tokens);
+      console.log(`找到 ${tokens.length} 个代币\n`);
       
       // 如果有代币，尝试获取第一个代币的详情
       if (tokens.length > 0) {

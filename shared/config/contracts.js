@@ -73,21 +73,34 @@ function getContractAddresses() {
  */
 function getAbi(contractName) {
   try {
-    // 直接从artifacts加载
-    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
-    logger.info(`尝试从${artifactPath}加载ABI...`);
+    // 首先尝试从标准Hardhat输出目录加载
+    const standardArtifactPath = path.join(ROOT_DIR, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
+    logger.info(`尝试从${standardArtifactPath}加载ABI...`);
     
-    if (fs.existsSync(artifactPath)) {
-      const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    if (fs.existsSync(standardArtifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(standardArtifactPath, 'utf8'));
       if (artifact.abi && Array.isArray(artifact.abi)) {
-        logger.info(`从artifacts加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
+        logger.info(`从标准artifacts目录加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
+        return artifact.abi;
+      }
+    }
+    
+    // 后备方案：从旧路径加载
+    const legacyArtifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    logger.info(`尝试从旧路径${legacyArtifactPath}加载ABI...`);
+    
+    if (fs.existsSync(legacyArtifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(legacyArtifactPath, 'utf8'));
+      if (artifact.abi && Array.isArray(artifact.abi)) {
+        logger.info(`从旧artifacts目录加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
         return artifact.abi;
       } else {
         throw new Error(`合约 ${contractName} 的ABI格式无效`);
       }
-    } else {
-      throw new Error(`找不到合约 ${contractName} 的ABI文件: ${artifactPath}`);
     }
+    
+    // 两个路径都尝试失败
+    throw new Error(`找不到合约 ${contractName} 的ABI文件，已尝试路径:\n1. ${standardArtifactPath}\n2. ${legacyArtifactPath}`);
   } catch (error) {
     logger.error(`Failed to load ABI for contract: ${contractName}`, error);
     throw error;
@@ -101,13 +114,21 @@ function getAbi(contractName) {
  */
 function getBytecode(contractName) {
   try {
-    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
-    if (!fs.existsSync(artifactPath)) {
-      throw new Error(`Bytecode file not found for contract: ${contractName}`);
+    // 首先尝试从标准Hardhat输出目录加载
+    const standardArtifactPath = path.join(ROOT_DIR, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
+    if (fs.existsSync(standardArtifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(standardArtifactPath, 'utf8'));
+      return artifact.bytecode;
+    }
+    
+    // 后备方案：从旧路径加载
+    const legacyArtifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    if (fs.existsSync(legacyArtifactPath)) {
+      const artifact = JSON.parse(fs.readFileSync(legacyArtifactPath, 'utf8'));
+      return artifact.bytecode;
     }
 
-    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-    return artifact.bytecode;
+    throw new Error(`Bytecode file not found for contract: ${contractName}`);
   } catch (error) {
     logger.error(`Failed to load bytecode for contract: ${contractName}`, error);
     throw error;

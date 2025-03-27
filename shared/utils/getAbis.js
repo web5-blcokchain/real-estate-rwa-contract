@@ -17,6 +17,9 @@ const ROOT_DIR = path.join(__dirname, '..', '..');
 // 缓存文件路径
 const ABI_CACHE_FILE = path.join(SHARED_DIR, 'cache/abi-cache.json');
 
+// 合约ABI源目录 - 使用 Hardhat 的标准输出目录
+const ARTIFACTS_DIR = path.join(ROOT_DIR, 'artifacts', 'contracts');
+
 /**
  * 从指定路径加载ABI文件
  * @param {string} contractName 合约名称
@@ -24,8 +27,10 @@ const ABI_CACHE_FILE = path.join(SHARED_DIR, 'cache/abi-cache.json');
  */
 const loadAbi = async (contractName) => {
   try {
-    // 从 artifacts 目录加载
-    const artifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    // 从 artifacts 目录加载，遵循 Hardhat 标准结构
+    const contractDir = path.join(ARTIFACTS_DIR, `${contractName}.sol`);
+    const artifactPath = path.join(contractDir, `${contractName}.json`);
+    
     console.log(`尝试从${artifactPath}加载ABI...`);
     
     if (fsSync.existsSync(artifactPath)) {
@@ -59,6 +64,24 @@ const loadAbi = async (contractName) => {
       }
     }
     
+    // 尝试从contracts/artifacts目录加载（兼容旧结构）
+    const legacyPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+    console.log(`尝试从旧路径${legacyPath}加载ABI...`);
+    
+    if (fsSync.existsSync(legacyPath)) {
+      const artifact = JSON.parse(await fs.readFile(legacyPath, 'utf8'));
+      if (artifact.abi) {
+        const abi = artifact.abi;
+        console.log(`从旧路径加载了${contractName}的ABI`);
+        contractAbis[contractName] = abi;
+        return abi;
+      }
+    }
+    
+    // 找不到ABI文件，尝试通过临时编译获取
+    console.warn(`在标准路径和旧路径都找不到 ${contractName} 的ABI文件`);
+    console.warn('请确保已编译合约，或先运行 npx hardhat compile');
+    
     throw new Error(`找不到合约 ${contractName} 的ABI文件`);
   } catch (error) {
     const errorMsg = `无法加载 ${contractName} 的ABI: ${error.message}`;
@@ -73,12 +96,55 @@ const loadAbi = async (contractName) => {
  * @returns {Object} ABI对象
  */
 function getAbi(contractName) {
+  // 如果尚未初始化，尝试延迟初始化
   if (!initialized) {
-    throw new Error('ABI尚未初始化，请先调用 initializeAbis()');
+    console.warn('ABI尚未初始化，尝试延迟初始化...');
+    try {
+      // 如果有缓存，尝试从缓存加载
+      if (fsSync.existsSync(ABI_CACHE_FILE)) {
+        const cachedData = JSON.parse(fsSync.readFileSync(ABI_CACHE_FILE, 'utf8'));
+        Object.assign(contractAbis, cachedData);
+        initialized = true;
+        console.log(`已从缓存加载 ${Object.keys(cachedData).length} 个ABI`);
+      } else {
+        throw new Error('ABI尚未初始化，请先调用 initializeAbis()');
+      }
+    } catch (error) {
+      throw new Error(`ABI尚未初始化: ${error.message}`);
+    }
   }
 
   const abi = contractAbis[contractName];
   if (!abi) {
+    // 尝试同步加载单个ABI
+    try {
+      // 先尝试从标准Hardhat结构加载
+      const contractDir = path.join(ARTIFACTS_DIR, `${contractName}.sol`);
+      const artifactPath = path.join(contractDir, `${contractName}.json`);
+      
+      if (fsSync.existsSync(artifactPath)) {
+        const artifact = JSON.parse(fsSync.readFileSync(artifactPath, 'utf8'));
+        if (artifact.abi && Array.isArray(artifact.abi) && artifact.abi.length > 0) {
+          contractAbis[contractName] = artifact.abi;
+          console.log(`已动态加载 ${contractName} 的ABI`);
+          return artifact.abi;
+        }
+      }
+      
+      // 再尝试从旧路径加载
+      const legacyPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
+      if (fsSync.existsSync(legacyPath)) {
+        const artifact = JSON.parse(fsSync.readFileSync(legacyPath, 'utf8'));
+        if (artifact.abi && Array.isArray(artifact.abi) && artifact.abi.length > 0) {
+          contractAbis[contractName] = artifact.abi;
+          console.log(`已从旧路径动态加载 ${contractName} 的ABI`);
+          return artifact.abi;
+        }
+      }
+    } catch (e) {
+      console.error(`动态加载 ${contractName} 的ABI失败: ${e.message}`);
+    }
+    
     throw new Error(`找不到合约 ${contractName} 的ABI`);
   }
 
@@ -126,6 +192,20 @@ async function initializeAbis(logger) {
       'RealEstateSystem'
     ];
     log('需要加载的合约: ' + requiredContracts.join(', '));
+
+    // 如果缓存已包含所有必需的合约，则不再重新加载
+    const missingContracts = requiredContracts.filter(name => !contractAbis[name]);
+    if (missingContracts.length === 0) {
+      log('所有必需的合约ABI已在缓存中，跳过加载');
+      initialized = true;
+      return;
+    }
+
+    // 检查ABI源目录是否存在
+    if (!fsSync.existsSync(ARTIFACTS_DIR)) {
+      log(`警告: 标准ABI源目录不存在: ${ARTIFACTS_DIR}`);
+      log('请确保已编译合约，或先运行 npx hardhat compile');
+    }
 
     // 加载每个合约的ABI
     for (const contractName of requiredContracts) {
@@ -207,6 +287,14 @@ const saveCachedAbis = async () => {
   }
 };
 
+/**
+ * 获取ABI源目录路径
+ * @returns {string} ABI源目录路径
+ */
+function getAbiSourceDir() {
+  return ARTIFACTS_DIR;
+}
+
 // 导出函数和缓存
 module.exports = {
   getAbi,
@@ -214,5 +302,6 @@ module.exports = {
   initializeAbis,
   contractAbis,
   loadCachedAbis,
-  saveCachedAbis
+  saveCachedAbis,
+  getAbiSourceDir
 }; 

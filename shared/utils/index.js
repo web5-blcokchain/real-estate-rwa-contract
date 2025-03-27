@@ -29,5 +29,6 @@ module.exports = {
   getSigner: web3Provider.getSigner,
   executeTransaction: transaction.executeTransaction,
   createEventListener: eventListener.createEventListener,
-  deployContract: deployUtils.deployContract
+  deployContract: deployUtils.deployContract,
+  createContractService: contractService.createContractService
 }; 

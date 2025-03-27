@@ -2,8 +2,10 @@
  * 交易工具模块
  * 提供交易处理的公共函数
  */
-const { ethers } = require('hardhat');
-const { logger } = require('./logger');
+const { ethers } = require('ethers');
+const { getLogger } = require('./logger');
+
+const logger = getLogger('transaction');
 
 /**
  * 处理交易错误
@@ -187,67 +189,66 @@ async function waitForTransaction(tx, confirmations = 1) {
  * @param {Object} options 选项
  * @returns {Promise<Object>} 交易结果
  */
-async function executeTransaction(contract, method, args, options = {}) {
-  const operation = options.operation || `执行方法 ${method}`;
-  
+async function executeTransaction(contract, method, args = [], options = {}) {
   try {
-    logger.info(`开始${operation}...`);
+    logger.info(`执行交易: ${method}`);
+    logger.info('参数:', args);
     
-    let txOptions = {};
-    
-    // 如果需要估算gas
+    // 估算 gas
+    let gasLimit;
     if (options.estimateGas !== false) {
-      txOptions.gasLimit = await estimateGas(contract, method, args, {
-        safetyMargin: options.safetyMargin,
-        defaultGasLimit: options.gasLimit
-      });
-    } else if (options.gasLimit) {
-      txOptions.gasLimit = options.gasLimit;
+      try {
+        const estimatedGas = await contract.estimateGas[method](...args);
+        gasLimit = BigInt(Math.floor(Number(estimatedGas) * (1 + (options.safetyMargin || 0.2))));
+        logger.info(`预估 gas: ${estimatedGas}`);
+        logger.info(`设置 gas 限制: ${gasLimit}`);
+      } catch (error) {
+        logger.error(`Gas 估算失败: ${error.message}`);
+        throw error;
+      }
     }
     
-    // 如果需要设置gas价格
-    if (options.customGasPrice) {
-      txOptions.gasPrice = options.customGasPrice;
-    } else if (options.getGasPrice !== false) {
-      const provider = contract.runner.provider || await ethers.provider;
-      txOptions.gasPrice = await getGasPrice(provider);
-    }
+    // 获取当前 gas 价格
+    const provider = contract.provider;
+    const feeData = await provider.getFeeData();
+    let gasPrice = feeData.gasPrice;
     
-    // 设置交易优先级
+    // 根据优先级调整 gas 价格
     if (options.priority === 'high') {
-      txOptions.maxFeePerGas = txOptions.gasPrice * BigInt(2);
-      txOptions.maxPriorityFeePerGas = txOptions.gasPrice / BigInt(2);
+      gasPrice = BigInt(Math.floor(Number(gasPrice) * 1.2));
+    } else if (options.priority === 'low') {
+      gasPrice = BigInt(Math.floor(Number(gasPrice) * 0.8));
     }
     
     // 执行交易
-    const tx = await contract[method](...args, txOptions);
-    logger.info(`${operation}交易已提交: ${tx.hash}`);
+    const tx = await contract[method](...args, {
+      gasLimit,
+      gasPrice,
+      ...options
+    });
     
     // 等待交易确认
-    const receipt = await waitForTransaction(tx, options.confirmations || 1);
+    const receipt = await tx.wait();
     
-    // 构建返回结果
-    const result = {
+    // 记录交易结果
+    logger.info(`交易成功: ${receipt.hash}`);
+    logger.info(`区块号: ${receipt.blockNumber}`);
+    logger.info(`Gas 使用: ${receipt.gasUsed}`);
+    logger.info(`实际 Gas 价格: ${receipt.effectiveGasPrice}`);
+    
+    return {
       success: true,
-      transactionHash: tx.hash
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed,
+      effectiveGasPrice: receipt.effectiveGasPrice
     };
-    
-    // 安全地添加收据信息
-    if (receipt) {
-      if (receipt.gasUsed) {
-        result.gasUsed = receipt.gasUsed.toString();
-      }
-      if (receipt.gasPrice) {
-        result.effectiveGasPrice = receipt.gasPrice.toString();
-      }
-      if (receipt.blockNumber) {
-        result.blockNumber = receipt.blockNumber;
-      }
-    }
-    
-    return result;
   } catch (error) {
-    return handleTransactionError(error, operation);
+    logger.error(`交易失败: ${error.message}`);
+    return {
+      success: false,
+      error
+    };
   }
 }
 

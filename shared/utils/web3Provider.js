@@ -1,16 +1,68 @@
 const { ethers } = require('ethers');
 const { networkConfig } = require('../config');
+const { getLogger } = require('./logger');
+
+const logger = getLogger('web3Provider');
 
 // 提供者缓存
 let providerCache = null;
 let networkInfo = null;
+
+let provider = null;
+let signer = null;
+
+/**
+ * 初始化区块链连接
+ */
+async function initializeProvider() {
+  try {
+    // 使用 Hardhat 的 provider
+    provider = ethers.provider;
+    signer = await provider.getSigner();
+    
+    logger.info('区块链连接初始化成功');
+    return true;
+  } catch (error) {
+    logger.error('区块链连接初始化失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 获取 provider 实例
+ */
+function getProvider() {
+  if (!provider) {
+    throw new Error('Provider not initialized');
+  }
+  return provider;
+}
+
+/**
+ * 获取 signer 实例
+ */
+function getSigner() {
+  if (!signer) {
+    throw new Error('Signer not initialized');
+  }
+  return signer;
+}
+
+/**
+ * 重置区块链连接
+ */
+async function resetProvider() {
+  provider = null;
+  signer = null;
+  await initializeProvider();
+}
 
 /**
  * 获取以太坊提供者
  * @param {string} [customRpcUrl] 可选的自定义RPC URL
  * @returns {ethers.Provider} 以太坊提供者
  */
-const getProvider = (customRpcUrl) => {
+const getProviderFromCache = (customRpcUrl) => {
   // 如果已缓存并且没有指定自定义URL，则使用缓存的提供者
   if (providerCache && !customRpcUrl) {
     return providerCache;
@@ -44,12 +96,12 @@ const getProvider = (customRpcUrl) => {
  * @param {ethers.Provider} [customProvider] 可选的自定义提供者
  * @returns {ethers.Signer} 签名者
  */
-const getSigner = (privateKey, customProvider) => {
+const getSignerFromCache = (privateKey, customProvider) => {
   if (!privateKey) {
     throw new Error('未提供私钥');
   }
   
-  const provider = customProvider || getProvider();
+  const provider = customProvider || getProviderFromCache();
   
   try {
     return new ethers.Wallet(privateKey, provider);
@@ -69,7 +121,7 @@ const getNetworkInfo = async () => {
   }
   
   try {
-    const provider = getProvider();
+    const provider = getProviderFromCache();
     const network = await provider.getNetwork();
     
     // 缓存网络信息
@@ -102,7 +154,7 @@ const clearProviderCache = () => {
  */
 const testConnection = async () => {
   try {
-    const provider = getProvider();
+    const provider = getProviderFromCache();
     await provider.getBlockNumber();
     const network = await getNetworkInfo();
     console.log(`网络连接测试成功，链接到 ${network.name} (Chain ID: ${network.chainId})`);
@@ -114,8 +166,12 @@ const testConnection = async () => {
 };
 
 module.exports = {
+  initializeProvider,
   getProvider,
   getSigner,
+  resetProvider,
+  getProviderFromCache,
+  getSignerFromCache,
   getNetworkInfo,
   clearProviderCache,
   testConnection

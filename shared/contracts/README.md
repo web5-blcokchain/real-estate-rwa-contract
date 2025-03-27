@@ -2,32 +2,25 @@
 
 ## 概述
 
-本目录管理日本房产代币化平台使用的所有智能合约ABI（应用二进制接口）文件。ABI文件是应用程序与区块链智能合约交互的基础，它们定义了合约函数和事件的接口规范。
+本项目使用Hardhat编译框架管理智能合约ABI（应用二进制接口）文件。ABI文件是应用程序与区块链智能合约交互的基础，它们定义了合约函数和事件的接口规范。
 
-## 目录结构
+## ABI文件位置
+
+项目中的ABI文件存储在以下位置（Hardhat标准输出目录）：
 
 ```
-contracts/
-├── abis/               # ABI JSON文件
-│   ├── RoleManager.json
-│   ├── PropertyRegistry.json
-│   ├── TokenFactory.json
-│   ├── RealEstateToken.json
-│   ├── RedemptionManager.json
-│   ├── RentDistributor.json
-│   ├── FeeManager.json
-│   ├── Marketplace.json
-│   ├── TokenHolderQuery.json
-│   ├── RealEstateSystem.json
-│   └── ... 
-└── README.md           # 本文档
+artifacts/
+└── contracts/           # 合约编译产物，包含完整ABI
+    ├── ContractName.sol/
+    │   └── ContractName.json
+    └── ...
 ```
 
 ## ABI更新流程
 
 系统通过以下机制保持ABI文件的同步和更新：
 
-1. **自动更新**: 合约编译后，运行 `npm run update-abis` 自动提取最新的ABI并更新文件
+1. **自动编译**: 通过 `npx hardhat compile` 编译合约后，Hardhat会自动更新ABI
 2. **版本控制**: ABI文件纳入版本控制系统，确保所有开发者使用统一版本
 3. **缓存机制**: 在运行时首次加载ABI后会进行缓存，提高性能
 
@@ -38,14 +31,9 @@ contracts/
    npx hardhat compile
    ```
 
-2. 运行ABI更新脚本
+2. 验证ABI更新
    ```bash
-   npm run update-abis
-   ```
-
-3. 验证ABI更新
-   ```bash
-   git diff shared/contracts/abis
+   git diff artifacts/contracts
    ```
 
 ## 使用方法
@@ -69,7 +57,7 @@ const roleManagerAbi = getAbi('RoleManager');
 如果需要直接访问ABI文件，可以使用：
 
 ```javascript
-const roleManagerAbi = require('../shared/contracts/abis/RoleManager.json');
+const roleManagerAbi = require('../artifacts/contracts/RoleManager.sol/RoleManager.json').abi;
 ```
 
 ## ABI缓存
@@ -87,10 +75,9 @@ const roleManagerAbi = require('../shared/contracts/abis/RoleManager.json');
 
 如果遇到合约交互错误，可能是ABI不匹配，解决方法：
 
-1. 确保已编译最新版本的合约
-2. 运行 `npm run update-abis` 更新ABI文件
-3. 删除 `shared/cache/abi-cache.json` 清除缓存
-4. 重启应用程序
+1. 确保已编译最新版本的合约： `npx hardhat compile`
+2. 删除 `shared/cache/abi-cache.json` 清除缓存
+3. 重启应用程序
 
 ### 缺失ABI文件
 
@@ -98,4 +85,4 @@ const roleManagerAbi = require('../shared/contracts/abis/RoleManager.json');
 
 1. 检查合约名称拼写是否正确
 2. 确保合约已成功编译
-3. 手动将合约ABI从 `artifacts/contracts/{ContractName}.sol/{ContractName}.json` 中的 `abi` 字段复制到对应的ABI文件 
+3. 确认 `artifacts/contracts/{ContractName}.sol/{ContractName}.json` 文件存在 
