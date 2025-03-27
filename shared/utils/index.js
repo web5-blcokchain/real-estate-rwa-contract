@@ -11,6 +11,7 @@ const contractService = require('./contractService');
 const transaction = require('./transaction');
 const eventListener = require('./eventListener');
 const deployUtils = require('./deployUtils');
+const ethersUtils = require('./ethers');
 
 // 导出所有工具模块
 module.exports = {
@@ -21,6 +22,7 @@ module.exports = {
   transaction,
   eventListener,
   deployUtils,
+  ethersUtils,
   
   // 导出常用函数以便直接使用
   getLogger: logger.getLogger,

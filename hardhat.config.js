@@ -1,78 +1,122 @@
-require('@nomicfoundation/hardhat-ethers');
-require('@nomicfoundation/hardhat-verify');
-require('@openzeppelin/hardhat-upgrades');
-require('dotenv').config();
+/**
+ * @type import('hardhat/config').HardhatUserConfig
+ */
 
-// 从环境变量中获取配置
-const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || '';
+// 临时修改: 仅使用ethers v5兼容配置
+require('@nomiclabs/hardhat-waffle');
+require('@nomiclabs/hardhat-ethers');
+// 暂时注释掉依赖于ethers v6的插件
+// require('@nomicfoundation/hardhat-verify');
+// require('@openzeppelin/hardhat-upgrades');
 
-// 获取各网络配置
-const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || 'https://bsc-dataseed.binance.org/';
-const MAINNET_CHAIN_ID = parseInt(process.env.MAINNET_CHAIN_ID || '56');
-const MAINNET_GAS_PRICE = parseInt(process.env.MAINNET_GAS_PRICE || '5000000000');
+// 自定义引入ethers v5
+const ethers = require('ethers');
+global.ethers = ethers;
+global.getAddress = ethers.utils.getAddress;
 
-const TESTNET_RPC_URL = process.env.TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545/';
-const TESTNET_CHAIN_ID = parseInt(process.env.TESTNET_CHAIN_ID || '97');
-const TESTNET_GAS_PRICE = parseInt(process.env.TESTNET_GAS_PRICE || '10000000000');
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
 
-const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://127.0.0.1:8545';
-const HARDHAT_CHAIN_ID = parseInt(process.env.HARDHAT_CHAIN_ID || '31337');
-const HARDHAT_GAS_PRICE = parseInt(process.env.HARDHAT_GAS_PRICE || '50000000000');
+// 加载环境变量
+dotenv.config();
 
-// 如果没有有效的私钥，输出警告
-if (DEPLOYER_PRIVATE_KEY === '0000000000000000000000000000000000000000000000000000000000000000') {
-  console.warn('警告: 使用默认私钥，请设置有效的私钥');
+// 准备私钥
+function getPrivateKey() {
+  try {
+    const privateKeyPath = path.join(__dirname, '.secret');
+    if (fs.existsSync(privateKeyPath)) {
+      return fs.readFileSync(privateKeyPath, 'utf8').trim();
+    } else {
+      return process.env.PRIVATE_KEY || '';
+    }
+  } catch (error) {
+    return process.env.PRIVATE_KEY || '';
+  }
+}
+
+const privateKey = getPrivateKey();
+
+// 确保部署状态目录存在
+const deployStateDir = path.join(__dirname, 'deploy-state');
+if (!fs.existsSync(deployStateDir)) {
+  fs.mkdirSync(deployStateDir, { recursive: true });
 }
 
 module.exports = {
   solidity: {
-    version: '0.8.22',
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 1
+    compilers: [
+      {
+        version: '0.8.22',
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          },
+          viaIR: true
+        }
       },
-      viaIR: true,
-      debug: {
-        revertStrings: 'strip'  // 减少 revert 字符串的大小
+      {
+        version: '0.8.20',
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          },
+          viaIR: true
+        }
+      },
+      {
+        version: '0.8.19',
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          },
+          viaIR: true
+        }
       }
-    }
-  },
-  networks: {
-    hardhat: {
-      chainId: HARDHAT_CHAIN_ID,
-      gasPrice: HARDHAT_GAS_PRICE,
-      allowUnlimitedContractSize: true
-    },
-    localhost: {
-      url: HARDHAT_RPC_URL,
-      chainId: HARDHAT_CHAIN_ID,
-      gasPrice: HARDHAT_GAS_PRICE
-    },
-    bsc_mainnet: {
-      url: MAINNET_RPC_URL,
-      accounts: [DEPLOYER_PRIVATE_KEY],
-      chainId: MAINNET_CHAIN_ID,
-      gasPrice: MAINNET_GAS_PRICE
-    },
-    bsc_testnet: {
-      url: TESTNET_RPC_URL,
-      accounts: [DEPLOYER_PRIVATE_KEY],
-      chainId: TESTNET_CHAIN_ID,
-      gasPrice: TESTNET_GAS_PRICE
-    }
-  },
-  etherscan: {
-    apiKey: ETHERSCAN_API_KEY
+    ]
   },
   paths: {
     sources: './contracts',
-    tests: './test',
     cache: './cache',
     artifacts: './artifacts'
   },
+  networks: {
+    hardhat: {
+      chainId: 1337
+    },
+    localhost: {
+      url: 'http://127.0.0.1:8545',
+      chainId: 1337
+    },
+    mumbai: {
+      url: process.env.MUMBAI_RPC_URL || 'https://rpc-mumbai.maticvigil.com',
+      accounts: privateKey ? [privateKey] : [],
+      chainId: 80001,
+      gasPrice: 2500000000
+    },
+    polygon: {
+      url: process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com',
+      accounts: privateKey ? [privateKey] : [],
+      chainId: 137,
+      gasPrice: 50000000000
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || 'https://rpc.sepolia.org',
+      accounts: privateKey ? [privateKey] : [],
+      chainId: 11155111
+    }
+  },
   mocha: {
     timeout: 40000
+  },
+  etherscan: {
+    apiKey: {
+      polygon: process.env.POLYGONSCAN_API_KEY || '',
+      polygonMumbai: process.env.POLYGONSCAN_API_KEY || '',
+      sepolia: process.env.ETHERSCAN_API_KEY || ''
+    }
   }
 };

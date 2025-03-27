@@ -1,6 +1,6 @@
 /**
- * ethers工具模块
- * 统一提供ethers v5 API，确保在整个项目中兼容性
+ * ethers v5工具模块
+ * 直接使用ethers v5 API，不进行兼容处理
  */
 const { ethers } = require('ethers');
 const { getNetworkConfigPath, validatePath } = require('./paths');
@@ -69,17 +69,7 @@ async function waitForTransaction(tx, confirmations = 1) {
  */
 function isAddress(address) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.isAddress === 'function') {
-      // ethers v6
-      return ethers.isAddress(address);
-    } else if (typeof ethers.utils?.isAddress === 'function') {
-      // ethers v5
-      return ethers.utils.isAddress(address);
-    } else {
-      logger.error('无法找到 ethers.isAddress 或 ethers.utils.isAddress 方法');
-      return false;
-    }
+    return ethers.utils.isAddress(address);
   } catch (error) {
     logger.error(`检查地址验证时出错: ${error.message}`);
     return false;
@@ -93,34 +83,12 @@ function isAddress(address) {
  */
 function getAddress(address) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.getAddress === 'function') {
-      // ethers v6
-      return ethers.getAddress(address);
-    } else if (typeof ethers.utils?.getAddress === 'function') {
-      // ethers v5
-      return ethers.utils.getAddress(address);
-    } else {
-      // 兼容性处理 - 如果ethers中没有getAddress，自己实现一个简单版本
-      // 这仅作为最后手段，应该尽量避免使用
-      logger.warn('无法找到 ethers.getAddress 或 ethers.utils.getAddress 方法，使用兼容实现');
-      // 简单的地址合法性检查和转换为小写
-      if (typeof address !== 'string' || !address.match(/^0x[0-9a-fA-F]{40}$/)) {
-        throw new Error(`Invalid address: ${address}`);
-      }
-      // 如果getAddress不可用，至少返回一个小写版本的地址
-      return address.toLowerCase();
-    }
+    return ethers.utils.getAddress(address);
   } catch (error) {
     logger.error(`格式化地址时出错: ${error.message}`);
     throw error;
   }
 }
-
-// 从hardhat-ethers中导入getAddress以在全局作用域可用
-// 这使得其他模块可以直接导入此模块中的getAddress
-// 注意：这是为了确保在整个项目中使用相同的getAddress函数
-global.getAddress = getAddress;
 
 /**
  * 解析以太币金额
@@ -129,16 +97,7 @@ global.getAddress = getAddress;
  */
 function parseEther(value) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.parseEther === 'function') {
-      // ethers v6
-      return ethers.parseEther(value.toString());
-    } else if (typeof ethers.utils?.parseEther === 'function') {
-      // ethers v5
-      return ethers.utils.parseEther(value.toString());
-    } else {
-      throw new Error('无法找到 ethers.parseEther 或 ethers.utils.parseEther 方法');
-    }
+    return ethers.utils.parseEther(value.toString());
   } catch (error) {
     logger.error(`解析以太币数量时出错: ${error.message}`);
     throw error;
@@ -152,16 +111,7 @@ function parseEther(value) {
  */
 function formatEther(value) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.formatEther === 'function') {
-      // ethers v6
-      return ethers.formatEther(value);
-    } else if (typeof ethers.utils?.formatEther === 'function') {
-      // ethers v5
-      return ethers.utils.formatEther(value);
-    } else {
-      throw new Error('无法找到 ethers.formatEther 或 ethers.utils.formatEther 方法');
-    }
+    return ethers.utils.formatEther(value);
   } catch (error) {
     logger.error(`格式化以太币数量时出错: ${error.message}`);
     throw error;
@@ -176,16 +126,7 @@ function formatEther(value) {
  */
 function parseUnits(value, decimals) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.parseUnits === 'function') {
-      // ethers v6
-      return ethers.parseUnits(value.toString(), decimals);
-    } else if (typeof ethers.utils?.parseUnits === 'function') {
-      // ethers v5
-      return ethers.utils.parseUnits(value.toString(), decimals);
-    } else {
-      throw new Error('无法找到 ethers.parseUnits 或 ethers.utils.parseUnits 方法');
-    }
+    return ethers.utils.parseUnits(value.toString(), decimals);
   } catch (error) {
     logger.error(`解析代币数量时出错: ${error.message}`);
     throw error;
@@ -200,16 +141,7 @@ function parseUnits(value, decimals) {
  */
 function formatUnits(value, decimals) {
   try {
-    // 兼容 ethers v5 和 v6
-    if (typeof ethers.formatUnits === 'function') {
-      // ethers v6
-      return ethers.formatUnits(value, decimals);
-    } else if (typeof ethers.utils?.formatUnits === 'function') {
-      // ethers v5
-      return ethers.utils.formatUnits(value, decimals);
-    } else {
-      throw new Error('无法找到 ethers.formatUnits 或 ethers.utils.formatUnits 方法');
-    }
+    return ethers.utils.formatUnits(value, decimals);
   } catch (error) {
     logger.error(`格式化代币数量时出错: ${error.message}`);
     throw error;
@@ -235,6 +167,29 @@ function validateAddress(address) {
   }
 }
 
+/**
+ * 获取合约地址，统一处理ethers v5和v6的差异
+ * @param {Object} contract - 合约实例
+ * @returns {string} 合约地址
+ */
+function getContractAddress(contract) {
+  // 从合约实例中获取地址
+  if (!contract) return null;
+  
+  // 如果是ethers v5格式的合约，直接返回address属性
+  if (contract.address) {
+    return contract.address;
+  }
+  
+  // 如果是特殊格式，尝试获取target属性
+  if (contract.target) {
+    return contract.target;
+  }
+  
+  // 如果都无法获取，返回null
+  return null;
+}
+
 module.exports = {
   createProvider,
   createSigner,
@@ -246,6 +201,7 @@ module.exports = {
   parseUnits,
   formatUnits,
   validateAddress,
+  getContractAddress,
   // 导出原始ethers以便在需要时使用
   ethers
 }; 

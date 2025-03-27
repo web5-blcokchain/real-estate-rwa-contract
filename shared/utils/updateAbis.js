@@ -72,7 +72,13 @@ function findContractFile(dir, contractName) {
         // 递归搜索目录
         if (file.name === `${contractName}.sol`) {
           // 如果找到合约目录，查找里面的JSON文件
-          const jsonFiles = fs.readdirSync(fullPath).filter(f => f.endsWith('.json') && !f.endsWith('.dbg.json'));
+          const jsonFiles = fs.readdirSync(fullPath).filter(f => {
+            // 确保选择的是合约本身，而不是接口或库
+            return f.endsWith('.json') && 
+                  !f.endsWith('.dbg.json') && 
+                  f.startsWith(contractName);
+          });
+          
           if (jsonFiles.length > 0) {
             return path.join(fullPath, jsonFiles[0]);
           }

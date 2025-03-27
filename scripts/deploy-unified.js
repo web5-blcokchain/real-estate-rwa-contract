@@ -13,8 +13,10 @@ const {
   deployUtils, 
   getLogger, 
   transaction, 
-  contractService 
+  contractService
 } = require("../shared/utils");
+// 使用ethers-v5模块来替代ethersUtils
+const ethersUtils = require("../shared/utils/ethers-v5");
 const { closeLoggers } = require("../shared/utils/logger");
 const config = require("../shared/config");
 const contracts = require("../shared/config/contracts");
@@ -199,136 +201,179 @@ async function deployStep(deployer_contract, step) {
 
 async function main() {
   try {
+    // 添加详细的错误日志记录
+    console.error = function() {
+      deployLogger.error.apply(deployLogger, arguments);
+      console.log.apply(console, arguments);
+    };
+    console.warn = function() {
+      deployLogger.warn.apply(deployLogger, arguments);
+      console.log.apply(console, arguments);
+    };
+    
     // 获取网络和部署者信息
-    const [signer] = await ethers.getSigners();
-    const chainId = await ethers.provider.getNetwork().then(n => n.chainId);
-    const network = await ethers.provider.getNetwork();
-    const networkName = network.name !== 'unknown' ? network.name : `chain-${chainId}`;
-    const balance = ethers.formatEther(await ethers.provider.getBalance(signer.address));
-    
-    // 记录部署信息
-    deployLogger.info(`部署网络: ${networkName} (Chain ID: ${chainId})`);
-    deployLogger.info(`部署账户: ${signer.address}`);
-    deployLogger.info(`账户余额: ${balance} ETH`);
-    
-    // 检查余额是否足够
-    if (parseFloat(balance) < 0.1) {
-      deployLogger.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
-    }
-    
-    // 库合约部署
-    deployLogger.info("部署库合约...");
-    
-    // 部署 SystemDeployerLib1
-    const SystemDeployerLib1 = await ethers.getContractFactory('SystemDeployerLib1');
-    const estimatedGas1 = await ethers.provider.estimateGas({
-      from: signer.address,
-      data: SystemDeployerLib1.bytecode
-    });
-    const gasLimit1 = BigInt(Math.floor(Number(estimatedGas1) * 1.5));
-    deployLogger.info(`SystemDeployerLib1 预估 gas: ${estimatedGas1}`);
-    deployLogger.info(`SystemDeployerLib1 设置 gas 限制: ${gasLimit1}`);
-
-    const lib1Result = await deployUtils.deployLibrary(SystemDeployerLib1, 'SystemDeployerLib1', {
-      gasLimit: gasLimit1
-    });
-
-    if (!lib1Result.success) {
-      throw new Error(`SystemDeployerLib1 部署失败: ${lib1Result.error.message}`);
-    }
-    
-    // 部署 SystemDeployerLib2
-    const SystemDeployerLib2 = await ethers.getContractFactory('SystemDeployerLib2');
-    const estimatedGas2 = await ethers.provider.estimateGas({
-      from: signer.address,
-      data: SystemDeployerLib2.bytecode
-    });
-    const gasLimit2 = BigInt(Math.floor(Number(estimatedGas2) * 1.5));
-    deployLogger.info(`SystemDeployerLib2 预估 gas: ${estimatedGas2}`);
-    deployLogger.info(`SystemDeployerLib2 设置 gas 限制: ${gasLimit2}`);
-
-    const lib2Result = await deployUtils.deployLibrary(SystemDeployerLib2, 'SystemDeployerLib2', {
-      gasLimit: gasLimit2
-    });
-
-    if (!lib2Result.success) {
-      throw new Error(`SystemDeployerLib2 部署失败: ${lib2Result.error.message}`);
-    }
-    
-    // 部署主合约
-    deployLogger.info('部署主合约...');
-    const SystemDeployer = await ethers.getContractFactory('SystemDeployer', {
-      libraries: {
-        SystemDeployerLib1: lib1Result.contractAddress,
-        SystemDeployerLib2: lib2Result.contractAddress
-      }
-    });
-    
-    // 估算主合约的 gas
-    const estimatedGas3 = await ethers.provider.estimateGas({
-      from: signer.address,
-      data: SystemDeployer.bytecode
-    });
-    const gasLimit3 = BigInt(Math.floor(Number(estimatedGas3) * 1.5));
-    deployLogger.info(`SystemDeployer 预估 gas: ${estimatedGas3}`);
-    deployLogger.info(`SystemDeployer 设置 gas 限制: ${gasLimit3}`);
-
-    // 部署主合约
-    const systemDeployerResult = await deployUtils.deployContract(
-      SystemDeployer,
-      'SystemDeployer',
-      [],
-      {
-        gasLimit: gasLimit3,
-        priority: 'high'
-      }
-    );
-    
-    if (!systemDeployerResult.success) {
-      throw new Error(`SystemDeployer 部署失败: ${systemDeployerResult.error.message}`);
-    }
-    
-    // 记录部署结果
-    deployLogger.info(`SystemDeployer 部署成功`);
-    deployLogger.info(`合约地址: ${systemDeployerResult.contractAddress}`);
-    if (systemDeployerResult.transactionHash) {
-      deployLogger.info(`交易哈希: ${systemDeployerResult.transactionHash}`);
-    }
-    if (systemDeployerResult.gasUsed) {
-      deployLogger.info(`Gas使用: ${systemDeployerResult.gasUsed}`);
-    }
-    if (systemDeployerResult.effectiveGasPrice) {
-      deployLogger.info(`实际Gas价格: ${systemDeployerResult.effectiveGasPrice}`);
-    }
-    if (systemDeployerResult.blockNumber) {
-      deployLogger.info(`部署区块: ${systemDeployerResult.blockNumber}`);
-    }
-    
-    // 获取合约实例
-    const systemDeployer = await ethers.getContractAt('SystemDeployer', systemDeployerResult.contractAddress);
-    
-    // 开始监听部署进度
-    monitorDeploymentProgress(systemDeployer);
-    
-    // 逐步部署系统
-    for (let step = 0; step < 12; step++) {
+    try {
+      // 使用Hardhat-ethers提供的ethers v5方法
+      const signers = await ethers.getSigners();
+      const signer = signers[0];
+      
+      console.log('成功获取签名者:', signer);
+      
       try {
-        await deployStep(systemDeployer, step);
-        // 等待一段时间，确保交易被确认
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // 获取签名者地址
+        const signerAddress = await signer.getAddress();
+        
+        if (!signerAddress) {
+          throw new Error('无法确定签名者地址');
+        }
+        
+        console.log('成功获取签名者地址:', signerAddress);
+        
+        try {
+          // 使用ethers v5的方法获取网络信息
+          const network = await ethers.provider.getNetwork();
+          const chainId = network.chainId;
+          const networkName = network.name !== 'unknown' ? network.name : `chain-${chainId}`;
+          
+          // 获取余额
+          const balanceWei = await ethers.provider.getBalance(signerAddress);
+          const balance = ethersUtils.formatEther(balanceWei);
+          
+          // 记录部署信息
+          deployLogger.info(`部署网络: ${networkName} (Chain ID: ${chainId})`);
+          deployLogger.info(`部署账户: ${signerAddress}`);
+          deployLogger.info(`账户余额: ${balance} ETH`);
+          
+          // 检查余额是否足够
+          if (parseFloat(balance) < 0.1) {
+            deployLogger.warn(`警告: 账户余额较低 (${balance} ETH), 可能无法完成部署`);
+          }
+          
+          // 库合约部署
+          deployLogger.info("部署库合约...");
+          
+          // 部署 SystemDeployerLib1
+          const SystemDeployerLib1 = await ethers.getContractFactory('SystemDeployerLib1');
+          const estimatedGas1 = await ethers.provider.estimateGas({
+            from: signerAddress,
+            data: SystemDeployerLib1.bytecode
+          });
+          const gasLimit1 = BigInt(Math.floor(Number(estimatedGas1) * 1.5));
+          deployLogger.info(`SystemDeployerLib1 预估 gas: ${estimatedGas1}`);
+          deployLogger.info(`SystemDeployerLib1 设置 gas 限制: ${gasLimit1}`);
+
+          const lib1Result = await deployUtils.deployLibrary(SystemDeployerLib1, 'SystemDeployerLib1', {
+            gasLimit: gasLimit1
+          });
+
+          if (!lib1Result.success) {
+            throw new Error(`SystemDeployerLib1 部署失败: ${lib1Result.error.message}`);
+          }
+          
+          // 部署 SystemDeployerLib2
+          const SystemDeployerLib2 = await ethers.getContractFactory('SystemDeployerLib2');
+          const estimatedGas2 = await ethers.provider.estimateGas({
+            from: signerAddress,
+            data: SystemDeployerLib2.bytecode
+          });
+          const gasLimit2 = BigInt(Math.floor(Number(estimatedGas2) * 1.5));
+          deployLogger.info(`SystemDeployerLib2 预估 gas: ${estimatedGas2}`);
+          deployLogger.info(`SystemDeployerLib2 设置 gas 限制: ${gasLimit2}`);
+
+          const lib2Result = await deployUtils.deployLibrary(SystemDeployerLib2, 'SystemDeployerLib2', {
+            gasLimit: gasLimit2
+          });
+
+          if (!lib2Result.success) {
+            throw new Error(`SystemDeployerLib2 部署失败: ${lib2Result.error.message}`);
+          }
+          
+          // 部署主合约
+          deployLogger.info('部署主合约...');
+          const SystemDeployer = await ethers.getContractFactory('SystemDeployer', {
+            libraries: {
+              SystemDeployerLib1: lib1Result.contractAddress,
+              SystemDeployerLib2: lib2Result.contractAddress
+            }
+          });
+          
+          // 估算主合约的 gas
+          const estimatedGas3 = await ethers.provider.estimateGas({
+            from: signerAddress,
+            data: SystemDeployer.bytecode
+          });
+          const gasLimit3 = BigInt(Math.floor(Number(estimatedGas3) * 1.5));
+          deployLogger.info(`SystemDeployer 预估 gas: ${estimatedGas3}`);
+          deployLogger.info(`SystemDeployer 设置 gas 限制: ${gasLimit3}`);
+
+          // 部署主合约
+          const systemDeployerResult = await deployUtils.deployContract(
+            SystemDeployer,
+            'SystemDeployer',
+            [],
+            {
+              gasLimit: gasLimit3,
+              priority: 'high'
+            }
+          );
+          
+          if (!systemDeployerResult.success) {
+            throw new Error(`SystemDeployer 部署失败: ${systemDeployerResult.error.message}`);
+          }
+          
+          // 记录部署结果
+          deployLogger.info(`SystemDeployer 部署成功`);
+          deployLogger.info(`合约地址: ${systemDeployerResult.contractAddress}`);
+          if (systemDeployerResult.transactionHash) {
+            deployLogger.info(`交易哈希: ${systemDeployerResult.transactionHash}`);
+          }
+          if (systemDeployerResult.gasUsed) {
+            deployLogger.info(`Gas使用: ${systemDeployerResult.gasUsed}`);
+          }
+          if (systemDeployerResult.effectiveGasPrice) {
+            deployLogger.info(`实际Gas价格: ${systemDeployerResult.effectiveGasPrice}`);
+          }
+          if (systemDeployerResult.blockNumber) {
+            deployLogger.info(`部署区块: ${systemDeployerResult.blockNumber}`);
+          }
+          
+          // 获取合约实例
+          const systemDeployer = await ethers.getContractAt('SystemDeployer', systemDeployerResult.contractAddress);
+          
+          // 开始监听部署进度
+          monitorDeploymentProgress(systemDeployer);
+          
+          // 逐步部署系统
+          for (let step = 0; step < 12; step++) {
+            try {
+              await deployStep(systemDeployer, step);
+              // 等待一段时间，确保交易被确认
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (error) {
+              deployLogger.error(`部署步骤 ${step} 失败，停止部署`);
+              throw error;
+            }
+          }
+          
+          // 获取部署的合约地址
+          const deployedContracts = await systemDeployer.getDeployedContracts();
+          
+          // 保存部署记录
+          saveDeploymentRecord(deployedContracts, chainId, networkName, signerAddress);
+          
+          deployLogger.info("部署完成！");
+        } catch (error) {
+          deployLogger.error('获取网络信息失败:', error);
+          throw error;
+        }
       } catch (error) {
-        deployLogger.error(`部署步骤 ${step} 失败，停止部署`);
+        deployLogger.error('获取签名者地址失败:', error);
         throw error;
       }
+    } catch (error) {
+      deployLogger.error('获取签名者失败:', error);
+      throw error;
     }
-    
-    // 获取部署的合约地址
-    const deployedContracts = await systemDeployer.getDeployedContracts();
-    
-    // 保存部署记录
-    saveDeploymentRecord(deployedContracts, chainId, networkName, signer.address);
-    
-    deployLogger.info("部署完成！");
   } catch (error) {
     deployLogger.error(`部署失败: ${error.message}`);
     throw error;

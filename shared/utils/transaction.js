@@ -2,7 +2,7 @@
  * 交易工具模块
  * 提供交易处理的公共函数
  */
-const { ethers } = require('hardhat');
+const { ethers } = require('../utils/ethers-v5');
 const { logger } = require('./logger');
 
 /**

@@ -5,7 +5,7 @@
 const fs = require('fs');
 const { getContractAbiPath, getDeployStatePath, validatePath } = require('../utils/paths');
 const logger = require('../utils/logger');
-const { ethers } = require('ethers');
+const { isAddress } = require('../utils/ethers-v5');
 const { getAbi: getContractAbi } = require('../contracts/getAbis');
 
 // 合约地址配置
@@ -45,7 +45,7 @@ try {
  */
 function isValidEthereumAddress(address) {
   try {
-    return ethers.isAddress(address);
+    return isAddress(address);
   } catch (error) {
     return false;
   }
@@ -123,9 +123,20 @@ function updateContractAddress(contractName, address) {
 function saveToDeployState() {
   try {
     const deployStatePath = getDeployStatePath();
+    
+    // 创建格式化的合约地址对象，保持合约名称首字母大写
+    const formattedContracts = {};
+    Object.keys(contractAddresses).forEach(key => {
+      if (contractAddresses[key]) {
+        // 将首字母转为大写
+        const formattedKey = key.charAt(0).toUpperCase() + key.slice(1);
+        formattedContracts[formattedKey] = contractAddresses[key];
+      }
+    });
+    
     fs.writeFileSync(
       deployStatePath,
-      JSON.stringify({ contracts: contractAddresses }, null, 2)
+      JSON.stringify({ contracts: formattedContracts }, null, 2)
     );
     logger.info('Deploy state saved successfully');
   } catch (error) {
@@ -140,5 +151,6 @@ module.exports = {
   getAbi,
   getBytecode,
   updateContractAddress,
-  saveToDeployState
+  saveToDeployState,
+  addresses: contractAddresses
 }; 

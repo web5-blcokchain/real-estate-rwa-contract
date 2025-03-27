@@ -1,0 +1,7 @@
+获取签名者失败: TypeError: (0 , ethers_1.getAddress) is not a function
+    at new HardhatEthersSigner (/Users/zhangandy/Documents/work/code/party/blockchain/fashi-shijian/japan-rwa/node_modules/.pnpm/@nomicfoundation+hardhat-ethers@3.0.8_ethers@5.8.0_bufferutil@4.0.5_utf-8-validate@5.0.7__har_54bhkagnpjauc2c6qnwx4rkica/node_modules/@nomicfoundation/hardhat-ethers/signers.js:74:48)
+    at HardhatEthersSigner.create (/Users/zhangandy/Documents/work/code/party/blockchain/fashi-shijian/japan-rwa/node_modules/.pnpm/@nomicfoundation+hardhat-ethers@3.0.8_ethers@5.8.0_bufferutil@4.0.5_utf-8-validate@5.0.7__har_54bhkagnpjauc2c6qnwx4rkica/node_modules/@nomicfoundation/hardhat-ethers/signers.js:70:16)
+    at async getSigner (/Users/zhangandy/Documents/work/code/party/blockchain/fashi-shijian/japan-rwa/node_modules/.pnpm/@nomicfoundation+hardhat-ethers@3.0.8_ethers@5.8.0_bufferutil@4.0.5_utf-8-validate@5.0.7__har_54bhkagnpjauc2c6qnwx4rkica/node_modules/@nomicfoundation/hardhat-ethers/internal/helpers.js:56:31)
+    at async Promise.all (index 0)
+    at async getSigners (/Users/zhangandy/Documents/work/code/party/blockchain/fashi-shijian/japan-rwa/node_modules/.pnpm/@nomicfoundation+hardhat-ethers@3.0.8_ethers@5.8.0_bufferutil@4.0.5_utf-8-validate@5.0.7__har_54bhkagnpjauc2c6qnwx4rkica/node_modules/@nomicfoundation/hardhat-ethers/internal/helpers.js:50:32)
+    at async main (/Users/zhangandy/Documents/work/code/party/blockchain/fashi-shijian/japan-rwa/scripts/deploy-unified.js:215:24)

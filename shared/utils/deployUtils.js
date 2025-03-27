@@ -2,11 +2,40 @@
  * 部署工具模块
  * 提供智能合约部署和验证的公共函数
  */
-const { ethers } = require('hardhat');
-const { logger } = require('./logger');
-const { getProvider } = require('./web3Provider');
-const { contracts, deployConfig } = require('../config');
+const { getAbi } = require('../contracts/getAbis');
+const { configManager } = require('../config');
+const contracts = require('../config/contracts');
+const deployConfig = require('../config/deploy');
+const logger = require('./logger').getLogger('deploy');
 const { executeTransaction } = require('./transaction');
+// 使用我们的ethers-v5模块
+const { ethers, getAddress, isAddress } = require('./ethers-v5');
+
+/**
+ * 获取合约地址（兼容不同版本的ethers）
+ * @param {Object} contract 合约对象
+ * @returns {Promise<string>} 合约地址
+ */
+async function getContractAddress(contract) {
+  try {
+    // 如果合约有address属性(通常是v6)
+    if (contract.address) {
+      return contract.address;
+    }
+    // 如果getAddress是函数(通常是v5)
+    else if (typeof contract.getAddress === 'function') {
+      return await contract.getAddress();
+    }
+    // 兜底方案
+    else {
+      logger.error('无法获取合约地址：合约对象既没有address属性也没有getAddress方法');
+      throw new Error('无法获取合约地址：合约对象格式不支持');
+    }
+  } catch (error) {
+    logger.error(`获取合约地址时出错: ${error.message}`);
+    throw error;
+  }
+}
 
 /**
  * 通用部署函数
@@ -74,7 +103,7 @@ async function deployContract(factory, contractName, constructorArgs = [], optio
     
     // 等待合约部署确认
     await contract.waitForDeployment();
-    const contractAddress = await contract.getAddress();
+    const contractAddress = await getContractAddress(contract);
     logger.info(`${contractName} 部署成功，合约地址: ${contractAddress}`);
     
     // 更新合约地址配置
@@ -131,29 +160,46 @@ async function verifyContract(contractAddress, contractName, constructorArgs = [
     const network = await ethers.provider.getNetwork();
     const chainId = network.chainId;
     
+    // 获取Hardhat的run函数
+    // 注意：这个函数需要在Hardhat环境中使用
+    // 在非Hardhat环境中，此验证可能会失败
+    let hardhatRun;
+    try {
+      const hardhat = require('hardhat');
+      hardhatRun = hardhat.run;
+    } catch (error) {
+      logger.warn(`无法加载Hardhat: ${error.message}`);
+      return false;
+    }
+    
+    if (!hardhatRun) {
+      logger.warn('Hardhat run函数不可用，无法验证合约');
+      return false;
+    }
+    
     // 根据不同的网络选择验证方式
     switch (chainId) {
       case 1: // Ethereum Mainnet
         // 使用 Etherscan API
-        await run("verify:verify", {
+        await hardhatRun('verify:verify', {
           address: contractAddress,
-          constructorArguments: constructorArgs,
+          constructorArguments: constructorArgs
         });
         break;
         
       case 56: // BSC Mainnet
         // 使用 BSCscan API
-        await run("verify:verify", {
+        await hardhatRun('verify:verify', {
           address: contractAddress,
-          constructorArguments: constructorArgs,
+          constructorArguments: constructorArgs
         });
         break;
         
       case 97: // BSC Testnet
         // 使用 BSCscan Testnet API
-        await run("verify:verify", {
+        await hardhatRun('verify:verify', {
           address: contractAddress,
-          constructorArguments: constructorArgs,
+          constructorArguments: constructorArgs
         });
         break;
         
@@ -199,7 +245,7 @@ async function deployUpgradeableContract(factory, contractName, constructorArgs 
     const contract = await factory.deploy(...constructorArgs);
     logger.info(`${contractName} 实现合约部署交易已提交: ${contract.deploymentTransaction().hash}`);
     await contract.waitForDeployment();
-    const implementationAddress = await contract.getAddress();
+    const implementationAddress = await getContractAddress(contract);
     logger.info(`${contractName} 实现合约部署成功，地址: ${implementationAddress}`);
     
     // 部署代理合约
@@ -279,19 +325,36 @@ async function deployLibrary(factory, libraryName, options = {}) {
     
     // 部署库
     const library = await factory.deploy(options);
-    logger.info(`${libraryName} 部署交易已提交: ${library.deploymentTransaction().hash}`);
+    // 兼容 ethers v5 和 v6
+    const deployTx = library.deployTransaction || library.deploymentTransaction();
+    logger.info(`${libraryName} 部署交易已提交: ${deployTx.hash}`);
     
     // 等待部署完成
-    await library.waitForDeployment();
-    const libraryAddress = await library.getAddress();
+    if (library.waitForDeployment) {
+      await library.waitForDeployment();
+    } else if (library.deployed) {
+      await library.deployed();
+    }
+    
+    // 获取合约地址
+    const libraryAddress = await getContractAddress(library);
     logger.info(`${libraryName} 部署成功，地址: ${libraryAddress}`);
+    
+    // 更新合约地址配置
+    const configKey = libraryName.charAt(0).toLowerCase() + libraryName.slice(1);
+    contracts.updateContractAddress(configKey, libraryAddress.toString());
+    
+    // 保存部署状态
+    if (options.saveState !== false) {
+      contracts.saveToDeployState();
+    }
     
     // 返回部署结果
     return {
       success: true,
       contractAddress: libraryAddress.toString(),
       libraryName,
-      transactionHash: library.deploymentTransaction().hash
+      transactionHash: deployTx.hash
     };
   } catch (error) {
     logger.error(`${libraryName} 库部署失败: ${error.message}`);

@@ -18,18 +18,21 @@
     "monitor:check": "node monitor/scripts/check-contracts.js",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
-    "contracts:deploy": "hardhat run scripts/deploy-unified.js",
+    "contracts:deploy:hardhat": "hardhat run scripts/deploy-unified.js --network hardhat --verbose",
     "contracts:deploy:testnet": "hardhat run scripts/deploy-unified.js --network testnet",
     "contracts:deploy:mainnet": "hardhat run scripts/deploy-unified.js --network mainnet",
     "contracts:verify": "hardhat run scripts/verify-contracts.js",
     "contracts:verify:testnet": "hardhat run scripts/verify-contracts.js --network testnet",
     "contracts:verify:mainnet": "hardhat run scripts/verify-contracts.js --network mainnet",
+    "contracts:reset-state": "node scripts/reset-deploy-state.js",
+    "contracts:redeploy": "npm run contracts:reset-state && npm run contracts:deploy:hardhat && npm run update-abis",
     "update-abis": "node shared/utils/updateAbis.js",
     "hardhat:node": "hardhat node --hostname 0.0.0.0 --port 8545",
     "hardhat:node:reset": "hardhat node --hostname 0.0.0.0 --port 8545 --reset",
     "dev": "concurrently \"npm run hardhat:node\" \"npm run server:dev\"",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "contracts:test-deploy": "hardhat run scripts/deploy-test.js --network hardhat"
   },
   "_moduleAliases": {
     "@shared": "./shared",
@@ -59,7 +62,6 @@
     "table": "^6.8.1"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "@nomicfoundation/hardhat-verify": "^2.0.13",
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-etherscan": "^3.1.8",
