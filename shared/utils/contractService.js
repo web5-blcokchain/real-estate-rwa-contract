@@ -6,12 +6,12 @@ const { getAbi } = require('./getAbis');
  * 合约服务基础类
  */
 class ContractService {
-  constructor(contractAddress, contractName) {
+  constructor(contractAddress, contractName, signer) {
     this.contractAddress = contractAddress;
     this.contractName = contractName;
     this.abi = getAbi(contractName);
     this.provider = getProvider();
-    this.signer = getSigner();
+    this.signer = signer || getSigner();
     this.contract = new ethers.Contract(contractAddress, this.abi, this.signer);
   }
 
@@ -67,10 +67,11 @@ class ContractService {
  * 创建合约服务实例
  * @param {string} contractAddress 合约地址
  * @param {string} contractName 合约名称
+ * @param {ethers.Signer} signer 可选的签名者
  * @returns {ContractService} 合约服务实例
  */
-function createContractService(contractAddress, contractName) {
-  return new ContractService(contractAddress, contractName);
+function createContractService(contractAddress, contractName, signer) {
+  return new ContractService(contractAddress, contractName, signer);
 }
 
 module.exports = {

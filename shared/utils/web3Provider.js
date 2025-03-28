@@ -16,11 +16,21 @@ let signer = null;
  */
 async function initializeProvider() {
   try {
-    // 使用 Hardhat 的 provider
-    provider = ethers.provider;
-    signer = await provider.getSigner();
+    // 使用配置的RPC URL创建provider
+    provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
     
-    logger.info('区块链连接初始化成功');
+    // 使用配置的私钥创建signer
+    if (networkConfig.privateKey) {
+      signer = new ethers.Wallet(networkConfig.privateKey, provider);
+      logger.info(`使用账户地址: ${signer.address}`);
+    } else {
+      logger.warn('未配置私钥，将无法执行需要签名的操作');
+    }
+    
+    // 测试连接
+    const blockNumber = await provider.getBlockNumber();
+    logger.info(`区块链连接初始化成功，当前区块: ${blockNumber}`);
+    
     return true;
   } catch (error) {
     logger.error('区块链连接初始化失败:', error);
@@ -33,7 +43,7 @@ async function initializeProvider() {
  */
 function getProvider() {
   if (!provider) {
-    throw new Error('Provider not initialized');
+    provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
   }
   return provider;
 }
@@ -42,8 +52,12 @@ function getProvider() {
  * 获取 signer 实例
  */
 function getSigner() {
+  if (!signer && networkConfig.privateKey) {
+    const provider = getProvider();
+    signer = new ethers.Wallet(networkConfig.privateKey, provider);
+  }
   if (!signer) {
-    throw new Error('Signer not initialized');
+    throw new Error('Signer not initialized and no private key configured');
   }
   return signer;
 }
@@ -150,17 +164,18 @@ const clearProviderCache = () => {
 
 /**
  * 测试网络连接
+ * @param {ethers.Provider} [testProvider] 可选的测试用提供者
  * @returns {Promise<boolean>} 连接是否成功
  */
-const testConnection = async () => {
+const testConnection = async (testProvider) => {
   try {
-    const provider = getProviderFromCache();
-    await provider.getBlockNumber();
-    const network = await getNetworkInfo();
-    console.log(`网络连接测试成功，链接到 ${network.name} (Chain ID: ${network.chainId})`);
+    const provider = testProvider || getProvider();
+    const blockNumber = await provider.getBlockNumber();
+    const network = await provider.getNetwork();
+    logger.info(`网络连接测试成功，链接到 ${network.name} (Chain ID: ${network.chainId}), 当前区块: ${blockNumber}`);
     return true;
   } catch (error) {
-    console.error(`网络连接测试失败: ${error.message}`);
+    logger.error(`网络连接测试失败: ${error.message}`);
     return false;
   }
 };
