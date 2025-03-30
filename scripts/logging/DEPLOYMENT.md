@@ -1,7 +1,7 @@
 # 部署摘要
 
 ## 部署信息
-- 网络: localhost
+- 网络: hardhat
 - 策略: 可升级
 - 部署账户: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
@@ -21,4 +21,4 @@
 - SystemDeployerLib2: [object Object]
 
 ## 部署时间
-Mon Mar 31 2025 03:00:51 GMT+0800 (China Standard Time)
+Mon Mar 31 2025 03:37:24 GMT+0800 (China Standard Time)

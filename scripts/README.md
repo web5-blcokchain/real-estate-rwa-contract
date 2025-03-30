@@ -6,7 +6,7 @@
 
 ```
 scripts/
-├── deploy.sh                      # 主部署脚本（Shell）
+├── deploy-flow.js                 # 主部署流程脚本（Node.js）
 ├── deploy.js                      # 合约部署执行脚本
 ├── deploy-token-implementation.js # 代币实现部署与TokenFactory配置脚本
 ├── setup-roles.js                 # 合约角色设置脚本
@@ -18,6 +18,7 @@ scripts/
 │   ├── basic-processes-test.js    # 基础业务流程测试
 │   ├── business-processes-test.js # 完整业务流程测试（包括代币创建）
 │   └── README.md                  # 测试策略说明
+├── README_DEPLOY.md               # 部署流程详细文档
 ├── deploy-state.json              # 部署状态记录文件
 └── logging/                       # 部署日志目录
 ```
@@ -26,28 +27,34 @@ scripts/
 
 ### 1. 部署脚本
 
-#### 主部署脚本 (`deploy.sh`)
+#### 主部署脚本 (`deploy-flow.js`)
 
-这是部署流程的入口脚本，集成了合约部署、代币实现设置、角色配置和测试验证的完整流程。
+这是部署流程的入口脚本，用JavaScript实现，集成了合约部署、代币实现设置、角色配置和测试验证的完整流程。它替代了旧的bash脚本`deploy.sh`。
 
 **使用方法**:
 ```bash
 # 基本用法
-./deploy.sh <network> [options]
+node scripts/deploy-flow.js <network> [options]
+
+# 或使用NPM脚本
+npm run contracts:deploy:flow
 
 # 部署示例
-./deploy.sh local                       # 部署到本地网络
-./deploy.sh local --force               # 强制重新部署所有合约
-./deploy.sh testnet --verify            # 部署到测试网并验证源码
-./deploy.sh mainnet --skip-token-impl   # 部署到主网但跳过代币实现设置
+npm run contracts:deploy:flow        # 部署到本地网络
+npm run contracts:deploy:flow:force  # 强制重新部署所有合约
+npm run contracts:deploy:flow:testnet  # 部署到测试网并验证源码
+npm run contracts:deploy:flow:mainnet  # 部署到主网（需确认）
 ```
 
 **重要参数**:
-- `--force`: 强制重新部署所有合约，忽略已部署状态
-- `--strategy=<upgradeable|direct>`: 选择部署策略
-- `--verify`: 在区块链浏览器上验证合约源码
-- `--no-roles`: 跳过角色设置步骤
-- `--skip-token-impl`: 跳过代币实现部署和配置
+- `--force` (`-f`): 强制重新部署所有合约，忽略已部署状态
+- `--strategy=<upgradeable|direct|minimal>` (`-s`): 选择部署策略
+- `--verify` (`-v`): 在区块链浏览器上验证合约源码
+- `--roles` (`-r`): 设置角色
+- `--token-impl` (`-t`): 部署代币实现
+- `--confirm`: 确认主网部署
+
+完整的部署流程参数和详细说明请参阅 [README_DEPLOY.md](./README_DEPLOY.md)。
 
 #### 代币实现部署脚本 (`deploy-token-implementation.js`)
 
@@ -55,6 +62,8 @@ scripts/
 
 **使用方法**:
 ```bash
+npm run contracts:token-impl
+# 或
 npx hardhat run scripts/deploy-token-implementation.js --network <network>
 ```
 
@@ -70,6 +79,8 @@ npx hardhat run scripts/deploy-token-implementation.js --network <network>
 验证基本合约部署是否成功，检查关键合约地址和关系。
 
 ```bash
+npm run contracts:test:deployment
+# 或
 npx hardhat run scripts/tests/deployment-test.js --network <network>
 ```
 
@@ -78,6 +89,8 @@ npx hardhat run scripts/tests/deployment-test.js --network <network>
 测试系统基本功能，但不涉及代币创建操作。
 
 ```bash
+npm run contracts:test:basic
+# 或
 npx hardhat run scripts/tests/basic-processes-test.js --network <network>
 ```
 
@@ -86,7 +99,17 @@ npx hardhat run scripts/tests/basic-processes-test.js --network <network>
 测试完整业务流程，包括房产注册、代币创建、交易和租金分配等。此测试需要TokenFactory正确配置tokenImplementation地址。
 
 ```bash
+npm run contracts:test:business
+# 或
 npx hardhat run scripts/tests/business-processes-test.js --network <network>
+```
+
+#### 所有测试
+
+运行所有主要测试，包括部署验证、基础业务流程和完整业务流程测试。
+
+```bash
+npm run contracts:test:all
 ```
 
 ### 3. 调试工具
@@ -96,6 +119,8 @@ npx hardhat run scripts/tests/business-processes-test.js --network <network>
 用于调试代币创建过程中可能出现的问题，提供手动代理部署功能。
 
 ```bash
+npm run contracts:debug:token-creation
+# 或
 npx hardhat run scripts/debug-token-creation.js --network <network>
 ```
 
@@ -103,24 +128,24 @@ npx hardhat run scripts/debug-token-creation.js --network <network>
 
 ### 本地开发流程
 
-1. **启动本地节点**:
+1. **启动本地节点和服务器**:
    ```bash
-   npx hardhat node
+   npm run dev
    ```
 
 2. **部署基础合约**:
    ```bash
-   ./deploy.sh local
+   npm run contracts:deploy:flow
    ```
 
 3. **验证基础功能**:
    ```bash
-   npx hardhat run scripts/tests/basic-processes-test.js --network localhost
+   npm run contracts:test:basic
    ```
 
 4. **测试业务流程**:
    ```bash
-   npx hardhat run scripts/tests/business-processes-test.js --network localhost
+   npm run contracts:test:business
    ```
 
 ### 调试常见问题
@@ -133,19 +158,19 @@ npx hardhat run scripts/debug-token-creation.js --network <network>
    > await tf.tokenImplementation()
    
    # 如果地址为0或不正确，重新部署代币实现
-   npx hardhat run scripts/deploy-token-implementation.js --network localhost
+   npm run contracts:token-impl
    ```
 
 2. **角色权限问题**:
    ```bash
    # 检查角色设置
-   npx hardhat run scripts/setup-roles.js --network localhost
+   npm run contracts:setup-roles
    ```
 
 3. **手动创建代币**:
    ```bash
    # 使用调试工具手动创建代币
-   npx hardhat run scripts/debug-token-creation.js --network localhost
+   npm run contracts:debug:token-creation
    ```
 
 ## 工作原理
@@ -164,13 +189,15 @@ TokenFactory需要知道RealEstateToken实现合约的地址才能创建新代�
 
 完整部署流程包括以下步骤：
 
-1. 部署所有基础合约（`deploy.js`）
+1. 部署所有基础合约（`deploy.js`或`force-deploy.js`）
 2. 部署RealEstateToken实现合约（`deploy-token-implementation.js`）
 3. 设置TokenFactory的tokenImplementation地址
 4. 设置合约角色（`setup-roles.js`）
 5. 验证部署（`tests/deployment-test.js`）
 6. 测试基础功能（`tests/basic-processes-test.js`）
 7. 测试完整业务流程（`tests/business-processes-test.js`）
+
+`deploy-flow.js`脚本负责协调这些步骤的执行，以确保完整的部署流程。
 
 ## 常见问题
 
@@ -180,15 +207,15 @@ TokenFactory需要知道RealEstateToken实现合约的地址才能创建新代�
 
 **解决方案**:
 - 确保TokenFactory的tokenImplementation地址已正确设置
-- 运行`deploy-token-implementation.js`脚本更新实现地址
-- 使用`debug-token-creation.js`脚本手动创建代币进行测试
+- 运行`contracts:token-impl`脚本更新实现地址
+- 使用`contracts:debug:token-creation`脚本手动创建代币进行测试
 
 ### 2. 权限错误
 
 **问题**: 执行特定操作时出现"Caller is not a super admin"或类似权限错误。
 
 **解决方案**:
-- 运行`setup-roles.js`脚本确保角色正确设置
+- 运行`contracts:setup-roles`脚本确保角色正确设置
 - 检查调用者是否有所需的角色（SUPER_ADMIN、TOKEN_MANAGER等）
 - 在控制台中验证角色分配：
   ```javascript
@@ -214,6 +241,15 @@ TokenFactory需要知道RealEstateToken实现合约的地址才能创建新代�
 - 确保所有依赖合约已部署
 - 检查导入路径是否正确
 - 尝试单独验证每个合约
+
+### 5. 合约无代码错误
+
+**问题**: 调用合约方法时出现"address has no code"错误。
+
+**解决方案**:
+- 这通常发生在Hardhat节点重启后但使用了旧的部署地址
+- 使用`npm run contracts:deploy:flow:force`重新部署所有合约
+- 确保使用最新的合约地址
 
 ## 最佳实践
 
