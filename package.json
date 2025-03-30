@@ -26,7 +26,7 @@
     "contracts:test:contracts-loading": "hardhat run scripts/tests/verify-contracts-loading.js --network localhost",
     "contracts:test:flow": "hardhat run scripts/tests/test-flow.js --network localhost",
     "contracts:test:all": "npm run contracts:test:basic && npm run contracts:test:business-flow",
-    "hardhat:node": " hardhat node --persist --hostname 0.0.0.0 --port 8545",
+    "hardhat:node": "  npx hardhat node --hostname 127.0.0.1 --port 8545  ",
     "dev": "concurrently \"yarn hardhat:node\" \"yarn server:dev\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

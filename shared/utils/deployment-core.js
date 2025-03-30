@@ -429,6 +429,19 @@ async function deployUpgradeableContract(contractName, initArgs = [], libraries 
     if (options.updateAddresses !== false) {
       const configKey = contractName.charAt(0).toLowerCase() + contractName.slice(1);
       await deploymentState.updateContractAddress(configKey, proxyAddress);
+      
+      // 更新实现合约地址
+      if (deploymentState.updateImplementationAddress) {
+        await deploymentState.updateImplementationAddress(contractName, implAddress);
+      } else {
+        logger.warn(`无法更新实现合约地址，deploymentState缺少updateImplementationAddress方法`);
+        
+        // 尝试直接添加到部署记录中
+        if (!deploymentState.deploymentRecord.implementationAddresses) {
+          deploymentState.deploymentRecord.implementationAddresses = {};
+        }
+        deploymentState.deploymentRecord.implementationAddresses[contractName] = implAddress;
+      }
     }
     
     // 验证合约
@@ -468,20 +481,19 @@ async function deployUpgradeableContract(contractName, initArgs = [], libraries 
 }
 
 /**
- * 保存部署记录
+ * 保存部署记录到文件
  * @param {Object} deploymentRecord 部署记录
  * @param {string} networkName 网络名称
- * @param {Object} options 选项
- * @returns {Promise<void>}
+ * @param {Object} options 记录选项
  */
 async function saveDeploymentRecord(deploymentRecord, networkName, options = {}) {
-  // 合并默认选项
-  const mergedOptions = {
-    ...DEFAULT_OPTIONS.records,
-    ...options
-  };
-  
   try {
+    // 合并默认选项
+    const mergedOptions = {
+      ...DEFAULT_OPTIONS.records,
+      ...options
+    };
+
     // 确保部署记录有时间戳
     if (!deploymentRecord.timestamp) {
       deploymentRecord.timestamp = new Date().toISOString();
@@ -500,10 +512,28 @@ async function saveDeploymentRecord(deploymentRecord, networkName, options = {})
       fs.mkdirSync(deploymentDir, { recursive: true });
     }
     
-    // 准备合约地址数据
+    // 提取实现合约地址（如果存在）
+    const implementations = {};
+    if (deploymentRecord.implementationAddresses) {
+      Object.entries(deploymentRecord.implementationAddresses).forEach(([name, address]) => {
+        implementations[name] = address;
+      });
+    }
+    
+    // 准备合约地址数据 - 新格式（包含proxy和implementation地址）
     const contractAddresses = {
+      // 保留旧格式的字段（直接放在根层级）用于向后兼容
       ...deploymentRecord.libraries || {},
-      ...deploymentRecord.contracts || {}
+      ...Object.entries(deploymentRecord.contracts || {}).reduce((acc, [name, address]) => {
+        // 使用驼峰命名作为键
+        const camelCaseName = name.charAt(0).toLowerCase() + name.slice(1);
+        acc[camelCaseName] = address;
+        return acc;
+      }, {}),
+      
+      // 新格式：分离contracts和implementations
+      contracts: deploymentRecord.contracts || {},
+      implementations
     };
     
     // 保存到scripts/deploy-state.json

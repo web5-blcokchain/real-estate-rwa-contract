@@ -369,6 +369,72 @@ class DeploymentState {
   }
 
   /**
+   * 更新实现合约地址
+   * @param {string} contractName 合约名称
+   * @param {string} address 实现合约地址
+   * @returns {Promise<boolean>} 更新是否成功
+   */
+  async updateImplementationAddress(contractName, address) {
+    try {
+      const state = await this.loadState();
+      
+      // 确保implementations对象存在
+      state.implementations = state.implementations || {};
+      
+      // 更新地址
+      state.implementations[contractName] = address;
+      
+      // 标记缓存为脏
+      this.cache.dirty = true;
+      
+      // 如果启用自动保存，立即保存
+      if (this.options.autoSave) {
+        await this.saveState();
+      }
+      
+      logger.info(`实现合约地址已更新: ${contractName} -> ${address}`);
+      return true;
+    } catch (error) {
+      logger.error(`更新实现合约地址失败 (${contractName}):`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取实现合约地址
+   * @param {string} contractName 合约名称
+   * @returns {Promise<string|null>} 实现合约地址，不存在则返回null
+   */
+  async getImplementationAddress(contractName) {
+    try {
+      const state = await this.loadState();
+      
+      if (!state || !state.implementations || !state.implementations[contractName]) {
+        return null;
+      }
+      
+      return state.implementations[contractName];
+    } catch (error) {
+      logger.error(`获取实现合约地址失败 (${contractName}):`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取所有实现合约地址
+   * @returns {Promise<Object>} 所有实现合约地址的映射
+   */
+  async getAllImplementationAddresses() {
+    try {
+      const state = await this.loadState();
+      return state.implementations || {};
+    } catch (error) {
+      logger.error('获取所有实现合约地址失败:', error);
+      return {};
+    }
+  }
+
+  /**
    * 清理缓存
    * @returns {Promise<void>}
    */

@@ -15,79 +15,96 @@ const ROOT_DIR = path.join(__dirname, '..', '..');
 // 部署状态文件路径 - 唯一的合约地址来源
 const DEPLOY_STATE_PATH = path.join(ROOT_DIR, 'scripts', 'deploy-state.json');
 
-// 合约地址配置
-const contractAddresses = {};
+// 合约地址缓存
+let contractAddresses = {};
+let implementationAddresses = {};
 
-// 尝试加载合约地址
-function loadContractAddresses() {
+/**
+ * 加载合约地址
+ * @param {boolean} [force=false] 是否强制重新加载
+ * @returns {Object} 合约地址对象
+ */
+function loadContractAddresses(force = false) {
+  // 如果已经加载并且不强制重新加载，则直接返回
+  if (!force && Object.keys(contractAddresses).length > 0) {
+    return contractAddresses;
+  }
+
+  logger.debug('正在加载合约地址...');
+  
   try {
+    // 清空当前缓存
+    contractAddresses = {};
+    implementationAddresses = {};
+    
     // 只从scripts/deploy-state.json加载
-    if (!fs.existsSync(DEPLOY_STATE_PATH)) {
-      logger.warn(`部署状态文件不存在: ${DEPLOY_STATE_PATH}`);
-      return {};
-    }
-
-    logger.info(`从 ${DEPLOY_STATE_PATH} 加载合约地址`);
-    
-    // 读取文件内容
-    const fileContent = fs.readFileSync(DEPLOY_STATE_PATH, 'utf8');
-    if (!fileContent || fileContent.trim() === '') {
-      logger.warn(`部署状态文件为空: ${DEPLOY_STATE_PATH}`);
-      return {};
+    let deployStateData;
+    try {
+      deployStateData = fs.readFileSync(DEPLOY_STATE_PATH, 'utf8');
+    } catch (error) {
+      logger.warn(`无法读取部署状态文件 ${DEPLOY_STATE_PATH}: ${error.message}`);
+      return contractAddresses;
     }
     
-    // 解析JSON
-    const deployState = JSON.parse(fileContent);
-    
-    if (!deployState) {
-      logger.warn(`部署状态文件内容无效: ${DEPLOY_STATE_PATH}`);
-      return {};
+    // 解析JSON数据
+    let deployedAddresses;
+    try {
+      deployedAddresses = JSON.parse(deployStateData);
+    } catch (error) {
+      logger.error(`解析部署状态文件失败 ${DEPLOY_STATE_PATH}: ${error.message}`);
+      return contractAddresses;
     }
     
-    // 清空现有地址
-    Object.keys(contractAddresses).forEach(key => delete contractAddresses[key]);
+    // 处理新格式（包含contracts和implementations字段）
+    if (deployedAddresses.contracts) {
+      // 使用新格式中的contracts字段
+      Object.assign(contractAddresses, deployedAddresses.contracts);
+      
+      // 使用新格式中的implementations字段
+      if (deployedAddresses.implementations) {
+        Object.assign(implementationAddresses, deployedAddresses.implementations);
+      }
+    }
     
-    if (deployState.contracts) {
-      // 如果有contracts字段（新格式）
-      Object.assign(contractAddresses, deployState.contracts);
-      logger.info(`从contracts字段加载了 ${Object.keys(deployState.contracts).length} 个合约地址`);
-    } else {
-      // 直接遍历部署状态中的所有项，处理不同的格式
-      for (const [key, value] of Object.entries(deployState)) {
-        if (typeof value === 'string' && value.startsWith('0x')) {
-          // 标准地址格式
-          contractAddresses[key] = value;
-        } else if (value && value.target && typeof value.target === 'string' && value.target.startsWith('0x')) {
-          // 库合约格式，如SystemDeployerLib1和SystemDeployerLib2
-          contractAddresses[key] = value.target;
+    // 同时加载旧格式（直接在根级别的字段）以兼容
+    Object.keys(deployedAddresses).forEach(key => {
+      // 跳过contracts和implementations字段，因为已经处理过了
+      if (key === 'contracts' || key === 'implementations') {
+        return;
+      }
+      
+      const address = deployedAddresses[key];
+      
+      // 只处理字符串类型的地址
+      if (typeof address === 'string' && address.startsWith('0x')) {
+        // 将Pascal命名转换为驼峰命名以适应新格式
+        const pascalName = key.charAt(0).toUpperCase() + key.slice(1);
+        
+        // 如果不是库合约（通常以Lib结尾），添加到合约地址映射
+        if (!key.endsWith('Lib') && !key.endsWith('Library')) {
+          contractAddresses[pascalName] = address;
         }
       }
-      logger.info(`直接加载了 ${Object.keys(contractAddresses).length} 个合约地址`);
-    }
+    });
     
-    // 处理特殊字段
-    if (deployState.RealEstateTokenImplementation) {
-      contractAddresses.RealEstateTokenImplementation = deployState.RealEstateTokenImplementation;
-      logger.info('已加载 RealEstateTokenImplementation 地址');
-    }
+    logger.info(`已成功加载合约地址: ${Object.keys(contractAddresses).length}个合约，${Object.keys(implementationAddresses).length}个实现合约`);
     
-    logger.info(`合约地址加载成功，共 ${Object.keys(contractAddresses).length} 个合约`);
-    logger.debug('已加载的合约地址:', contractAddresses);
+    if (Object.keys(contractAddresses).length === 0) {
+      logger.warn('未找到任何合约地址，请确保正确配置了部署状态文件');
+    }
     
     return contractAddresses;
   } catch (error) {
-    logger.error(`加载合约地址失败: ${error.message}`, error);
+    logger.error(`加载合约地址失败: ${error.message}`);
+    logger.error(error.stack);
     return {};
   }
 }
 
-// 初始加载合约地址
-loadContractAddresses();
-
 /**
- * 验证以太坊地址是否合法
- * @param {string} address 要验证的地址
- * @returns {boolean} 是否是合法的以太坊地址
+ * 验证以太坊地址格式
+ * @param {string} address 以太坊地址
+ * @returns {boolean} 是否为有效地址
  */
 function isValidEthereumAddress(address) {
   try {
@@ -122,6 +139,45 @@ function getContractAddress(contractName) {
 }
 
 /**
+ * 在需要时加载合约地址
+ * @private
+ */
+function loadContractAddressesIfNeeded() {
+  // 如果缓存为空，尝试重新加载
+  if (Object.keys(contractAddresses).length === 0) {
+    loadContractAddresses();
+  }
+}
+
+/**
+ * 获取指定合约的实现合约地址
+ * @param {string} contractName 合约名称
+ * @returns {string|null} 实现合约地址，如果未找到则返回null
+ */
+function getImplementationAddress(contractName) {
+  try {
+    loadContractAddressesIfNeeded();
+    
+    // 首先检查implementations字段
+    if (implementationAddresses && implementationAddresses[contractName]) {
+      return implementationAddresses[contractName];
+    }
+    
+    // 尝试转换Pascal命名为合适的格式
+    const pascalName = contractName.charAt(0).toUpperCase() + contractName.slice(1);
+    if (implementationAddresses && implementationAddresses[pascalName]) {
+      return implementationAddresses[pascalName];
+    }
+    
+    // 未找到实现合约地址
+    return null;
+  } catch (error) {
+    logger.error(`获取实现合约地址失败 (${contractName}): ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * 获取所有合约地址
  * @returns {Object} 合约地址配置
  */
@@ -139,70 +195,58 @@ function getContractAddresses() {
 }
 
 /**
- * 获取合约ABI
- * @param {string} contractName 合约名称
- * @returns {Array} 合约ABI
+ * 获取所有实现合约地址
+ * @returns {Object} 实现合约地址配置
  */
-function getAbi(contractName) {
+function getImplementationAddresses() {
+  // 如果缓存为空，尝试重新加载
+  if (Object.keys(implementationAddresses).length === 0 && Object.keys(contractAddresses).length === 0) {
+    loadContractAddresses();
+  }
+  
+  return { ...implementationAddresses };
+}
+
+/**
+ * 获取合约实例
+ * @param {string} contractName 合约名称
+ * @param {ethers.Provider} provider 提供者
+ * @returns {Promise<ethers.Contract>} 合约实例
+ */
+async function getContract(contractName, provider) {
   try {
-    // 首先尝试从标准Hardhat输出目录加载
-    const standardArtifactPath = path.join(ROOT_DIR, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
-    logger.info(`尝试从${standardArtifactPath}加载ABI...`);
+    const address = getContractAddress(contractName);
+    const abi = await getContractAbi(contractName);
     
-    if (fs.existsSync(standardArtifactPath)) {
-      const artifact = JSON.parse(fs.readFileSync(standardArtifactPath, 'utf8'));
-      if (artifact.abi && Array.isArray(artifact.abi)) {
-        logger.info(`从标准artifacts目录加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
-        return artifact.abi;
-      }
+    if (!provider) {
+      throw new Error('需要提供有效的ethers Provider');
     }
     
-    // 后备方案：从旧路径加载
-    const legacyArtifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
-    logger.info(`尝试从旧路径${legacyArtifactPath}加载ABI...`);
-    
-    if (fs.existsSync(legacyArtifactPath)) {
-      const artifact = JSON.parse(fs.readFileSync(legacyArtifactPath, 'utf8'));
-      if (artifact.abi && Array.isArray(artifact.abi)) {
-        logger.info(`从旧artifacts目录加载了${contractName}的ABI，包含 ${artifact.abi.length} 个函数/事件`);
-        return artifact.abi;
-      } else {
-        throw new Error(`合约 ${contractName} 的ABI格式无效`);
-      }
-    }
-    
-    // 两个路径都尝试失败
-    throw new Error(`找不到合约 ${contractName} 的ABI文件，已尝试路径:\n1. ${standardArtifactPath}\n2. ${legacyArtifactPath}`);
+    return new ethers.Contract(address, abi, provider);
   } catch (error) {
-    logger.error(`Failed to load ABI for contract: ${contractName}`, error);
+    logger.error(`创建合约 ${contractName} 实例失败: ${error.message}`, error);
     throw error;
   }
 }
 
 /**
- * 获取合约字节码
+ * 获取合约实现实例
  * @param {string} contractName 合约名称
- * @returns {string} 合约字节码
+ * @param {ethers.Provider} provider 提供者
+ * @returns {Promise<ethers.Contract>} 实现合约实例
  */
-function getBytecode(contractName) {
+async function getImplementationContract(contractName, provider) {
   try {
-    // 首先尝试从标准Hardhat输出目录加载
-    const standardArtifactPath = path.join(ROOT_DIR, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
-    if (fs.existsSync(standardArtifactPath)) {
-      const artifact = JSON.parse(fs.readFileSync(standardArtifactPath, 'utf8'));
-      return artifact.bytecode;
+    const address = getImplementationAddress(contractName);
+    const abi = await getContractAbi(contractName);
+    
+    if (!provider) {
+      throw new Error('需要提供有效的ethers Provider');
     }
     
-    // 后备方案：从旧路径加载
-    const legacyArtifactPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
-    if (fs.existsSync(legacyArtifactPath)) {
-      const artifact = JSON.parse(fs.readFileSync(legacyArtifactPath, 'utf8'));
-      return artifact.bytecode;
-    }
-
-    throw new Error(`Bytecode file not found for contract: ${contractName}`);
+    return new ethers.Contract(address, abi, provider);
   } catch (error) {
-    logger.error(`Failed to load bytecode for contract: ${contractName}`, error);
+    logger.error(`创建实现合约 ${contractName} 实例失败: ${error.message}`, error);
     throw error;
   }
 }
@@ -225,43 +269,100 @@ function updateContractAddress(contractName, address) {
 }
 
 /**
- * 保存部署状态
+ * 更新实现合约地址
+ * @param {string} contractName 合约名称
+ * @param {string} address 实现合约地址
+ */
+function updateImplementationAddress(contractName, address) {
+  if (!isValidEthereumAddress(address)) {
+    throw new Error(`尝试更新的实现地址 ${address} 不是有效的以太坊地址`);
+  }
+  
+  implementationAddresses[contractName] = address;
+  logger.info(`更新了合约 ${contractName} 的实现地址: ${address}`);
+  
+  // 自动保存到deploy-state.json
+  saveToDeployState();
+}
+
+/**
+ * 保存当前合约地址到deploy-state.json
  */
 function saveToDeployState() {
   try {
-    if (Object.keys(contractAddresses).length === 0) {
-      logger.warn('没有合约地址可保存');
-      return;
+    // 确保部署状态文件存在
+    if (!fs.existsSync(DEPLOY_STATE_PATH)) {
+      const initialState = {
+        contracts: {},
+        implementations: {}
+      };
+      fs.writeFileSync(DEPLOY_STATE_PATH, JSON.stringify(initialState, null, 2));
     }
     
-    // 确保目录存在
-    const dir = path.dirname(DEPLOY_STATE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      logger.info(`创建目录: ${dir}`);
+    // 读取当前状态
+    const currentState = JSON.parse(fs.readFileSync(DEPLOY_STATE_PATH, 'utf8'));
+    
+    // 更新contracts字段
+    if (!currentState.contracts) {
+      currentState.contracts = {};
     }
+    Object.assign(currentState.contracts, contractAddresses);
     
-    // 保存合约地址
-    fs.writeFileSync(
-      DEPLOY_STATE_PATH,
-      JSON.stringify(contractAddresses, null, 2)
-    );
+    // 更新implementations字段
+    if (!currentState.implementations) {
+      currentState.implementations = {};
+    }
+    Object.assign(currentState.implementations, implementationAddresses);
     
-    logger.info(`合约地址已保存到 ${DEPLOY_STATE_PATH}`);
-    logger.debug('保存的合约地址:', contractAddresses);
+    // 保留旧格式的向后兼容
+    Object.entries(contractAddresses).forEach(([key, value]) => {
+      // 对于系统合约，保持驼峰命名
+      if (/^[A-Z]/.test(key) && CONTRACT_NAMES.includes(key)) {
+        const camelCaseKey = key.charAt(0).toLowerCase() + key.slice(1);
+        currentState[camelCaseKey] = value;
+      } else {
+        currentState[key] = value;
+      }
+    });
+    
+    // 写入文件
+    fs.writeFileSync(DEPLOY_STATE_PATH, JSON.stringify(currentState, null, 2));
+    logger.info(`合约地址已保存到: ${DEPLOY_STATE_PATH}`);
+    
+    return true;
   } catch (error) {
     logger.error(`保存部署状态失败: ${error.message}`, error);
-    throw error;
+    return false;
   }
 }
 
-// 导出功能
+// 系统合约名列表
+const CONTRACT_NAMES = [
+  'RoleManager',
+  'FeeManager',
+  'PropertyRegistry',
+  'RentDistributor',
+  'TokenFactory',
+  'RedemptionManager',
+  'Marketplace',
+  'TokenHolderQuery',
+  'RealEstateSystem'
+];
+
+// 加载合约地址
+loadContractAddresses();
+
+// 导出模块API
 module.exports = {
   getContractAddress,
+  getImplementationAddress,
   getContractAddresses,
-  getAbi,
-  getBytecode,
+  getImplementationAddresses,
+  getContract,
+  getImplementationContract,
   updateContractAddress,
+  updateImplementationAddress,
   saveToDeployState,
-  DEPLOY_STATE_PATH  // 导出部署状态文件路径常量
+  DEPLOY_STATE_PATH,
+  CONTRACT_NAMES
 }; 

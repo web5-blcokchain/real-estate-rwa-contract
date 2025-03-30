@@ -13,6 +13,7 @@ const {
 } = require('../shared/utils');
 const fs = require('fs');
 const path = require('path');
+const { upgrades } = require('hardhat');
 
 // 流程标题日志
 function logStage(stage) {
@@ -246,20 +247,72 @@ async function main() {
       fs.mkdirSync(deploymentsDir, { recursive: true });
     }
     
+    // 从SystemDeployer获取实现合约地址
+    const implementations = {};
+    try {
+      for (const contractName of Object.keys(result.contractAddresses)) {
+        // 跳过库合约
+        if (contractName.includes('Lib') || contractName === 'tokenImplementation') {
+          continue;
+        }
+        
+        // 尝试获取实现合约地址
+        const proxyAddress = result.contractAddresses[contractName];
+        if (proxyAddress && proxyAddress.startsWith('0x')) {
+          try {
+            const implAddress = await upgrades.erc1967.getImplementationAddress(proxyAddress);
+            implementations[contractName] = implAddress;
+            logger.info(`获取到实现合约地址: ${contractName} => ${implAddress}`);
+          } catch (error) {
+            logger.warn(`无法获取${contractName}的实现合约地址: ${error.message}`);
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn(`获取实现合约地址时出错: ${error.message}`);
+    }
+    
+    // 准备新格式的合约地址数据
+    const formattedAddresses = {
+      // 保留原始格式的地址（向后兼容）
+      ...contractAddresses,
+      
+      // 新的格式 - 分离contracts和implementations
+      contracts: {},
+      implementations: {}
+    };
+    
+    // 填充contracts字段
+    Object.entries(contractAddresses).forEach(([name, address]) => {
+      // 只处理合约地址，不包括库和tokenImplementation
+      if (!name.includes('Lib') && name !== 'tokenImplementation' && address && address.startsWith('0x')) {
+        formattedAddresses.contracts[name] = address;
+      }
+    });
+    
+    // 填充implementations字段
+    Object.assign(formattedAddresses.implementations, implementations);
+    // 添加tokenImplementation到implementations
+    if (contractAddresses.tokenImplementation) {
+      formattedAddresses.implementations['RealEstateToken'] = contractAddresses.tokenImplementation;
+    }
+    
+    // 保存到scripts/deploy-state.json
     fs.writeFileSync(
       path.join(process.cwd(), 'scripts/deploy-state.json'),
-      JSON.stringify(contractAddresses, null, 2)
+      JSON.stringify(formattedAddresses, null, 2)
     );
     
+    // 保存到shared/deployments/contracts.json
     fs.writeFileSync(
       path.join(deploymentsDir, 'contracts.json'),
-      JSON.stringify(contractAddresses, null, 2)
+      JSON.stringify(formattedAddresses, null, 2)
     );
     
     const networkFilename = `${network.name}-latest.json`;
     fs.writeFileSync(
       path.join(deploymentsDir, networkFilename),
-      JSON.stringify(contractAddresses, null, 2)
+      JSON.stringify(formattedAddresses, null, 2)
     );
     
     // ========== 阶段4：部署验证 ==========
