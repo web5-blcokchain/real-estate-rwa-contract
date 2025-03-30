@@ -16,6 +16,10 @@
     "monitor:start": "node monitor/src/index.js",
     "monitor:dev": "nodemon monitor/src/index.js",
     "monitor:check": "node monitor/scripts/check-contracts.js",
+    "http:start": "node http-server/src/index.js",
+    "http:dev": "nodemon http-server/src/index.js",
+    "http:test": "jest http-server",
+    "http:test:api": "node http-server/tests/test-api.js",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
     "contracts:deploy": "hardhat run scripts/deploy-unified.js",
@@ -27,22 +31,25 @@
     "hardhat:node": "hardhat node --hostname 0.0.0.0 --port 8545",
     "hardhat:node:reset": "hardhat node --hostname 0.0.0.0 --port 8545 --reset",
     "dev": "concurrently \"yarn hardhat:node\" \"yarn server:dev\"",
+    "dev:all": "concurrently \"yarn hardhat:node\" \"yarn server:dev\" \"yarn http:dev\" \"yarn monitor:dev\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "_moduleAliases": {
     "@shared": "./shared",
     "@server": "./server/src",
-    "@monitor": "./monitor/src"
+    "@monitor": "./monitor/src",
+    "@http": "./http-server/src"
   },
   "dependencies": {
     "axios": "^1.6.7",
     "bcrypt": "^5.1.0",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.4.7",
     "ethers": "^6.11.1",
     "express": "^4.18.3",
+    "express-rate-limit": "^7.5.0",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.0",

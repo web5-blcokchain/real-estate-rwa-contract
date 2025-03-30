@@ -1,46 +1,23 @@
 /**
- * 合约API路由
+ * 合约路由
+ * 处理合约信息查询的API请求
  */
 
 const express = require('express');
-const ContractController = require('../controllers/contractController');
-const { logger } = require('../utils/logger');
-
 const router = express.Router();
+const ContractInfoController = require('../controllers/ContractInfoController');
+const { apiKeyAuth } = require('../middleware/apiKeyAuth');
 
-/**
- * @route   GET /api/v1/contracts
- * @desc    获取所有合约信息
- * @access  Private
- */
-router.get('/', ContractController.getAllContracts);
+// 获取所有合约地址
+router.get('/', apiKeyAuth, ContractInfoController.getAllContractAddresses);
 
-/**
- * @route   GET /api/v1/contracts/:contractName
- * @desc    获取特定合约信息
- * @access  Private
- */
-router.get('/:contractName', ContractController.getContractInfo);
+// 获取特定合约地址
+router.get('/:name/address', apiKeyAuth, ContractInfoController.getContractAddress);
 
-/**
- * @route   GET /api/v1/contracts/:contractName/functions
- * @desc    获取合约函数列表
- * @access  Private
- */
-router.get('/:contractName/functions', ContractController.getContractFunctions);
+// 获取合约信息
+router.get('/:name/info', apiKeyAuth, ContractInfoController.getContractInfo);
 
-/**
- * @route   GET /api/v1/contracts/:contractName/:functionName
- * @desc    执行合约的只读函数
- * @access  Private
- */
-router.get('/:contractName/:functionName', ContractController.executeReadFunction);
-
-/**
- * @route   POST /api/v1/contracts/:contractName/:functionName
- * @desc    执行合约的写入函数
- * @access  Private
- */
-router.post('/:contractName/:functionName', ContractController.executeWriteFunction);
+// 检查合约是否已部署
+router.get('/:name/deployed', apiKeyAuth, ContractInfoController.isContractDeployed);
 
 module.exports = router; 

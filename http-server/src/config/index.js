@@ -1,52 +1,61 @@
 /**
  * 配置文件
- * 用于整合环境变量和应用配置
+ * 包含HTTP服务器的所有配置项
  */
+
+require('dotenv').config();
 const path = require('path');
-const fs = require('fs');
 
-// 使用shared目录的环境变量加载功能
-const { initializeEnvironment, getEnvVar } = require('../.././../shared/config/environment');
-// 导入合约配置模块以获取部署状态文件路径
-const { DEPLOY_STATE_PATH } = require('../.././../shared/config/contracts');
-
-// 初始化环境变量
-initializeEnvironment();
-
-// 服务配置
+// 默认配置
 const config = {
-  // 服务器配置
+  // 服务器设置
   server: {
-    port: getEnvVar('HTTP_SERVER_PORT', 3030),
-    host: getEnvVar('HTTP_SERVER_HOST', 'localhost'),
-    apiKey: getEnvVar('API_KEY', 'default-api-key'),
-    nodeEnv: getEnvVar('NODE_ENV', 'development')
+    port: process.env.HTTP_SERVER_PORT || 3030,
+    host: process.env.HTTP_SERVER_HOST || 'localhost',
+    env: process.env.NODE_ENV || 'development'
   },
-
-  // 区块链配置 - 使用已有环境变量
+  
+  // API设置
+  api: {
+    prefix: 'api',
+    version: 'v1',
+    key: process.env.API_KEY || 'default-api-key',
+    rateLimit: {
+      windowMs: 15 * 60 * 1000, // 15分钟
+      max: 100 // 每个IP在windowMs时间内的最大请求数
+    }
+  },
+  
+  // 区块链设置
   blockchain: {
-    network: getEnvVar('DEPLOY_NETWORK', 'hardhat'),
-    rpcUrl: getEnvVar('HARDHAT_RPC_URL', 'http://127.0.0.1:8545'),
-    chainId: parseInt(getEnvVar('HARDHAT_CHAIN_ID', '31337'), 10),
-    privateKey: getEnvVar('ADMIN_PRIVATE_KEY', '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+    rpcUrl: process.env.HARDHAT_RPC_URL || 'http://127.0.0.1:8545',
+    chainId: parseInt(process.env.HARDHAT_CHAIN_ID || '31337', 10),
+    privateKeys: {
+      admin: process.env.ADMIN_PRIVATE_KEY,
+      propertyAdmin: process.env.PROPERTY_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
+      tokenAdmin: process.env.TOKEN_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
+      systemAdmin: process.env.SYSTEM_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY
+    },
+    contracts: {
+      addressesPath: path.resolve(__dirname, '../../../scripts/deploy-state.json')
+    },
+    transactionConfirmations: 1,
+    gasMultiplier: 1.2
   },
-
-  // 日志配置
-  logging: {
-    level: getEnvVar('LOG_LEVEL', 'info'),
-    directory: path.resolve(__dirname, '../../../logs')
+  
+  // 日志设置
+  logs: {
+    dir: path.resolve(__dirname, '../../../logs/http-server'),
+    level: process.env.LOG_LEVEL || 'info',
+    maxSize: '20m',
+    maxFiles: '14d'
   },
-
-  // 合约配置
-  contracts: {
-    // 使用shared/config/contracts模块中的DEPLOY_STATE_PATH常量
-    deployStateFile: DEPLOY_STATE_PATH
+  
+  // 缓存设置
+  cache: {
+    stdTTL: 60 * 5, // 5分钟
+    checkPeriod: 60 * 2 // 2分钟
   }
 };
-
-// 确保日志目录存在
-if (!fs.existsSync(config.logging.directory)) {
-  fs.mkdirSync(config.logging.directory, { recursive: true });
-}
 
 module.exports = config; 

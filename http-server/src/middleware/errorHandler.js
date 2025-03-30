@@ -6,146 +6,131 @@
 const { logger } = require('../utils/logger');
 
 /**
- * API错误类
+ * 处理404错误
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
  */
-class ApiError extends Error {
-  constructor(status, message, errorCode = null) {
-    super(message);
-    this.name = this.constructor.name;
-    this.status = status;
-    this.errorCode = errorCode || `API_ERROR_${status}`;
-    Error.captureStackTrace(this, this.constructor);
-  }
-
-  /**
-   * 创建400错误 - 错误的请求
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static badRequest(message) {
-    return new ApiError(400, message, 'BAD_REQUEST');
-  }
-
-  /**
-   * 创建401错误 - 未授权
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static unauthorized(message = '未授权，请提供有效的API密钥') {
-    return new ApiError(401, message, 'UNAUTHORIZED');
-  }
-
-  /**
-   * 创建403错误 - 禁止访问
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static forbidden(message = '禁止访问此资源') {
-    return new ApiError(403, message, 'FORBIDDEN');
-  }
-
-  /**
-   * 创建404错误 - 未找到
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static notFound(message = '资源未找到') {
-    return new ApiError(404, message, 'NOT_FOUND');
-  }
-
-  /**
-   * 创建500错误 - 服务器内部错误
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static internal(message = '服务器内部错误') {
-    return new ApiError(500, message, 'SERVER_ERROR');
-  }
-
-  /**
-   * 创建502错误 - 网关错误
-   * @param {string} message 错误消息
-   * @returns {ApiError} 错误实例
-   */
-  static gatewayError(message = '区块链网关错误') {
-    return new ApiError(502, message, 'BLOCKCHAIN_ERROR');
-  }
+function notFoundHandler(req, res) {
+  res.status(404).json({
+    status: 'error',
+    message: `未找到路径: ${req.originalUrl}`,
+    code: 'NOT_FOUND'
+  });
 }
 
 /**
- * API错误处理中间件
- * @param {Error} err 错误对象
- * @param {Object} req 请求对象
- * @param {Object} res 响应对象
- * @param {Function} next 下一个中间件
+ * 全局错误处理中间件
+ * @param {Error} err - 错误对象
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件函数
  */
-const errorHandler = (err, req, res, next) => {
-  let status = 500;
-  let message = '服务器内部错误';
-  let errorCode = 'SERVER_ERROR';
-  let errorDetails = undefined;
-
-  // 如果是ApiError实例，使用其状态码和消息
-  if (err instanceof ApiError) {
-    status = err.status;
-    message = err.message;
-    errorCode = err.errorCode;
-  } else if (err.name === 'SyntaxError' && err.status === 400) {
-    // JSON解析错误
-    status = 400;
-    message = '无效的JSON格式';
-    errorCode = 'INVALID_JSON';
-  } else if (err.name === 'ValidationError') {
-    // 验证错误
-    status = 400;
-    message = '请求数据验证失败';
-    errorCode = 'VALIDATION_ERROR';
-    errorDetails = err.details;
-  } else {
-    // 记录未预期的错误
-    logger.error('未捕获的错误:', err);
+function errorHandler(err, req, res, next) {
+  const statusCode = err.statusCode || 500;
+  const errorMessage = err.message || '服务器内部错误';
+  const errorCode = err.code || 'INTERNAL_SERVER_ERROR';
+  const stack = process.env.NODE_ENV === 'development' ? err.stack : undefined;
+  
+  // 记录错误日志
+  logger.error(`[${req.method}] ${req.originalUrl} - ${statusCode} ${errorMessage}`);
+  if (err.stack) {
+    logger.error(err.stack);
   }
 
-  // 构建错误响应
-  const errorResponse = {
-    success: false,
-    error: {
-      code: errorCode,
-      message: message
-    }
-  };
-
-  // 如果有详细错误信息，添加到响应中
-  if (errorDetails) {
-    errorResponse.error.details = errorDetails;
-  }
-
-  // 在非生产环境下添加堆栈跟踪
-  if (process.env.NODE_ENV !== 'production' && err.stack) {
-    errorResponse.error.stack = err.stack.split('\n');
-  }
-
-  res.status(status).json(errorResponse);
-};
+  // 发送错误响应
+  res.status(statusCode).json({
+    status: 'error',
+    message: errorMessage,
+    code: errorCode,
+    stack: stack,
+    path: req.originalUrl
+  });
+}
 
 /**
- * 404错误处理中间件
- * 处理未匹配的路由
+ * 自定义API错误类
  */
-const notFoundHandler = (req, res) => {
-  const errorResponse = {
-    success: false,
-    error: {
-      code: 'NOT_FOUND',
-      message: `未找到路由: ${req.method} ${req.originalUrl}`
-    }
-  };
+class ApiError extends Error {
+  /**
+   * 创建API错误
+   * @param {string} message - 错误消息
+   * @param {number} statusCode - HTTP状态码
+   * @param {string} code - 错误代码
+   */
+  constructor(message, statusCode = 500, code = 'INTERNAL_SERVER_ERROR') {
+    super(message);
+    this.name = this.constructor.name;
+    this.statusCode = statusCode;
+    this.code = code;
+    Error.captureStackTrace(this, this.constructor);
+  }
   
-  res.status(404).json(errorResponse);
-};
+  /**
+   * 创建400错误(Bad Request)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static badRequest(message, code = 'BAD_REQUEST') {
+    return new ApiError(message, 400, code);
+  }
+  
+  /**
+   * 创建401错误(Unauthorized)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static unauthorized(message = '未授权访问', code = 'UNAUTHORIZED') {
+    return new ApiError(message, 401, code);
+  }
+  
+  /**
+   * 创建403错误(Forbidden)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static forbidden(message = '禁止访问', code = 'FORBIDDEN') {
+    return new ApiError(message, 403, code);
+  }
+  
+  /**
+   * 创建404错误(Not Found)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static notFound(message = '资源不存在', code = 'NOT_FOUND') {
+    return new ApiError(message, 404, code);
+  }
+  
+  /**
+   * 创建429错误(Too Many Requests)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static tooManyRequests(message = '请求过于频繁', code = 'TOO_MANY_REQUESTS') {
+    return new ApiError(message, 429, code);
+  }
+  
+  /**
+   * 创建500错误(Internal Server Error)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static internal(message = '服务器内部错误', code = 'INTERNAL_SERVER_ERROR') {
+    return new ApiError(message, 500, code);
+  }
+  
+  /**
+   * 创建503错误(Service Unavailable)
+   * @param {string} message - 错误消息
+   * @param {string} code - 错误代码
+   */
+  static serviceUnavailable(message = '服务暂时不可用', code = 'SERVICE_UNAVAILABLE') {
+    return new ApiError(message, 503, code);
+  }
+}
 
 module.exports = {
-  ApiError,
+  notFoundHandler,
   errorHandler,
-  notFoundHandler
+  ApiError
 }; 
