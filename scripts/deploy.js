@@ -3,6 +3,7 @@
  * 统一入口点
  */
 require('dotenv').config();
+const hre = require('hardhat');
 const { ethers, upgrades, config } = require('hardhat');
 const { DeploymentStrategy, loadDeploymentConfig } = require('../shared/config/deployment');
 const logger = require('../shared/utils/logger');
@@ -14,6 +15,49 @@ const {
   deployUpgradeableContract,
   saveDeploymentRecord
 } = require('../shared/utils/deployment-core');
+const { configManager } = require('../shared/config');
+
+/**
+ * 加载部署记录
+ */
+function loadDeployments() {
+  const stateFile = path.join(process.cwd(), 'scripts/deploy-state.json');
+  if (fs.existsSync(stateFile)) {
+    return JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  }
+  return {};
+}
+
+/**
+ * 获取部署顺序
+ */
+async function getDeploymentOrder(strategy) {
+  // 加载部署配置
+  const deployConfig = await loadDeploymentConfig();
+  // 返回部署顺序
+  return deployConfig.deploymentOrder || [
+    'RoleManager',
+    'FeeManager',
+    'PropertyRegistry',
+    'RentDistributor',
+    'TokenFactory',
+    'RedemptionManager',
+    'Marketplace',
+    'TokenHolderQuery',
+    'RealEstateSystem'
+  ];
+}
+
+/**
+ * 获取网络配置
+ */
+async function getNetworkConfig() {
+  const network = await ethers.provider.getNetwork();
+  return {
+    name: network.name,
+    chainId: network.chainId
+  };
+}
 
 /**
  * 生成部署摘要文档
@@ -154,21 +198,21 @@ async function main() {
     if (forceDeploy || !deployData.SystemDeployerLib1) {
       console.log('部署 SystemDeployerLib1...');
       systemDeployerLib1 = await SystemDeployerLib1.deploy();
-      await systemDeployerLib1.deployed();
-      console.log(`SystemDeployerLib1 已部署到: ${systemDeployerLib1.address}`);
+      // 在Ethers.js v6中，不再需要调用deployed()方法，因为部署已经等待了交易确认
+      console.log(`SystemDeployerLib1 已部署到: ${await systemDeployerLib1.getAddress()}`);
     } else {
-      console.log(`使用现有 SystemDeployerLib1: ${deployData.SystemDeployerLib1.address}`);
-      systemDeployerLib1 = {address: deployData.SystemDeployerLib1.address};
+      console.log(`使用现有 SystemDeployerLib1: ${deployData.SystemDeployerLib1}`);
+      systemDeployerLib1 = {address: deployData.SystemDeployerLib1};
     }
 
     if (forceDeploy || !deployData.SystemDeployerLib2) {
       console.log('部署 SystemDeployerLib2...');
       systemDeployerLib2 = await SystemDeployerLib2.deploy();
-      await systemDeployerLib2.deployed();
-      console.log(`SystemDeployerLib2 已部署到: ${systemDeployerLib2.address}`);
+      // 在Ethers.js v6中，不再需要调用deployed()方法，因为部署已经等待了交易确认
+      console.log(`SystemDeployerLib2 已部署到: ${await systemDeployerLib2.getAddress()}`);
     } else {
-      console.log(`使用现有 SystemDeployerLib2: ${deployData.SystemDeployerLib2.address}`);
-      systemDeployerLib2 = {address: deployData.SystemDeployerLib2.address};
+      console.log(`使用现有 SystemDeployerLib2: ${deployData.SystemDeployerLib2}`);
+      systemDeployerLib2 = {address: deployData.SystemDeployerLib2};
     }
     
     // 根据策略部署合约
