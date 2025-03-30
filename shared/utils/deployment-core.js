@@ -95,10 +95,28 @@ async function deployUpgradeableContract(contractName, initArgs = [], libraries 
   logger.info(`部署 ${contractName}...`);
   
   try {
-    // 创建合约工厂
-    const Contract = await ethers.getContractFactory(contractName, {
-      libraries: libraries
-    });
+    // 检查合约是否需要库
+    const contractsRequiringLibraries = [
+      'PropertyRegistry',
+      'TokenFactory',
+      'RealEstateSystem',
+      'RentDistributor',
+      'RedemptionManager',
+      'Marketplace',
+      'TokenHolderQuery'
+    ];
+    
+    // 创建合约工厂，只有需要库的合约才链接库
+    let Contract;
+    if (contractsRequiringLibraries.includes(contractName)) {
+      logger.info(`${contractName} 需要链接库`);
+      Contract = await ethers.getContractFactory(contractName, {
+        libraries: libraries
+      });
+    } else {
+      logger.info(`${contractName} 不需要链接库`);
+      Contract = await ethers.getContractFactory(contractName);
+    }
     
     // 部署可升级合约
     const contract = await upgrades.deployProxy(Contract, initArgs, {
@@ -120,6 +138,12 @@ async function deployUpgradeableContract(contractName, initArgs = [], libraries 
       implementationAddress: implAddress
     };
   } catch (error) {
+    // 处理特定错误 - 如果是库链接错误，尝试不带库重新部署
+    if (error.message && error.message.includes("not one of its libraries")) {
+      logger.warn(`${contractName} 不需要链接库，尝试重新部署...`);
+      return deployUpgradeableContract(contractName, initArgs, {}, options);
+    }
+    
     logger.error(`${contractName} 部署失败:`, error);
     throw error;
   }
@@ -239,4 +263,4 @@ module.exports = {
   deployUpgradeableContract,
   saveDeploymentRecord,
   generateDeploymentSummary
-}; 
+};

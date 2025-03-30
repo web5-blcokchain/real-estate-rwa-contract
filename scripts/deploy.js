@@ -228,14 +228,28 @@ async function main() {
         const initFn = deployConfig.initializeParams[contractName];
         const initArgs = (typeof initFn === 'function') ? initFn(deployedContracts) : (initFn || []);
         
+        // 检查合约是否需要库
+        const contractsRequiringLibraries = [
+          'PropertyRegistry',
+          'TokenFactory',
+          'RealEstateSystem',
+          'RentDistributor',
+          'RedemptionManager',
+          'Marketplace',
+          'TokenHolderQuery'
+        ];
+        
+        // 只为需要库的合约提供库
+        const libsToUse = contractsRequiringLibraries.includes(contractName) ? {
+          SystemDeployerLib1: systemDeployerLib1,
+          SystemDeployerLib2: systemDeployerLib2
+        } : {};
+        
         // 部署合约
         const { proxyAddress, implementationAddress } = await deployUpgradeableContract(
           contractName,
           initArgs,
-          {
-            SystemDeployerLib1: systemDeployerLib1,
-            SystemDeployerLib2: systemDeployerLib2
-          },
+          libsToUse,
           { force: forceDeploy }
         );
         
