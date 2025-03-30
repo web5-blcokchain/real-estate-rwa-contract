@@ -6,73 +6,73 @@
 
 ```
 scripts/
-├── deploy-flow.js                 # 主部署流程脚本（Node.js）
-├── deploy.js                      # 合约部署执行脚本
-├── deploy-token-implementation.js # 代币实现部署与TokenFactory配置脚本
-├── setup-roles.js                 # 合约角色设置脚本
-├── verify.js                      # 合约源码验证脚本
-├── force-deploy.js                # 强制部署脚本（避免gas估算问题）
-├── debug-token-creation.js        # 代币创建调试工具脚本
-├── tests/                         # 测试脚本目录
-│   ├── deployment-test.js         # 部署验证测试
-│   ├── basic-processes-test.js    # 基础业务流程测试
-│   ├── business-processes-test.js # 完整业务流程测试（包括代币创建）
-│   └── README.md                  # 测试策略说明
-├── README_DEPLOY.md               # 部署流程详细文档
-├── deploy-state.json              # 部署状态记录文件
-└── logging/                       # 部署日志目录
+├── deploy-with-new-architecture.js  # 主部署脚本（使用新的三层架构）
+├── verify-deployment.js            # 部署验证脚本
+├── deploy-state.json               # 部署状态记录文件
+├── logging/                        # 部署日志目录
+└── tests/                          # 测试脚本目录
+    ├── deployment-test.js          # 部署验证测试
+    ├── basic-processes-test.js     # 基础业务流程测试
+    ├── business-processes-test.js  # 完整业务流程测试（包括代币创建）
+    └── README.md                   # 测试策略说明
 ```
+
+## 三层部署架构说明
+
+我们采用了一个新的三层部署架构来组织部署工具和流程：
+
+1. **基础层 (deployment-state.js)** - 处理部署状态持久化，管理合约地址、网络配置和部署时间戳
+2. **核心层 (deployment-core.js)** - 提供核心部署功能，处理合约编译、部署、升级和验证
+3. **系统层 (deployment-system.js)** - 提供高级系统级部署功能，包括库部署、系统合约部署和角色配置
+
+这种架构设计提供了更好的关注点分离、更高的可维护性和更强的扩展能力。
 
 ## 关键脚本说明
 
 ### 1. 部署脚本
 
-#### 主部署脚本 (`deploy-flow.js`)
+#### 主部署脚本 (`deploy-with-new-architecture.js`)
 
-这是部署流程的入口脚本，用JavaScript实现，集成了合约部署、代币实现设置、角色配置和测试验证的完整流程。它替代了旧的bash脚本`deploy.sh`。
+这是使用新三层架构的主要部署脚本，负责协调整个部署流程，包括合约部署、库部署、角色配置等。
 
 **使用方法**:
 ```bash
 # 基本用法
-node scripts/deploy-flow.js <network> [options]
+npx hardhat run scripts/deploy-with-new-architecture.js --network <network>
 
 # 或使用NPM脚本
-npm run contracts:deploy:flow
+npm run contracts:deploy:new
 
-# 部署示例
-npm run contracts:deploy:flow        # 部署到本地网络
-npm run contracts:deploy:flow:force  # 强制重新部署所有合约
-npm run contracts:deploy:flow:testnet  # 部署到测试网并验证源码
-npm run contracts:deploy:flow:mainnet  # 部署到主网（需确认）
+# 部署选项
+FORCE_DEPLOY=true npx hardhat run scripts/deploy-with-new-architecture.js --network <network>  # 强制重新部署
+VERIFY_CONTRACTS=true npx hardhat run scripts/deploy-with-new-architecture.js --network <network>  # 部署并验证源码
 ```
 
-**重要参数**:
-- `--force` (`-f`): 强制重新部署所有合约，忽略已部署状态
-- `--strategy=<upgradeable|direct|minimal>` (`-s`): 选择部署策略
-- `--verify` (`-v`): 在区块链浏览器上验证合约源码
-- `--roles` (`-r`): 设置角色
-- `--token-impl` (`-t`): 部署代币实现
-- `--confirm`: 确认主网部署
+**环境变量**:
+- `FORCE_DEPLOY`: 设置为`true`强制重新部署所有合约，忽略已部署状态
+- `VERIFY_CONTRACTS`: 设置为`true`在区块链浏览器上验证合约源码
+- `ADMIN_ADDRESS`: 管理员角色地址
+- `OPERATOR_ADDRESS`: 操作员角色地址
+- `VALIDATOR_ADDRESS`: 验证者角色地址
+- `TREASURY_ADDRESS`: 资金管理员角色地址
 
-完整的部署流程参数和详细说明请参阅 [README_DEPLOY.md](./README_DEPLOY.md)。
+#### 验证部署脚本 (`verify-deployment.js`)
 
-#### 代币实现部署脚本 (`deploy-token-implementation.js`)
-
-这个脚本负责部署RealEstateToken实现合约，并将其地址设置到TokenFactory中，是代币创建能够正常工作的关键步骤。
+验证已部署合约的配置和状态，确保部署成功且合约关系正确。
 
 **使用方法**:
 ```bash
-npm run contracts:token-impl
-# 或
-npx hardhat run scripts/deploy-token-implementation.js --network <network>
+npx hardhat run scripts/verify-deployment.js --network <network>
 ```
 
 **功能**:
-- 部署RealEstateToken实现合约
-- 设置TokenFactory的tokenImplementation地址
-- 保存实现地址到配置文件
+- 验证所有合约是否已部署并有代码
+- 验证系统合约引用是否正确
+- 验证角色设置是否正确
 
 ### 2. 测试脚本
+
+测试脚本与之前相同，但现在使用新的部署架构。
 
 #### 部署验证测试 (`tests/deployment-test.js`)
 
@@ -80,8 +80,6 @@ npx hardhat run scripts/deploy-token-implementation.js --network <network>
 
 ```bash
 npm run contracts:test:deployment
-# 或
-npx hardhat run scripts/tests/deployment-test.js --network <network>
 ```
 
 #### 基础业务流程测试 (`tests/basic-processes-test.js`)
@@ -90,57 +88,33 @@ npx hardhat run scripts/tests/deployment-test.js --network <network>
 
 ```bash
 npm run contracts:test:basic
-# 或
-npx hardhat run scripts/tests/basic-processes-test.js --network <network>
 ```
 
 #### 完整业务流程测试 (`tests/business-processes-test.js`)
 
-测试完整业务流程，包括房产注册、代币创建、交易和租金分配等。此测试需要TokenFactory正确配置tokenImplementation地址。
+测试完整业务流程，包括房产注册、代币创建、交易和租金分配等。
 
 ```bash
 npm run contracts:test:business
-# 或
-npx hardhat run scripts/tests/business-processes-test.js --network <network>
-```
-
-#### 所有测试
-
-运行所有主要测试，包括部署验证、基础业务流程和完整业务流程测试。
-
-```bash
-npm run contracts:test:all
-```
-
-### 3. 调试工具
-
-#### 代币创建调试工具 (`debug-token-creation.js`)
-
-用于调试代币创建过程中可能出现的问题，提供手动代理部署功能。
-
-```bash
-npm run contracts:debug:token-creation
-# 或
-npx hardhat run scripts/debug-token-creation.js --network <network>
 ```
 
 ## 开发与调试流程
 
 ### 本地开发流程
 
-1. **启动本地节点和服务器**:
+1. **启动本地节点**:
    ```bash
-   npm run dev
+   npx hardhat node
    ```
 
-2. **部署基础合约**:
+2. **部署合约**:
    ```bash
-   npm run contracts:deploy:flow
+   FORCE_DEPLOY=true npx hardhat run scripts/deploy-with-new-architecture.js --network localhost
    ```
 
-3. **验证基础功能**:
+3. **验证部署**:
    ```bash
-   npm run contracts:test:basic
+   npx hardhat run scripts/verify-deployment.js --network localhost
    ```
 
 4. **测试业务流程**:
@@ -150,111 +124,85 @@ npx hardhat run scripts/debug-token-creation.js --network <network>
 
 ### 调试常见问题
 
-1. **代币创建失败**: 
-   ```bash
-   # 验证TokenFactory实现地址
-   npx hardhat console --network localhost
-   > const tf = await ethers.getContractAt("TokenFactory", "<TokenFactory地址>")
-   > await tf.tokenImplementation()
+1. **合约部署问题**:
+   - 检查账户余额是否足够
+   - 确认网络连接是否正常
+   - 查看部署日志了解具体错误
    
-   # 如果地址为0或不正确，重新部署代币实现
-   npm run contracts:token-impl
-   ```
-
 2. **角色权限问题**:
-   ```bash
-   # 检查角色设置
-   npm run contracts:setup-roles
+   - 在验证脚本中检查角色是否正确设置
+   - 使用控制台手动检查角色:
+   ```javascript
+   const roleManager = await ethers.getContractAt("RoleManager", "<address>");
+   const superAdminRole = await roleManager.SUPER_ADMIN();
+   await roleManager.hasRole(superAdminRole, "<account>");
    ```
 
-3. **手动创建代币**:
-   ```bash
-   # 使用调试工具手动创建代币
-   npm run contracts:debug:token-creation
-   ```
+3. **合约初始化问题**:
+   - 检查部署参数是否正确
+   - 查看合约状态验证初始化是否成功
 
-## 工作原理
+## 部署架构工作原理
 
-### 1. 代理模式与实现分离
+### 1. 部署状态管理
 
-本系统采用可升级代理模式，关键组件如下：
+部署状态通过`deployment-state.js`模块管理，主要功能：
 
-- **实现合约**: 包含业务逻辑，如RealEstateToken实现
-- **代理合约**: 通过代理将调用转发到实现合约
-- **TokenFactory**: 工厂合约，负责创建新的代币代理
+- 记录已部署合约的地址
+- 跟踪部署网络和时间戳
+- 持久化部署记录到多个位置
+- 提供向后兼容性
 
-TokenFactory需要知道RealEstateToken实现合约的地址才能创建新代币。这是通过`tokenImplementation`变量存储的，这个地址需要在部署后通过`deploy-token-implementation.js`脚本设置。
+### 2. 部署策略
 
-### 2. 部署流程
+系统支持三种部署策略：
+
+- **直接部署 (DIRECT)**: 普通合约部署，不使用代理
+- **可升级部署 (UPGRADEABLE)**: 部署代理合约和实现合约，支持后续升级
+- **最小化部署 (MINIMAL)**: 只部署核心合约，用于测试或开发环境
+
+### 3. 部署流程
 
 完整部署流程包括以下步骤：
 
-1. 部署所有基础合约（`deploy.js`或`force-deploy.js`）
-2. 部署RealEstateToken实现合约（`deploy-token-implementation.js`）
-3. 设置TokenFactory的tokenImplementation地址
-4. 设置合约角色（`setup-roles.js`）
-5. 验证部署（`tests/deployment-test.js`）
-6. 测试基础功能（`tests/basic-processes-test.js`）
-7. 测试完整业务流程（`tests/business-processes-test.js`）
-
-`deploy-flow.js`脚本负责协调这些步骤的执行，以确保完整的部署流程。
+1. 部署库合约(`SystemDeployerLib1`, `SystemDeployerLib2`)
+2. 部署角色管理器(`RoleManager`)
+3. 部署费用管理器(`FeeManager`)
+4. 部署房产注册表(`PropertyRegistry`)
+5. 部署租金分配器(`RentDistributor`)
+6. 部署代币工厂(`TokenFactory`)  
+7. 部署赎回管理器(`RedemptionManager`)
+8. 部署市场(`Marketplace`)
+9. 部署代币持有者查询(`TokenHolderQuery`)
+10. 部署房地产系统(`RealEstateSystem`)
+11. 配置系统角色
+12. 记录部署状态
 
 ## 常见问题
 
-### 1. TokenFactory代币创建失败
+### 1. 部署失败
 
-**问题**: 调用`TokenFactory.createTokenPublic()`方法失败，返回"Transaction reverted without a reason string"。
+**问题**: 部署脚本执行失败。
 
 **解决方案**:
-- 确保TokenFactory的tokenImplementation地址已正确设置
-- 运行`contracts:token-impl`脚本更新实现地址
-- 使用`contracts:debug:token-creation`脚本手动创建代币进行测试
+- 检查日志了解具体错误
+- 确保账户余额充足
+- 使用`FORCE_DEPLOY=true`选项强制重新部署
+- 检查网络连接状态
 
 ### 2. 权限错误
 
-**问题**: 执行特定操作时出现"Caller is not a super admin"或类似权限错误。
+**问题**: 操作时出现权限错误。
 
 **解决方案**:
-- 运行`contracts:setup-roles`脚本确保角色正确设置
-- 检查调用者是否有所需的角色（SUPER_ADMIN、TOKEN_MANAGER等）
-- 在控制台中验证角色分配：
-  ```javascript
-  const rm = await ethers.getContractAt("RoleManager", "<RoleManager地址>");
-  const SUPER_ADMIN = await rm.SUPER_ADMIN();
-  await rm.hasRole(SUPER_ADMIN, "<账户地址>");
-  ```
+- 使用验证脚本检查角色设置
+- 确认操作账户具有所需角色
 
-### 3. 部署失败
-
-**问题**: 部署脚本执行失败，可能是gas估算问题。
-
-**解决方案**:
-- 使用`--force`选项运行部署脚本
-- 检查账户余额是否足够
-- 本地网络可能需要增加gas限制，可修改hardhat配置
-
-### 4. 合约依赖错误
-
-**问题**: 合约在验证阶段出现"Could not find contract dependencies"。
-
-**解决方案**:
-- 确保所有依赖合约已部署
-- 检查导入路径是否正确
-- 尝试单独验证每个合约
-
-### 5. 合约无代码错误
+### 3. 合约无代码错误
 
 **问题**: 调用合约方法时出现"address has no code"错误。
 
 **解决方案**:
-- 这通常发生在Hardhat节点重启后但使用了旧的部署地址
-- 使用`npm run contracts:deploy:flow:force`重新部署所有合约
-- 确保使用最新的合约地址
-
-## 最佳实践
-
-1. **先测试后生产**: 始终先在本地和测试网上验证部署脚本和业务流程
-2. **完整记录**: 保留每次部署的日志和状态，便于排查问题
-3. **分步验证**: 使用测试脚本逐步验证系统功能，从基础到复杂
-4. **权限管理**: 设置完成后验证关键角色是否正确分配
-5. **代币管理**: 理解TokenFactory与RealEstateToken实现的关系，确保设置正确 
+- 确认节点是否重启过，可能需要重新部署
+- 检查合约地址是否正确
+- 验证部署记录中的地址是否匹配 

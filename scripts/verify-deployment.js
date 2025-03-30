@@ -6,13 +6,20 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../shared/utils/logger');
 
+// 流程标题日志
+function logStage(stage) {
+  const separator = "=".repeat(80);
+  console.log(`\n${separator}`);
+  console.log(`【${stage}】`);
+  console.log(`${separator}\n`);
+}
+
 // 确保连接到正确的节点
 async function setupProvider() {
-  console.log('正在连接到本地Hardhat节点...');
-  // 创建一个自定义的提供器，连接到运行中的Hardhat节点
-  const customProvider = new ethers.JsonRpcProvider('http://localhost:8545');
-  
   try {
+    // 创建一个自定义的提供器，连接到运行中的Hardhat节点
+    const customProvider = new ethers.JsonRpcProvider('http://localhost:8545');
+    
     // 检查连接是否成功
     const blockNumber = await customProvider.getBlockNumber();
     console.log(`成功连接到节点，当前区块号: ${blockNumber}`);
@@ -41,8 +48,6 @@ function loadDeployedContracts() {
 
 // 验证合约的存在性
 async function verifyContractsExistence(provider, contracts) {
-  console.log('\n=== 验证合约存在性 ===');
-  
   let allValid = true;
   
   for (const [name, address] of Object.entries(contracts)) {
@@ -71,24 +76,36 @@ async function verifyContractsExistence(provider, contracts) {
 
 // 验证RealEstateSystem合约中的合约引用是否正确
 async function verifySystemReferences(provider, contracts) {
-  console.log('\n=== 验证系统合约引用 ===');
-  
   try {
     // 使用自定义提供器创建合约实例
     const RealEstateSystem = await ethers.getContractFactory('RealEstateSystem');
     const realEstateSystem = RealEstateSystem.attach(contracts.realEstateSystem).connect(provider);
     
+    // 获取系统合约引用
     const systemContracts = await realEstateSystem.getSystemContracts();
     
+    // 预期的合约地址
     const expectedAddresses = [
-      contracts.roleManager,
-      contracts.feeManager,
-      contracts.propertyRegistry,
-      contracts.tokenFactory,
-      contracts.redemptionManager,
-      contracts.rentDistributor,
-      contracts.marketplace,
-      contracts.tokenHolderQuery
+      contracts.roleManager,           // 0: RoleManager 
+      contracts.feeManager,            // 1: FeeManager
+      contracts.propertyRegistry,      // 2: PropertyRegistry
+      contracts.tokenFactory,          // 3: TokenFactory
+      contracts.redemptionManager,     // 4: RedemptionManager
+      contracts.rentDistributor,       // 5: RentDistributor
+      contracts.marketplace,           // 6: Marketplace
+      contracts.tokenHolderQuery       // 7: TokenHolderQuery
+    ];
+    
+    // 合约名称对应
+    const contractNames = [
+      'RoleManager',
+      'FeeManager',
+      'PropertyRegistry',
+      'TokenFactory',
+      'RedemptionManager',
+      'RentDistributor',
+      'Marketplace',
+      'TokenHolderQuery'
     ];
     
     let allReferencesValid = true;
@@ -98,9 +115,9 @@ async function verifySystemReferences(provider, contracts) {
       const actual = systemContracts[i].toLowerCase();
       
       if (expected === actual) {
-        console.log(`✅ 系统合约引用 #${i+1}: ${actual} - 匹配`);
+        console.log(`✅ ${contractNames[i]}: ${actual} - 引用正确`);
       } else {
-        console.log(`❌ 系统合约引用 #${i+1}: ${actual} - 不匹配! 期望: ${expected}`);
+        console.log(`❌ ${contractNames[i]}: ${actual} - 引用错误! 期望: ${expected}`);
         allReferencesValid = false;
       }
     }
@@ -114,8 +131,6 @@ async function verifySystemReferences(provider, contracts) {
 
 // 验证RoleManager的基本功能
 async function verifyRoleManager(provider, contracts) {
-  console.log('\n=== 验证角色管理器 ===');
-  
   try {
     // 使用自定义提供器创建合约实例
     const RoleManager = await ethers.getContractFactory('RoleManager');
@@ -147,10 +162,38 @@ async function verifyRoleManager(provider, contracts) {
   }
 }
 
+// 验证TokenFactory设置
+async function verifyTokenFactory(provider, contracts) {
+  try {
+    // 检查TokenFactory的设置
+    if (contracts.tokenImplementation && contracts.tokenImplementation !== ethers.ZeroAddress) {
+      console.log(`✅ TokenFactory实现地址已设置: ${contracts.tokenImplementation}`);
+      
+      // 检查实现合约是否存在
+      const code = await provider.getCode(contracts.tokenImplementation);
+      if (code !== '0x') {
+        console.log(`✅ 代币实现合约包含有效代码`);
+        return true;
+      } else {
+        console.log(`❌ 代币实现合约地址无效!`);
+        return false;
+      }
+    } else {
+      console.log(`❌ TokenFactory实现地址未设置!`);
+      return false;
+    }
+  } catch (error) {
+    console.error('验证TokenFactory失败:', error);
+    return false;
+  }
+}
+
 // 主函数
 async function main() {
   try {
-    console.log('=== 开始验证合约部署 ===');
+    // ========== 阶段1：准备工作 ==========
+    logStage("1. 验证准备");
+    console.log('正在连接到本地Hardhat节点...');
     
     // 设置提供器
     const provider = await setupProvider();
@@ -162,28 +205,51 @@ async function main() {
       console.log(`  ${name}: ${address}`);
     });
     
-    // 验证合约存在性
+    // ========== 阶段2：合约存在性验证 ==========
+    logStage("2. 合约存在性验证");
+    console.log('检查所有合约是否成功部署并具有代码:');
     const contractsExist = await verifyContractsExistence(provider, contracts);
     if (!contractsExist) {
       console.log('\n❌ 合约存在性验证失败!');
       return;
     }
     
-    // 验证系统合约引用
+    // ========== 阶段3：系统引用验证 ==========
+    logStage("3. 系统引用验证");
+    console.log('检查RealEstateSystem是否正确引用了所有子系统合约:');
     const referencesValid = await verifySystemReferences(provider, contracts);
     if (!referencesValid) {
       console.log('\n❌ 系统合约引用验证失败!');
       return;
     }
     
-    // 验证角色管理器
+    // ========== 阶段4：角色设置验证 ==========
+    logStage("4. 角色设置验证");
+    console.log('检查角色管理器是否正确设置:');
     const roleManagerValid = await verifyRoleManager(provider, contracts);
     if (!roleManagerValid) {
       console.log('\n❌ 角色管理器验证失败!');
       return;
     }
     
-    console.log('\n✅ 所有验证通过! 合约部署成功.');
+    // ========== 阶段5：关键合约设置验证 ==========
+    logStage("5. 关键合约设置验证");
+    console.log('检查关键合约设置:');
+    
+    const tokenFactoryValid = await verifyTokenFactory(provider, contracts);
+    if (!tokenFactoryValid) {
+      console.log('\n❌ TokenFactory设置验证失败!');
+      return;
+    }
+    
+    // ========== 阶段6：验证总结 ==========
+    logStage("6. 验证总结");
+    console.log('✅ 所有验证通过! 合约部署成功.');
+    console.log('已完成以下验证:');
+    console.log('- 合约存在性验证 ✓');
+    console.log('- 系统引用验证 ✓');
+    console.log('- 角色设置验证 ✓');
+    console.log('- 关键合约设置验证 ✓');
   } catch (error) {
     console.error('验证失败:', error);
     process.exit(1);

@@ -12,8 +12,7 @@ const transaction = require('./transaction');
 const eventListener = require('./eventListener');
 const ethers = require('./ethers');  // ethers v6 工具
 
-// 部署工具模块
-const deployUtils = require('./deployUtils');
+// 部署工具模块 - 三层架构
 const { deploymentState } = require('./deployment-state');
 const deploymentCore = require('./deployment-core');
 const { SystemDeployer, DEPLOYMENT_STRATEGIES } = require('./deployment-system');
@@ -30,11 +29,22 @@ module.exports = {
   ethers,
   
   // 导出部署模块（三层架构）
-  deployUtils,                  // 旧版兼容
   deploymentState,              // 第一层：状态层
   deploymentCore,               // 第二层：核心层
   SystemDeployer,               // 第三层：系统层
   DEPLOYMENT_STRATEGIES,        // 部署策略常量
+  
+  // 为了向后兼容性，导出旧版API接口
+  deployUtils: {
+    // 关键函数映射到新架构
+    getDeployedContracts: deploymentState.getDeployedContracts,
+    loadDeployedContracts: deploymentState.loadDeployedContracts,
+    saveDeployedContracts: deploymentState.saveDeployments,
+    deployContract: deploymentCore.deployContract,
+    deployUpgradeableContract: deploymentCore.deployUpgradeableContract,
+    verifyContract: deploymentCore.verifyContract,
+    isContractDeployed: deploymentCore.isContractDeployed
+  },
   
   // 常用函数直接导出，方便使用
   getLogger: logger.getLogger,

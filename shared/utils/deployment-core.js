@@ -506,16 +506,6 @@ async function saveDeploymentRecord(deploymentRecord, networkName, options = {})
       ...deploymentRecord.contracts || {}
     };
     
-    // 保存到scripts/logging/contracts.json
-    fs.writeFileSync(
-      path.join(loggingDir, 'contracts.json'),
-      JSON.stringify({
-        libraries: deploymentRecord.libraries || {},
-        contracts: deploymentRecord.contracts || {}
-      }, null, 2)
-    );
-    logger.info('合约地址已保存到scripts/logging/contracts.json');
-    
     // 保存到scripts/deploy-state.json
     fs.writeFileSync(
       path.join(rootDir, 'scripts', 'deploy-state.json'),
