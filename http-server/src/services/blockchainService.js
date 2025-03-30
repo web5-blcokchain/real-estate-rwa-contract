@@ -7,8 +7,8 @@ const { ethers } = require('ethers');
 const { ApiError } = require('../middleware/errorHandler');
 const { logger } = require('../utils/logger');
 const config = require('../config');
-const { loadContractAddresses, loadContractABI } = require('../utils/contractLoader');
-const { responseHelper } = require('../utils/responseHelper');
+// 替换为shared目录中的公共模块
+const { getContractAddress, getContractAddresses, getAbi } = require('../../../shared/config/contracts');
 
 // 缓存Provider实例
 let provider = null;
@@ -76,16 +76,15 @@ const blockchainService = {
    */
   getContract(contractName, withSigner = false, signerType = 'admin') {
     try {
-      // 获取合约地址
-      const addresses = loadContractAddresses();
-      const address = addresses[contractName];
+      // 获取合约地址 - 使用shared目录中的公共模块
+      const address = getContractAddress(contractName);
       
       if (!address || !ethers.isAddress(address)) {
         throw new Error(`无效的合约地址: ${contractName}`);
       }
       
-      // 获取合约ABI
-      const abi = loadContractABI(contractName);
+      // 获取合约ABI - 使用shared目录中的公共模块
+      const abi = getAbi(contractName);
       
       if (!abi) {
         throw new Error(`无法加载合约ABI: ${contractName}`);
@@ -97,6 +96,20 @@ const blockchainService = {
     } catch (error) {
       logger.error(`获取合约实例失败: ${contractName}`, error);
       throw new ApiError(`无法获取合约: ${error.message}`, 500, 'CONTRACT_ERROR');
+    }
+  },
+
+  /**
+   * 获取所有合约地址
+   * @returns {Object} 所有合约地址对象
+   */
+  getAllContractAddresses() {
+    try {
+      // 使用shared目录中的公共模块
+      return getContractAddresses();
+    } catch (error) {
+      logger.error('获取所有合约地址失败', error);
+      throw new ApiError(`无法获取合约地址: ${error.message}`, 500, 'CONTRACT_ERROR');
     }
   },
 

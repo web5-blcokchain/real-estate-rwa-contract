@@ -6,7 +6,6 @@
 const blockchainService = require('../services/blockchainService');
 const { ApiError } = require('../middleware/errorHandler');
 const { logger } = require('../utils/logger');
-const { loadContractAddresses } = require('../utils/contractLoader');
 const { createSuccessResponse } = require('../utils/responseHelper');
 
 // BigInt序列化处理
@@ -26,7 +25,7 @@ const ContractInfoController = {
    */
   async getAllContractAddresses(req, res, next) {
     try {
-      const addresses = loadContractAddresses();
+      const addresses = blockchainService.getAllContractAddresses();
       res.json(createSuccessResponse(addresses, '获取合约地址列表成功'));
     } catch (error) {
       logger.error('获取合约地址列表失败', error);
@@ -60,13 +59,8 @@ const ContractInfoController = {
    */
   async getServiceStatus(req, res, next) {
     try {
-      // 检查区块链连接
       const blockchainStatus = await blockchainService.checkConnection();
-      
-      // 处理可能的BigInt值
       const safeBlockchainStatus = stringifyBigInt(blockchainStatus);
-      
-      // 构建响应数据
       const data = {
         service: 'japan-rwa-api',
         status: 'operational',
@@ -74,7 +68,6 @@ const ContractInfoController = {
         environment: process.env.NODE_ENV || 'development',
         blockchain: safeBlockchainStatus
       };
-      
       res.json(createSuccessResponse(data, 'API服务运行正常'));
     } catch (error) {
       logger.error('获取API服务状态失败', error);
@@ -92,18 +85,17 @@ const ContractInfoController = {
     try {
       const { name } = req.params;
       
-      // 获取所有合约地址
-      const addresses = loadContractAddresses();
-      
-      // 检查合约是否存在
-      if (!addresses[name]) {
+      try {
+        const contract = blockchainService.getContract(name);
+        const address = await contract.getAddress();
+        
+        res.json(createSuccessResponse({
+          name,
+          address
+        }, `获取合约 ${name} 地址成功`));
+      } catch (contractError) {
         throw new ApiError(`合约 ${name} 不存在`, 404, 'CONTRACT_NOT_FOUND');
       }
-      
-      res.json(createSuccessResponse({
-        name,
-        address: addresses[name]
-      }, `获取合约 ${name} 地址成功`));
     } catch (error) {
       logger.error('获取合约地址失败', error);
       next(error);
@@ -120,27 +112,24 @@ const ContractInfoController = {
     try {
       const { name } = req.params;
       
-      // 获取所有合约地址
-      const addresses = loadContractAddresses();
-      
-      // 检查合约是否存在
-      if (!addresses[name]) {
+      try {
+        const contract = blockchainService.getContract(name);
+        const address = await contract.getAddress();
+        
+        const provider = blockchainService.getProvider();
+        const codeHash = await provider.getCode(address);
+        
+        const data = {
+          name,
+          address,
+          codeHash: codeHash.length > 66 ? `${codeHash.substring(0, 66)}...` : codeHash,
+          hasCode: codeHash !== '0x'
+        };
+        
+        res.json(createSuccessResponse(data, `获取合约 ${name} 信息成功`));
+      } catch (contractError) {
         throw new ApiError(`合约 ${name} 不存在`, 404, 'CONTRACT_NOT_FOUND');
       }
-      
-      // 获取合约代码哈希
-      const provider = blockchainService.getProvider();
-      const codeHash = await provider.getCode(addresses[name]);
-      
-      // 构建响应数据
-      const data = {
-        name,
-        address: addresses[name],
-        codeHash: codeHash.length > 66 ? `${codeHash.substring(0, 66)}...` : codeHash,
-        hasCode: codeHash !== '0x'
-      };
-      
-      res.json(createSuccessResponse(data, `获取合约 ${name} 信息成功`));
     } catch (error) {
       logger.error('获取合约信息失败', error);
       next(error);
@@ -157,10 +146,8 @@ const ContractInfoController = {
     try {
       const { name } = req.params;
       
-      // 获取所有合约地址
-      const addresses = loadContractAddresses();
+      const addresses = blockchainService.getAllContractAddresses();
       
-      // 检查合约是否在部署状态文件中
       if (!addresses[name]) {
         return res.json(createSuccessResponse({
           name,
@@ -169,11 +156,9 @@ const ContractInfoController = {
         }, `检查合约 ${name} 部署状态成功`));
       }
       
-      // 获取合约代码哈希
       const provider = blockchainService.getProvider();
       const codeHash = await provider.getCode(addresses[name]);
       
-      // 判断合约是否真正部署
       const isDeployed = codeHash !== '0x';
       
       res.json(createSuccessResponse({

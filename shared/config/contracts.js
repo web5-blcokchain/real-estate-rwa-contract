@@ -52,9 +52,17 @@ function loadContractAddresses() {
       Object.assign(contractAddresses, deployState.contracts);
       logger.info(`从contracts字段加载了 ${Object.keys(deployState.contracts).length} 个合约地址`);
     } else {
-      // 直接包含合约地址（旧格式）
-      Object.assign(contractAddresses, deployState);
-      logger.info(`直接加载了 ${Object.keys(deployState).length} 个合约地址`);
+      // 直接遍历部署状态中的所有项，处理不同的格式
+      for (const [key, value] of Object.entries(deployState)) {
+        if (typeof value === 'string' && value.startsWith('0x')) {
+          // 标准地址格式
+          contractAddresses[key] = value;
+        } else if (value && value.target && typeof value.target === 'string' && value.target.startsWith('0x')) {
+          // 库合约格式，如SystemDeployerLib1和SystemDeployerLib2
+          contractAddresses[key] = value.target;
+        }
+      }
+      logger.info(`直接加载了 ${Object.keys(contractAddresses).length} 个合约地址`);
     }
     
     // 处理特殊字段

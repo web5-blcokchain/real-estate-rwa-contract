@@ -33,7 +33,8 @@
     "dev": "concurrently \"yarn hardhat:node\" \"yarn server:dev\"",
     "dev:all": "concurrently \"yarn hardhat:node\" \"yarn server:dev\" \"yarn http:dev\" \"yarn monitor:dev\"",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "start-http-server": "NODE_ENV=development node http-server/src/index.js"
   },
   "_moduleAliases": {
     "@shared": "./shared",
