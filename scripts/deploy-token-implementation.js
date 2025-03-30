@@ -182,24 +182,7 @@ async function main() {
     
     try {
       // 更新deploy-state.json
-      fs.writeFileSync(
-        path.join(__dirname, 'deploy-state.json'), 
-        JSON.stringify(outputData, null, 2)
-      );
-      
-      // 确保logging目录存在
-      const loggingDir = path.join(__dirname, 'logging');
-      if (!fs.existsSync(loggingDir)) {
-        fs.mkdirSync(loggingDir, { recursive: true });
-      }
-      
-      // 更新contracts.json
-      fs.writeFileSync(
-        path.join(loggingDir, 'contracts.json'), 
-        JSON.stringify(outputData, null, 2)
-      );
-      
-      logger.info('代币实现地址已保存到配置文件');
+      await updateDeployStateWithTokenImpl(tokenImplAddress);
     } catch (error) {
       logger.error(`保存配置文件失败: ${error.message}`);
       // 不中断流程，因为合约已经更新成功
@@ -222,6 +205,54 @@ async function main() {
     };
   } finally {
     closeLoggers();
+  }
+}
+
+async function updateDeployStateWithTokenImpl(tokenImplAddress) {
+  logger.info('更新部署状态文件...');
+
+  try {
+    // 从deploy-state.json加载当前状态
+    const deployStatePath = path.join(__dirname, 'deploy-state.json');
+    const deployStateContent = fs.existsSync(deployStatePath)
+      ? JSON.parse(fs.readFileSync(deployStatePath, 'utf8'))
+      : {};
+    
+    // 更新token实现地址 - 使用扁平结构
+    deployStateContent['RealEstateTokenImplementation'] = tokenImplAddress;
+    
+    // 保存更新后的状态
+    fs.writeFileSync(
+      deployStatePath,
+      JSON.stringify(deployStateContent, null, 2)
+    );
+    
+    logger.info(`已更新deploy-state.json，RealEstateTokenImplementation: ${tokenImplAddress}`);
+    
+    // 同时更新logging/contracts.json
+    const loggingPath = path.join(__dirname, 'logging', 'contracts.json');
+    if (fs.existsSync(loggingPath)) {
+      const loggingContent = JSON.parse(fs.readFileSync(loggingPath, 'utf8'));
+      
+      // 确保contracts字段存在
+      if (!loggingContent.contracts) {
+        loggingContent.contracts = {};
+      }
+      
+      // 更新token实现地址
+      loggingContent.contracts['RealEstateTokenImplementation'] = tokenImplAddress;
+      
+      // 保存
+      fs.writeFileSync(
+        loggingPath,
+        JSON.stringify(loggingContent, null, 2)
+      );
+      
+      logger.info(`已更新logging/contracts.json`);
+    }
+  } catch (error) {
+    logger.error('更新部署状态出错:', error);
+    throw error;
   }
 }
 

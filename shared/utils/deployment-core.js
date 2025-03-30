@@ -158,28 +158,32 @@ async function deployUpgradeableContract(contractName, initArgs = [], libraries 
  */
 async function saveDeploymentRecord(deploymentRecord, networkName, generateSummary = true) {
   try {
-    // 创建日志目录
-    const loggingDir = path.join(process.cwd(), 'scripts/logging');
+    // 创建日志目录 - 使用绝对路径，避免嵌套scripts目录
+    const rootDir = process.cwd();
+    const loggingDir = path.join(rootDir, 'scripts', 'logging');
     if (!fs.existsSync(loggingDir)) {
       fs.mkdirSync(loggingDir, { recursive: true });
     }
     
-    // 保存合约地址
+    // 准备合约地址数据 - 直接作为扁平结构保存
     const contractAddresses = {
-      libraries: deploymentRecord.libraries || {},
-      contracts: deploymentRecord.contracts || {}
+      ...deploymentRecord.libraries || {},
+      ...deploymentRecord.contracts || {}
     };
     
-    // 保存到scripts/logging/contracts.json
+    // 保存到scripts/logging/contracts.json - 保留完整版，包含libraries和contracts
     fs.writeFileSync(
       path.join(loggingDir, 'contracts.json'),
-      JSON.stringify(contractAddresses, null, 2)
+      JSON.stringify({
+        libraries: deploymentRecord.libraries || {},
+        contracts: deploymentRecord.contracts || {}
+      }, null, 2)
     );
     logger.info('合约地址已保存到scripts/logging/contracts.json');
     
-    // 同时保存到scripts/deploy-state.json
+    // 保存到scripts/deploy-state.json - 以扁平结构保存，只包含合约地址
     fs.writeFileSync(
-      path.join(process.cwd(), 'scripts/deploy-state.json'),
+      path.join(rootDir, 'scripts', 'deploy-state.json'),
       JSON.stringify(contractAddresses, null, 2)
     );
     logger.info('合约地址已保存到scripts/deploy-state.json');
@@ -213,7 +217,7 @@ async function saveDeploymentRecord(deploymentRecord, networkName, generateSumma
       
       // 同时保存到scripts/DEPLOYMENT.md
       fs.writeFileSync(
-        path.join(process.cwd(), 'scripts/DEPLOYMENT.md'),
+        path.join(rootDir, 'scripts', 'DEPLOYMENT.md'),
         summary
       );
       logger.info('部署摘要已保存到scripts/DEPLOYMENT.md');

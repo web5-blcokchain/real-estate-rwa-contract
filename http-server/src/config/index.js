@@ -7,6 +7,8 @@ const fs = require('fs');
 
 // 使用shared目录的环境变量加载功能
 const { initializeEnvironment, getEnvVar } = require('../.././../shared/config/environment');
+// 导入合约配置模块以获取部署状态文件路径
+const { DEPLOY_STATE_PATH } = require('../.././../shared/config/contracts');
 
 // 初始化环境变量
 initializeEnvironment();
@@ -37,7 +39,8 @@ const config = {
 
   // 合约配置
   contracts: {
-    deployStateFile: path.resolve(__dirname, '../../../scripts/deploy-state.json')
+    // 使用shared/config/contracts模块中的DEPLOY_STATE_PATH常量
+    deployStateFile: DEPLOY_STATE_PATH
   }
 };
 
