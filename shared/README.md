@@ -27,7 +27,15 @@ shared/
 │   │   ├── TokenFactory.json
 │   │   └── ... 
 │   └── addresses/       # 合约地址记录
-└── README.md            # 文档
+├── deployments/         # 部署记录
+│   ├── contracts.json   # 所有合约当前地址
+│   ├── [网络]-latest.json # 各网络最新部署状态
+│   └── cleanup.sh       # 部署记录清理脚本
+├── cache/               # 缓存文件
+├── middlewares/         # 中间件组件
+├── routes/              # 路由定义
+├── services/            # 共享服务
+└── README.md            # 本文档
 ```
 
 ## 安装与配置
@@ -57,266 +65,73 @@ yarn install
 
 ### 1. 配置管理 (`config/`)
 
-配置模块管理系统的所有配置项，包括网络设置、合约地址、角色地址等。
+配置模块管理系统的所有配置项，包括网络设置、合约地址、角色地址等。详细说明请参考 `config/README.md`。
 
-#### 使用示例
+### 2. 工具模块 (`utils/`)
 
-```javascript
-// 导入配置
-const config = require('../shared/config');
+提供各种通用工具函数，包括合约交互、事件监听、日志记录等。详细说明请参考 `utils/README.md`。
 
-// 获取合约地址
-const marketplaceAddress = config.contractAddresses.marketplace;
+### 3. 部署记录 (`deployments/`)
 
-// 获取网络配置
-const { rpcUrl, chainId } = config.networkConfig;
-```
+存储和管理不同网络上的合约部署记录。详细说明请参考 `deployments/README.md`。
 
-#### 合约地址管理 (`contracts.js`)
+### 4. 合约接口 (`contracts/`)
 
-```javascript
-const { contracts } = require('../shared/config');
+存储合约ABI和地址信息，用于合约交互。
 
-// 获取所有合约地址
-const addresses = contracts.getContractAddresses();
+### 5. 共享服务 (`services/`)
 
-// 更新合约地址
-contracts.updateContractAddress('marketplace', '0x...');
+提供公共业务逻辑，供不同组件复用。
 
-// 保存到部署状态文件
-contracts.saveToDeployState();
-```
+## 代码清理说明
 
-#### 私钥管理 (`keys.js`)
+为提高代码质量和可维护性，我们进行了以下清理工作：
 
-```javascript
-const { keys } = require('../shared/config');
+1. **合并冗余模块**:
+   - 整合了多个部署工具文件，统一使用 `deployUtils.js` 作为主接口
+   - 移除了重复的以太坊工具，使用 `ethers-v6.js` 作为统一实现
 
-// 获取角色私钥
-const adminKey = keys.getKey('admin');
+2. **添加文档**:
+   - 为各目录添加了README文件，说明用途和使用方法
+   - 增加了代码注释和JSDoc文档
 
-// 设置角色私钥
-keys.setKey('operator', '0x...');
+3. **清理脚本**:
+   - 添加了部署记录清理脚本 `deployments/cleanup.sh`
+   - 建议定期运行以维持目录整洁
 
-// 保存私钥到加密文件
-keys.saveKeys();
-```
-
-### 2. 合约服务 (`utils/contractService.js`)
-
-合约服务管理与区块链合约的交互，提供合约实例创建和调用功能。
-
-#### 使用示例
-
-```javascript
-const { contractService } = require('../shared/utils');
-
-// 初始化合约服务
-contractService.initialize(contractAddresses);
-
-// 获取合约实例
-const roleManager = contractService.getRoleManager();
-const marketplace = contractService.getMarketplace('admin'); // 使用admin角色
-
-// 执行合约方法
-const tx = await marketplace.createSellOrder(tokenAddress, amount, price);
-```
-
-### 3. 交易工具 (`utils/transaction.js`)
-
-提供交易执行和错误处理的工具函数。
-
-#### 使用示例
-
-```javascript
-const { transaction } = require('../shared/utils');
-
-// 执行合约交易
-const result = await transaction.executeTransaction(
-  contract,
-  'methodName',
-  [param1, param2],
-  {
-    operation: '创建卖单',
-    estimateGas: true,
-    safetyMargin: 0.2,
-    priority: 'medium'
-  }
-);
-
-if (result.success) {
-  console.log(`交易成功: ${result.transactionHash}`);
-} else {
-  console.error(`交易失败: ${result.error.message}`);
-}
-```
-
-### 4. 事件监听 (`utils/eventListener.js`)
-
-管理合约事件的监听和处理。
-
-#### 使用示例
-
-```javascript
-const { eventListener } = require('../shared/utils');
-
-// 创建事件监听器
-const listenerId = eventListener.createEventListener(
-  contract,
-  'Transfer',
-  (eventData) => {
-    console.log(`监听到转账: ${eventData.args.from} -> ${eventData.args.to}, 金额: ${eventData.args.value}`);
-  }
-);
-
-// 查询历史事件
-const events = await eventListener.queryEvents(
-  contract,
-  'OrderCreated',
-  { fromBlock: 0, toBlock: 'latest' }
-);
-
-// 等待特定事件
-const event = await eventListener.waitForEvent(
-  contract,
-  'RentDistributed',
-  { timeout: 60000 }
-);
-
-// 清理监听器
-eventListener.removeEventListener(listenerId);
-```
-
-### 5. 日志工具 (`utils/logger.js`)
-
-提供统一的日志记录功能。
-
-#### 使用示例
-
-```javascript
-const { logger, getLogger } = require('../shared/utils');
-
-// 使用默认日志记录器
-logger.info('这是一条信息');
-logger.warn('这是一条警告');
-logger.error('这是一条错误');
-
-// 创建特定模块的日志记录器
-const deployLogger = getLogger('deploy');
-deployLogger.info('开始部署...');
-```
-
-### 6. Web3提供者 (`utils/web3Provider.js`)
-
-管理与区块链网络的连接。
-
-#### 使用示例
-
-```javascript
-const { web3Provider } = require('../shared/utils');
-
-// 获取提供者
-const provider = web3Provider.getProvider();
-
-// 获取签名者
-const signer = web3Provider.getSigner(privateKey);
-
-// 获取网络信息
-const network = await web3Provider.getNetworkInfo();
-console.log(`连接到网络: ${network.name} (ID: ${network.chainId})`);
-
-// 测试连接
-const connected = await web3Provider.testConnection();
-```
-
-### 7. ABI管理 (`utils/getAbis.js`)
-
-管理合约ABI的加载和缓存。
-
-#### 使用示例
-
-```javascript
-const { getAbi, initializeAbis } = require('../shared/utils');
-
-// 初始化所有主要合约ABI
-initializeAbis();
-
-// 获取特定合约ABI
-const roleManagerAbi = getAbi('RoleManager');
-```
-
-### 8. 部署工具 (`utils/deployUtils.js`)
-
-提供合约部署和验证的功能。
-
-#### 使用示例
-
-```javascript
-const { deployUtils } = require('../shared/utils');
-
-// 部署合约
-const result = await deployUtils.deployContract(
-  factory, 
-  'RoleManager',
-  [adminAddress],
-  { gasLimit: 4000000 }
-);
-
-// 验证合约
-await deployUtils.verifyContract(
-  contractAddress,
-  'RoleManager',
-  [adminAddress]
-);
-```
+4. **优化结构**:
+   - 明确了模块职责和边界
+   - 改进了导入/导出方式，使用更清晰的模块接口
 
 ## 使用最佳实践
 
-### 配置管理
+### 模块化开发
 
-1. **集中配置**: 所有配置都应在 `shared/config` 中定义，避免在代码中硬编码
-2. **环境变量**: 敏感信息（如私钥、API密钥）应通过环境变量传入
-3. **默认值**: 为所有配置提供合理的默认值，确保在环境变量缺失时系统仍能运行
+1. **职责清晰**: 每个模块应有明确的职责边界
+2. **接口设计**: 提供简洁、一致的公共接口
+3. **内部实现**: 复杂的内部实现应该被封装，避免外部直接依赖
 
-### 合约交互
+### 代码维护
 
-1. **使用合约服务**: 始终通过 `contractService` 获取合约实例，避免直接创建
-2. **角色管理**: 在调用需要特定权限的合约方法时，指定适当的角色
-3. **错误处理**: 使用 `transaction.executeTransaction` 处理交易，以获得统一的错误处理
+1. **保持简洁**: 避免不必要的复杂性和重复代码
+2. **向后兼容**: 接口变更应考虑兼容性，提供过渡方案
+3. **完善测试**: 关键功能应有充分的单元测试
+4. **定期清理**: 定期整理代码，移除过时的功能和文件
 
-### 事件处理
+### 性能优化
 
-1. **清理监听器**: 不再需要时，务必清理事件监听器，避免内存泄漏
-2. **事件过滤**: 为事件监听设置适当的过滤条件，避免处理不必要的事件
-3. **超时处理**: 使用 `waitForEvent` 时，设置合理的超时时间
+1. **缓存策略**: 重复使用的计算结果应适当缓存
+2. **异步处理**: 耗时操作应使用异步方式处理
+3. **资源释放**: 及时释放不再需要的资源，避免内存泄漏
 
-### 日志记录
+## 维护者指南
 
-1. **模块化日志**: 为不同模块创建专用的日志记录器
-2. **适当级别**: 使用合适的日志级别（info、warn、error、debug）
-3. **结构化数据**: 对于复杂数据，使用结构化格式记录
+1. 向此目录添加新功能时，请遵循现有的结构和命名约定
+2. 更新代码时请同步更新相关文档
+3. 多个组件共用的功能应放在此目录，而非重复实现
+4. 定期运行 `deployments/cleanup.sh` 清理冗余部署记录
+5. 对于大型重构，请先讨论并制定迁移计划
 
 ## 排错指南
 
-### 合约交互问题
-
-- **合约地址错误**: 检查合约地址是否正确，确保 `deploy-state.json` 文件存在且有效
-- **ABI不匹配**: 确保ABI与合约版本匹配，运行 `npm run update-abis` 更新ABI
-- **权限不足**: 确认使用了正确的角色/签名者执行操作
-- **Gas不足**: 检查账户余额，或调整Gas限制和价格
-
-### 配置问题
-
-- **环境变量缺失**: 检查 `.env` 文件是否完整，包含所有必要的变量
-- **网络配置错误**: 确认 `RPC_URL` 和 `CHAIN_ID` 设置正确
-- **私钥问题**: 验证角色私钥是否正确设置
-
-### 日志和调试
-
-- **启用调试日志**: 设置 `LOG_LEVEL=debug` 获取更详细的日志
-- **检查日志文件**: 日志文件默认保存在 `logs/` 目录中
-- **合约事件**: 使用 `eventListener.queryEvents` 查询历史事件进行调试
-
-## API参考
-
-详细的API文档请参考各模块的JSDoc注释，或使用自动化工具（如JSDoc、TypeDoc）生成完整的API文档。 
+请参考各子目录中的README文档获取特定模块的排错指南。 

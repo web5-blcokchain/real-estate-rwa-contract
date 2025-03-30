@@ -9,6 +9,36 @@ const { contracts, deployConfig } = require('../config');
 const { executeTransaction } = require('./transaction');
 
 /**
+ * @deprecated 此模块已弃用，将在未来版本中移除。请使用新的三层部署架构：
+ * - 第1层 (状态层): deployment-state.js
+ * - 第2层 (核心层): deployment-core.js
+ * - 第3层 (系统层): deployment-system.js
+ * 
+ * 详细文档请参考: shared/utils/DEPLOYMENT_ARCHITECTURE.md
+ */
+function showDeprecationWarning() {
+  console.warn('\x1b[33m%s\x1b[0m', `
+  ┌───────────────────────────────────────────────────────────────────┐
+  │                            警告                                   │
+  ├───────────────────────────────────────────────────────────────────┤
+  │                                                                   │
+  │  deployUtils.js 已弃用，将在未来版本中移除                         │
+  │                                                                   │
+  │  请使用新的三层部署架构:                                          │
+  │  - 第1层 (状态层): deployment-state.js                            │
+  │  - 第2层 (核心层): deployment-core.js                             │
+  │  - 第3层 (系统层): deployment-system.js                           │
+  │                                                                   │
+  │  详细文档请参考: shared/utils/DEPLOYMENT_ARCHITECTURE.md           │
+  │                                                                   │
+  └───────────────────────────────────────────────────────────────────┘
+  `);
+}
+
+// 显示弃用警告
+showDeprecationWarning();
+
+/**
  * 通用部署函数
  * @param {ethers.ContractFactory} factory 合约工厂
  * @param {string} contractName 合约名称
@@ -359,11 +389,23 @@ async function linkLibraries(libraries, contractNames) {
   }
 }
 
+// 导出模块
 module.exports = {
   deployContract,
   verifyContract,
   deployUpgradeableContract,
   deployLibrary,
   initializeContract,
-  linkLibraries
+  linkLibraries,
+  
+  // 添加指向新模块的引用
+  get newArchitecture() {
+    showDeprecationWarning();
+    return {
+      deploymentState: require('./deployment-state').deploymentState,
+      deploymentCore: require('./deployment-core'),
+      SystemDeployer: require('./deployment-system').SystemDeployer,
+      DEPLOYMENT_STRATEGIES: require('./deployment-system').DEPLOYMENT_STRATEGIES
+    };
+  }
 }; 

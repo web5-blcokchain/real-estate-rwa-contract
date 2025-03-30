@@ -10,25 +10,41 @@ const web3Provider = require('./web3Provider');
 const contractService = require('./contractService');
 const transaction = require('./transaction');
 const eventListener = require('./eventListener');
-const deployUtils = require('./deployUtils');
+const ethers = require('./ethers');  // ethers v6 工具
 
-// 导出所有工具模块
+// 部署工具模块
+const deployUtils = require('./deployUtils');
+const { deploymentState } = require('./deployment-state');
+const deploymentCore = require('./deployment-core');
+const { SystemDeployer, DEPLOYMENT_STRATEGIES } = require('./deployment-system');
+
+// 导出所有模块
 module.exports = {
+  // 工具模块
   logger,
   getAbis,
   web3Provider,
   contractService,
   transaction,
   eventListener,
-  deployUtils,
+  ethers,
   
-  // 导出常用函数以便直接使用
+  // 导出部署模块（三层架构）
+  deployUtils,                  // 旧版兼容
+  deploymentState,              // 第一层：状态层
+  deploymentCore,               // 第二层：核心层
+  SystemDeployer,               // 第三层：系统层
+  DEPLOYMENT_STRATEGIES,        // 部署策略常量
+  
+  // 常用函数直接导出，方便使用
   getLogger: logger.getLogger,
-  getAbi: getAbis.getAbi,
-  getProvider: web3Provider.getProvider,
-  getSigner: web3Provider.getSigner,
-  executeTransaction: transaction.executeTransaction,
-  createEventListener: eventListener.createEventListener,
-  deployContract: deployUtils.deployContract,
-  createContractService: contractService.createContractService
+  log: logger.log,
+  error: logger.error,
+  deployLibraries: deploymentCore.deployLibraries,
+  deployContract: deploymentCore.deployContract,
+  deployUpgradeableContract: deploymentCore.deployUpgradeableContract,
+  saveDeploymentRecord: deploymentCore.saveDeploymentRecord,
+  
+  // SystemDeployer 工厂方法
+  createSystemDeployer: (config) => new SystemDeployer(config)
 }; 
