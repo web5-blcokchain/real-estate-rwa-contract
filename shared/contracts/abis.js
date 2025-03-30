@@ -4,7 +4,7 @@
  * 此文件由 update-shared-abis.js 脚本自动生成
  * 包含所有合约的ABI定义
  * 
- * 生成时间: 2025-03-26T20:09:56.303Z
+ * 生成时间: 2025-03-30T22:15:18.740Z
  */
 
 const abis = {};
@@ -1829,6 +1829,25 @@ abis.PropertyRegistry = [
   {
     "inputs": [
       {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "name": "RealEstateTokens",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "contractAddress",
         "type": "address"
@@ -2220,25 +2239,6 @@ abis.PropertyRegistry = [
         "internalType": "bool",
         "name": "",
         "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
-    ],
-    "name": "propertyTokens",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
       }
     ],
     "stateMutability": "view",

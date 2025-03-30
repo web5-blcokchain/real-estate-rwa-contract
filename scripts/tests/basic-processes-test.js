@@ -21,18 +21,18 @@ async function main() {
     console.log(`测试账户: ${user1.address} (用户1)`);
     console.log(`测试账户: ${user2.address} (用户2)`);
     
-    // 加载系统合约
-    const realEstateSystem = await ethers.getContractAt('RealEstateSystem', contracts.RealEstateSystem);
-    const roleManager = await ethers.getContractAt('RoleManager', contracts.RoleManager);
-    const propertyRegistry = await ethers.getContractAt('PropertyRegistry', contracts.PropertyRegistry);
-    const tokenFactory = await ethers.getContractAt('TokenFactory', contracts.TokenFactory);
-    const feeManager = await ethers.getContractAt('FeeManager', contracts.FeeManager);
+    // 加载系统合约 - 修正合约地址键名
+    const realEstateSystem = await ethers.getContractAt('RealEstateSystem', contracts.realEstateSystem);
+    const roleManager = await ethers.getContractAt('RoleManager', contracts.roleManager);
+    const propertyRegistry = await ethers.getContractAt('PropertyRegistry', contracts.propertyRegistry);
+    const tokenFactory = await ethers.getContractAt('TokenFactory', contracts.tokenFactory);
+    const feeManager = await ethers.getContractAt('FeeManager', contracts.feeManager);
     
     // 测试1: 角色检查
     console.log('\n--- 测试1: 角色验证 ---');
     // 检查admin是否有SUPER_ADMIN角色
-    const SUPER_ADMIN = await roleManager.SUPER_ADMIN();
-    const hasSuperAdmin = await roleManager.hasRole(SUPER_ADMIN, admin.address);
+    const SUPER_ADMIN_ROLE = '0xd980155b32cf66e6af51e0972d64b9d5efe0e6f237dfaa4bdc83f990dd79e9c8';
+    const hasSuperAdmin = await roleManager.hasRole(SUPER_ADMIN_ROLE, admin.address);
     console.log(`管理员拥有SUPER_ADMIN角色: ${hasSuperAdmin}`);
     
     if (hasSuperAdmin) {
@@ -82,9 +82,9 @@ async function main() {
     // 获取RealEstateSystem的合约引用
     const roleManagerInSystem = await realEstateSystem.roleManager();
     console.log(`RealEstateSystem.roleManager: ${roleManagerInSystem}`);
-    console.log(`实际RoleManager地址: ${contracts.RoleManager}`);
+    console.log(`实际RoleManager地址: ${contracts.roleManager}`);
     
-    if (roleManagerInSystem.toLowerCase() === contracts.RoleManager.toLowerCase()) {
+    if (roleManagerInSystem.toLowerCase() === contracts.roleManager.toLowerCase()) {
       console.log('✅ RoleManager引用正确');
     } else {
       console.error('❌ RoleManager引用错误');

@@ -20,6 +20,9 @@ const ABI_CACHE_FILE = path.join(SHARED_DIR, 'cache/abi-cache.json');
 // 合约ABI源目录 - 使用 Hardhat 的标准输出目录
 const ARTIFACTS_DIR = path.join(ROOT_DIR, 'artifacts', 'contracts');
 
+// 共享模块的ABI文件路径
+const SHARED_ABIS_PATH = path.join(SHARED_DIR, 'contracts/abis.js');
+
 /**
  * 从指定路径加载ABI文件
  * @param {string} contractName 合约名称
@@ -27,7 +30,20 @@ const ARTIFACTS_DIR = path.join(ROOT_DIR, 'artifacts', 'contracts');
  */
 const loadAbi = async (contractName) => {
   try {
-    // 从 artifacts 目录加载，遵循 Hardhat 标准结构
+    // 首先尝试从shared/contracts/abis.js加载
+    try {
+      console.log(`尝试从shared contracts模块加载${contractName}的ABI...`);
+      const sharedAbis = require(SHARED_ABIS_PATH);
+      if (sharedAbis[contractName] && Array.isArray(sharedAbis[contractName])) {
+        console.log(`从shared/contracts/abis.js加载了${contractName}的ABI`);
+        contractAbis[contractName] = sharedAbis[contractName];
+        return sharedAbis[contractName];
+      }
+    } catch (error) {
+      console.warn(`从shared contracts模块加载ABI失败: ${error.message}`);
+    }
+    
+    // 如果从shared模块加载失败，从artifacts目录加载，遵循Hardhat标准结构
     const contractDir = path.join(ARTIFACTS_DIR, `${contractName}.sol`);
     const artifactPath = path.join(contractDir, `${contractName}.json`);
     
@@ -100,7 +116,24 @@ function getAbi(contractName) {
   if (!initialized) {
     console.warn('ABI尚未初始化，尝试延迟初始化...');
     try {
-      // 如果有缓存，尝试从缓存加载
+      // 首先尝试从shared/contracts/abis.js加载
+      try {
+        console.log(`尝试从shared contracts模块加载ABI...`);
+        const sharedAbis = require(SHARED_ABIS_PATH);
+        // 检查合约ABI是否存在
+        if (sharedAbis[contractName] && Array.isArray(sharedAbis[contractName])) {
+          contractAbis[contractName] = sharedAbis[contractName];
+          initialized = true;
+          console.log(`从shared/contracts/abis.js加载了${contractName}的ABI`);
+          return sharedAbis[contractName];
+        } else {
+          console.log(`在shared/contracts/abis.js中找不到${contractName}的ABI，尝试其他来源`);
+        }
+      } catch (error) {
+        console.warn(`从shared contracts模块加载ABI失败: ${error.message}`);
+      }
+      
+      // 如果从shared模块加载失败，尝试从缓存加载
       if (fsSync.existsSync(ABI_CACHE_FILE)) {
         const cachedData = JSON.parse(fsSync.readFileSync(ABI_CACHE_FILE, 'utf8'));
         Object.assign(contractAbis, cachedData);
@@ -118,7 +151,19 @@ function getAbi(contractName) {
   if (!abi) {
     // 尝试同步加载单个ABI
     try {
-      // 先尝试从标准Hardhat结构加载
+      // 首先尝试从shared/contracts/abis.js加载
+      try {
+        const sharedAbis = require(SHARED_ABIS_PATH);
+        if (sharedAbis[contractName] && Array.isArray(sharedAbis[contractName])) {
+          contractAbis[contractName] = sharedAbis[contractName];
+          console.log(`已从shared/contracts/abis.js动态加载 ${contractName} 的ABI`);
+          return sharedAbis[contractName];
+        }
+      } catch (e) {
+        console.warn(`从shared/contracts/abis.js加载ABI失败: ${e.message}`);
+      }
+      
+      // 再尝试从标准Hardhat结构加载
       const contractDir = path.join(ARTIFACTS_DIR, `${contractName}.sol`);
       const artifactPath = path.join(contractDir, `${contractName}.json`);
       
@@ -131,7 +176,7 @@ function getAbi(contractName) {
         }
       }
       
-      // 再尝试从旧路径加载
+      // 最后尝试从旧路径加载
       const legacyPath = path.join(ROOT_DIR, 'contracts', 'artifacts', `${contractName}.json`);
       if (fsSync.existsSync(legacyPath)) {
         const artifact = JSON.parse(fsSync.readFileSync(legacyPath, 'utf8'));

@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { initializeEnvironment } = require('../../shared/config/environment');
+const { initializeEnvironment } = require('../shared/config/environment');
 
 // 初始化环境
 initializeEnvironment();
@@ -19,9 +19,9 @@ initializeEnvironment();
 // 脚本配置
 const CONFIG = {
   // 默认artifacts路径
-  artifactsPath: path.join(__dirname, '../../artifacts/contracts'),
+  artifactsPath: path.join(__dirname, '../artifacts/contracts'),
   // 共享模块的ABI文件路径
-  sharedAbisPath: path.join(__dirname, '../../shared/contracts/abis.js'),
+  sharedAbisPath: path.join(__dirname, '../shared/contracts/abis.js'),
   // 合约名称映射表 (合约名 -> 共享模块中的键名)
   contractMapping: {
     'RoleManager': 'RoleManager',

@@ -217,15 +217,14 @@ async function testRedemption() {
     const approveTx = await token.approve(redemptionManager.target, REDEMPTION_AMOUNT);
     await approveTx.wait();
     
-    // 获取数字格式的属性ID
-    // 注意：如果系统使用字符串ID，需要将其转换为数字
-    // 这里简单地使用1作为示例
-    const numericPropertyId = 1;
+    // 使用字符串属性ID
+    // 修复：使用TEST_PROPERTY_ID变量而不是硬编码数字
+    console.log(`使用属性ID: ${TEST_PROPERTY_ID} 请求赎回`);
     
     // 请求赎回
     console.log(`请求赎回 ${ethers.formatEther(REDEMPTION_AMOUNT)} 代币...`);
     const requestTx = await redemptionManager.requestRedemption(
-      numericPropertyId,
+      TEST_PROPERTY_ID,
       tokenAddress,
       REDEMPTION_AMOUNT,
       stablecoinAddress
