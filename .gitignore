@@ -52,5 +52,7 @@ hardhat.config.local.js
 *.pem
 mnemonic.txt
 
+http-server/test-results/
+
 # 中心化数据库备份
 /db-backups

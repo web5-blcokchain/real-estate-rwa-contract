@@ -85,6 +85,40 @@ function saveTestResults() {
   const filename = path.join(resultsDir, `test-result-${new Date().toISOString().replace(/:/g, '-')}.json`);
   fs.writeFileSync(filename, JSON.stringify(results, null, 2));
   console.log(`测试结果已保存到: ${filename}`);
+  
+  // 调用清理函数
+  cleanupOldTestResults(resultsDir, filename);
+}
+
+// 清理旧的测试结果文件，只保留最新的5个
+function cleanupOldTestResults(resultsDir, currentFile) {
+  try {
+    // 获取所有测试结果文件
+    const files = fs.readdirSync(resultsDir)
+      .filter(file => file.startsWith('test-result-') && file.endsWith('.json'))
+      .map(file => path.join(resultsDir, file))
+      .sort((a, b) => {
+        // 根据文件修改时间排序，最新的在前面
+        return fs.statSync(b).mtime.getTime() - fs.statSync(a).mtime.getTime();
+      });
+    
+    // 保留最新的5个文件，删除其余的
+    const filesToKeep = 5;
+    if (files.length > filesToKeep) {
+      const filesToDelete = files.slice(filesToKeep);
+      filesToDelete.forEach(file => {
+        try {
+          fs.unlinkSync(file);
+          console.log(`已删除旧的测试结果文件: ${path.basename(file)}`);
+        } catch (err) {
+          console.error(`删除文件失败: ${path.basename(file)}`, err.message);
+        }
+      });
+      console.log(`清理完成，保留最新的${filesToKeep}个测试结果文件`);
+    }
+  } catch (error) {
+    console.error(`清理旧测试结果文件时发生错误: ${error.message}`);
+  }
 }
 
 // 添加详细的请求日志功能
