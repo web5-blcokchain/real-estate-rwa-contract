@@ -8,7 +8,8 @@ const { ApiError } = require('../middleware/errorHandler');
 const { logger } = require('../utils/logger');
 const config = require('../config');
 // 替换为shared目录中的公共模块
-const { getContractAddress, getContractAddresses, getAbi } = require('../../../shared/config/contracts');
+const { getContractAddress, getContractAddresses } = require('../../../shared/config/contracts');
+const { getAbi } = require('../../../shared/utils/getAbis');
 
 // 缓存Provider实例
 let provider = null;

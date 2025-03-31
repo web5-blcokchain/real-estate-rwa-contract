@@ -9,8 +9,8 @@ const { ApiError } = require('./errorHandler');
 
 /**
  * 验证API密钥中间件
- * 支持两种验证方式:
- * 1. 通过查询参数 api_key=xxx
+ * 支持多种验证方式:
+ * 1. 通过查询参数 api_key=xxx 或 apiKey=xxx
  * 2. 通过请求头 X-API-Key: xxx
  * @param {Object} req - Express请求对象
  * @param {Object} res - Express响应对象
@@ -18,8 +18,8 @@ const { ApiError } = require('./errorHandler');
  */
 function apiKeyAuth(req, res, next) {
   try {
-    // 获取API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
+    // 获取API密钥（支持多种形式）
+    const apiKey = req.query.api_key || req.query.apiKey || req.headers['x-api-key'];
     
     // 如果没有提供API密钥
     if (!apiKey) {
@@ -49,8 +49,8 @@ function apiKeyAuth(req, res, next) {
  */
 function optionalApiKeyAuth(req, res, next) {
   try {
-    // 获取API密钥
-    const apiKey = req.query.api_key || req.headers['x-api-key'];
+    // 获取API密钥（支持多种形式）
+    const apiKey = req.query.api_key || req.query.apiKey || req.headers['x-api-key'];
     
     // 如果没有提供API密钥，直接通过
     if (!apiKey) {

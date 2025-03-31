@@ -38,11 +38,14 @@
 4. 更新TokenFactory指向代币实现
 5. 验证全部部署是否成功
 
+注意：我们统一使用yarn来管理依赖和运行命令！
+
 ## 一键部署流程
 先要编译，编译之后会自动更新：shared/contracts/abis.js  文件，全局统一使用这个
+根目录执行 
 
 ```
-
+yarn contracts:compile 
 
 ```
 

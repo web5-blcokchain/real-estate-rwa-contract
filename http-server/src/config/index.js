@@ -32,8 +32,8 @@ const config = {
     chainId: parseInt(process.env.HARDHAT_CHAIN_ID || '31337', 10),
     privateKeys: {
       admin: process.env.ADMIN_PRIVATE_KEY,
-      propertyAdmin: process.env.PROPERTY_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
-      tokenAdmin: process.env.TOKEN_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
+      propertyAdmin: process.env.PROPERTY_MANAGER_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
+      tokenAdmin: process.env.TOKEN_MANAGER_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY,
       systemAdmin: process.env.SYSTEM_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY
     },
     contracts: {

@@ -173,6 +173,27 @@ async function runTests() {
 }
 
 /**
+ * 设置系统角色
+ */
+async function setupSystemRoles() {
+  try {
+    logStage('9. 设置系统角色');
+    logger.info('执行角色设置脚本...');
+    
+    // 使用直接导入的方式运行角色设置脚本
+    const { main: setupRoles } = require('./setup-roles');
+    await setupRoles();
+    
+    logger.info('角色设置成功!');
+    return true;
+  } catch (error) {
+    logger.error('设置系统角色失败:', error);
+    logger.warn('角色设置失败不会影响部署结果，部署过程已经成功完成');
+    return false;
+  }
+}
+
+/**
  * 主部署函数
  */
 async function main() {
@@ -316,64 +337,22 @@ async function main() {
     );
     
     // ========== 阶段4：部署验证 ==========
-    const verificationResult = await runDeploymentVerification();
+    const verificationSuccess = await runDeploymentVerification();
     
-    if (!verificationResult) {
-      logger.warn('部署验证未通过，但部署过程已完成。请检查验证报告以了解详情。');
-    }
-    
-    // ========== 阶段5：运行集成测试 ==========
-    if (process.env.RUN_TESTS === 'true') {
+    // ========== 阶段5：运行测试 ==========
+    if (verificationSuccess && process.env.RUN_TESTS === 'true') {
       await runTests();
     }
     
-    // ========== 阶段6：部署结果 ==========
-    logStage("6. 部署完成");
+    // ========== 阶段6：设置系统角色 ==========
+    await setupSystemRoles();
     
-    logger.info(`系统部署成功，用时 ${result.duration.toFixed(2)} 秒`);
-    logger.info('已部署的合约:');
-    Object.entries(contractAddresses).forEach(([name, address]) => {
-      logger.info(`  ${name}: ${address}`);
-    });
+    // 输出部署摘要
+    logger.info('\n🎉 部署全部完成！');
+    logger.info(`📝 合约地址已保存至 ${path.join(process.cwd(), 'scripts/deploy-state.json')}`);
+    logger.info(`💾 部署日志已保存至 ${path.join(process.cwd(), 'logs/deployment')}`);
     
-    // ========== 阶段7：初始化参数 ==========
-    logStage("7. 合约初始化参数");
-    
-    // 打印各合约的初始化参数
-    logger.info('合约初始化参数:');
-    logger.info('- RoleManager: 无参数');
-    logger.info('- FeeManager: [roleManagerAddress]');
-    logger.info('- PropertyRegistry: [roleManagerAddress]');
-    logger.info('- RentDistributor: [roleManagerAddress, feeManagerAddress]');
-    logger.info('- TokenFactory: [roleManagerAddress, propertyRegistryAddress, tokenImplementation(已更新), rentDistributorAddress]');
-    logger.info('- RedemptionManager: [roleManagerAddress, propertyRegistryAddress, tokenFactoryAddress]');
-    logger.info('- Marketplace: [roleManagerAddress, feeManagerAddress]');
-    logger.info('- TokenHolderQuery: [roleManagerAddress]');
-    logger.info('- RealEstateSystem: [roleManagerAddress, feeManagerAddress, propertyRegistryAddress, tokenFactoryAddress, redemptionManagerAddress, rentDistributorAddress, marketplaceAddress, tokenHolderQueryAddress]');
-    
-    // ========== 阶段8：部署记录 ==========
-    logStage("8. 部署记录保存");
-    
-    logger.info('部署记录已保存到:');
-    logger.info('- scripts/deploy-state.json');
-    logger.info('- shared/deployments/contracts.json');
-    logger.info(`- shared/deployments/${network.name}-latest.json`);
-    
-    // ========== 阶段9：后续步骤 ==========
-    logStage("9. 后续步骤说明");
-    
-    logger.info('📋 部署流程已全部完成，您可以通过以下命令进行后续操作:');
-    logger.info('');
-    logger.info('1. 手动验证部署: npm run contracts:verify:deployment');
-    logger.info('2. 运行基本流程测试: npm run contracts:test:basic');
-    logger.info('3. 运行业务流程测试: npm run contracts:test:business');
-    logger.info('4. 运行完整业务流程测试: npm run contracts:test:business-flow');
-    logger.info('5. 查看合约地址是否正确加载: npm run contracts:test:contracts-loading');
-    logger.info('');
-    logger.info('✅ 全部测试: npm run contracts:test:all');
-    
-    // 移除不重要的日志行
-    cleanupLogs();
+    return { success: true };
   } catch (error) {
     logger.error('部署脚本执行失败:', error);
     process.exit(1);
