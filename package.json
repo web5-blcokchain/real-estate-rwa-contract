@@ -11,14 +11,23 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "test:gas": "hardhat test --gas",
     "deploy:testnet": "hardhat run scripts/deploy.js --network testnet",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
-    "verify:testnet": "hardhat verify --network testnet",
-    "verify:mainnet": "hardhat verify --network mainnet",
+    "verify:testnet": "hardhat run scripts/verify-deployment.js --network testnet",
+    "verify:mainnet": "hardhat run scripts/verify-deployment.js --network mainnet",
     "server:start": "node server/src/index.js",
     "server:dev": "nodemon server/src/index.js",
     "monitor:start": "node monitor/src/index.js",
-    "monitor:dev": "nodemon monitor/src/index.js"
+    "monitor:dev": "nodemon monitor/src/index.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky install",
+    "analyze": "hardhat analyze",
+    "size": "hardhat size-contracts"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.0",
@@ -34,10 +43,34 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "@nomicfoundation/hardhat-verify": "^2.0.13",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
     "chai": "^4.3.7",
-    "ethereum-waffle": "^4.0.10",
     "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-solidity": "^1.0.0",
+    "ethereum-waffle": "^4.0.10",
+    "hardhat-gas-reporter": "^1.0.10",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
     "mocha": "^10.2.0",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "prettier": "^3.2.5",
+    "solidity-coverage": "^0.8.5",
+    "solidity-parser": "^0.16.1"
+  },
+  "lint-staged": {
+    "*.{js,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ],
+    "*.sol": [
+      "prettier --write"
+    ]
   }
 }

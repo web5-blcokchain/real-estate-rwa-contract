@@ -1,31 +1,42 @@
 module.exports = {
+  root: true,
   env: {
     node: true,
-    es2020: true,
-    jest: true
+    es2022: true,
   },
   extends: [
-    'eslint:recommended'
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:prettier/recommended",
   ],
+  parser: "@typescript-eslint/parser",
   parserOptions: {
-    ecmaVersion: 2020,
-    sourceType: 'module'
+    ecmaVersion: 2022,
+    sourceType: "module",
   },
+  plugins: ["@typescript-eslint", "prettier"],
   rules: {
-    'indent': ['error', 2],
-    'linebreak-style': ['error', 'unix'],
-    'quotes': ['error', 'single'],
-    'semi': ['error', 'always'],
-    'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
-    'no-unused-vars': ['warn', { 'argsIgnorePattern': '^_' }],
-    'no-constant-condition': ['error', { 'checkLoops': false }],
-    'no-var': 'error',
-    'prefer-const': 'warn',
-    'eqeqeq': ['error', 'always', { 'null': 'ignore' }],
-    'curly': ['error', 'multi-line'],
-    'keyword-spacing': ['error', { 'before': true, 'after': true }],
-    'space-before-blocks': ['error', 'always'],
-    'comma-dangle': ['error', 'never'],
-    'max-len': ['warn', { 'code': 120 }]
-  }
+    "prettier/prettier": "error",
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+    "no-console": ["warn", { allow: ["warn", "error"] }],
+  },
+  overrides: [
+    {
+      files: ["*.sol"],
+      extends: ["plugin:solidity/recommended"],
+      parser: "solidity-parser",
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: "module",
+      },
+      rules: {
+        "solidity/import-style": "off",
+        "solidity/visibility-modifier-order": "error",
+        "solidity/no-empty-blocks": "error",
+        "solidity/no-unused-import": "error",
+      },
+    },
+  ],
 }; 

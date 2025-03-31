@@ -1,18 +1,11 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
+require("@nomicfoundation/hardhat-verify");
+require("@nomicfoundation/hardhat-ethers");
+require("hardhat-gas-reporter");
+require("solidity-coverage");
 
-const {
-  ETHERSCAN_API_KEY,
-  ETHERSCAN_API_URL,
-  ETHERSCAN_BROWSER_URL,
-  HARDHAT_CHAIN_ID,
-  TESTNET_CHAIN_ID,
-  MAINNET_CHAIN_ID,
-  DEPLOYER_PRIVATE_KEY,
-  HARDHAT_RPC_URL,
-  TESTNET_RPC_URL,
-  MAINNET_RPC_URL
-} = process.env;
+const envConfig = require("./shared/src/config/env");
+envConfig.load();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -21,55 +14,13 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
-    }
-  },
-  networks: {
-    hardhat: {
-      url: HARDHAT_RPC_URL,
-      accounts: [DEPLOYER_PRIVATE_KEY],
-      chainId: parseInt(HARDHAT_CHAIN_ID),
-      blockGasLimit: 30000000,
-      gas: "auto",
-      gasPrice: "auto",
-      allowUnlimitedContractSize: false,
-      loggingEnabled: false
-    },
-    testnet: {
-      url: TESTNET_RPC_URL,
-      accounts: [DEPLOYER_PRIVATE_KEY],
-      chainId: parseInt(TESTNET_CHAIN_ID),
-      gas: "auto",
-      gasPrice: "auto"
-    },
-    mainnet: {
-      url: MAINNET_RPC_URL,
-      accounts: [DEPLOYER_PRIVATE_KEY],
-      chainId: parseInt(MAINNET_CHAIN_ID),
-      gas: "auto",
-      gasPrice: "auto"
-    }
-  },
-  etherscan: {
-    apiKey: ETHERSCAN_API_KEY,
-    customChains: [
-      {
-        network: "testnet",
-        chainId: parseInt(TESTNET_CHAIN_ID),
-        urls: {
-          apiURL: ETHERSCAN_API_URL,
-          browserURL: ETHERSCAN_BROWSER_URL
-        }
+        runs: 200,
       },
-      {
-        network: "mainnet",
-        chainId: parseInt(MAINNET_CHAIN_ID),
-        urls: {
-          apiURL: ETHERSCAN_API_URL,
-          browserURL: ETHERSCAN_BROWSER_URL
-        }
-      }
-    ]
-  }
+    },
+  },
+  networks: envConfig.getNetworkConfig(),
+  etherscan: envConfig.getEtherscanConfig(),
+  gasReporter: envConfig.getGasReporterConfig(),
+  paths: envConfig.getPathsConfig(),
+  mocha: envConfig.getMochaConfig(),
 };
