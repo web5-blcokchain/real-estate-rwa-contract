@@ -303,7 +303,7 @@ async function verifyTokenFactory(provider, contracts) {
         const tokenFactory = TokenFactory.attach(tokenFactoryAddress).connect(provider);
         
         // 尝试获取当前的Token实现地址
-        const currentImplementation = await tokenFactory.getTokenImplementation();
+        const currentImplementation = await tokenFactory.tokenImplementation();
         
         if (currentImplementation.toLowerCase() === tokenImplementationAddress.toLowerCase()) {
           console.log(`✅ TokenFactory当前设置的实现地址匹配: ${currentImplementation}`);

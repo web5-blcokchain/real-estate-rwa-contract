@@ -47,12 +47,19 @@ async function main() {
     // 检查接口
     console.log('\n合约接口:');
     
-    // 获取ABI并提取函数
-    const abi = TokenFactory.interface.format('json');
-    const parsedAbi = JSON.parse(abi);
-    
-    // 查找所有函数
-    const functions = parsedAbi.filter(item => item.type === 'function');
+    // 使用更安全的方式获取函数信息
+    const functions = [];
+    for (const fnName in tokenFactory.interface.functions) {
+      if (fnName.includes('(')) {
+        const fn = tokenFactory.interface.functions[fnName];
+        functions.push({
+          name: fn.name,
+          inputs: fn.inputs,
+          outputs: fn.outputs,
+          stateMutability: fn.stateMutability
+        });
+      }
+    }
     
     console.log(`发现 ${functions.length} 个函数:`);
     functions.forEach((func, index) => {
@@ -134,11 +141,20 @@ async function main() {
           const tokenImpl = TokenImpl.attach(tokenImplAddress);
           
           console.log('\n代币实现合约接口:');
-          const tokenImplAbi = TokenImpl.interface.format('json');
-          const parsedTokenImplAbi = JSON.parse(tokenImplAbi);
           
-          // 查找所有函数
-          const tokenFunctions = parsedTokenImplAbi.filter(item => item.type === 'function');
+          // 使用更安全的方式获取函数信息
+          const tokenFunctions = [];
+          for (const fnName in tokenImpl.interface.functions) {
+            if (fnName.includes('(')) {
+              const fn = tokenImpl.interface.functions[fnName];
+              tokenFunctions.push({
+                name: fn.name,
+                inputs: fn.inputs,
+                outputs: fn.outputs,
+                stateMutability: fn.stateMutability
+              });
+            }
+          }
           
           console.log(`发现 ${tokenFunctions.length} 个函数:`);
           const basicFunctions = tokenFunctions.filter(func => 
