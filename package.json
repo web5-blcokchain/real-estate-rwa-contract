@@ -9,22 +9,30 @@
     "deploy:testnet": "hardhat run scripts/deploy.js --network testnet",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "verify:testnet": "hardhat verify --network testnet",
-    "verify:mainnet": "hardhat verify --network mainnet"
+    "verify:mainnet": "hardhat verify --network mainnet",
+    "server:start": "node server/src/index.js",
+    "server:dev": "nodemon server/src/index.js",
+    "monitor:start": "node monitor/src/index.js",
+    "monitor:dev": "nodemon monitor/src/index.js"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.0",
     "@openzeppelin/contracts-upgradeable": "^4.9.0",
     "@openzeppelin/hardhat-upgrades": "^1.22.0",
     "dotenv": "^16.0.3",
-    "ethers": "^5.7.2",
-    "hardhat": "^2.14.0"
+    "ethers": "^6.11.1",
+    "hardhat": "^2.14.0",
+    "express": "^4.18.3",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
   },
   "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-waffle": "^2.0.5",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@nomicfoundation/hardhat-verify": "^2.0.13",
     "chai": "^4.3.7",
     "ethereum-waffle": "^4.0.10",
     "eslint": "^8.57.0",
-    "mocha": "^10.2.0"
+    "mocha": "^10.2.0",
+    "nodemon": "^3.1.0"
   }
 }
