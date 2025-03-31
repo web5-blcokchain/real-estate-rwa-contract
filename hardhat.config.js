@@ -1,59 +1,75 @@
-require('@nomiclabs/hardhat-waffle');
-require('@openzeppelin/hardhat-upgrades');
-require('dotenv').config();
+require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config();
 
+const {
+  ETHERSCAN_API_KEY,
+  ETHERSCAN_API_URL,
+  ETHERSCAN_BROWSER_URL,
+  HARDHAT_CHAIN_ID,
+  TESTNET_CHAIN_ID,
+  MAINNET_CHAIN_ID,
+  DEPLOYER_PRIVATE_KEY,
+  HARDHAT_RPC_URL,
+  TESTNET_RPC_URL,
+  MAINNET_RPC_URL
+} = process.env;
+
+/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: '0.8.19',
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
-      },
-    },
+        runs: 200
+      }
+    }
   },
   networks: {
     hardhat: {
-      chainId: 31337,
+      url: HARDHAT_RPC_URL,
+      accounts: [DEPLOYER_PRIVATE_KEY],
+      chainId: parseInt(HARDHAT_CHAIN_ID),
+      blockGasLimit: 30000000,
+      gas: "auto",
+      gasPrice: "auto",
+      allowUnlimitedContractSize: false,
+      loggingEnabled: false
     },
     testnet: {
-      url: process.env.TESTNET_RPC_URL || '',
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 97, // BSC Testnet
+      url: TESTNET_RPC_URL,
+      accounts: [DEPLOYER_PRIVATE_KEY],
+      chainId: parseInt(TESTNET_CHAIN_ID),
+      gas: "auto",
+      gasPrice: "auto"
     },
     mainnet: {
-      url: process.env.MAINNET_RPC_URL || '',
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 56, // BSC Mainnet
-    },
+      url: MAINNET_RPC_URL,
+      accounts: [DEPLOYER_PRIVATE_KEY],
+      chainId: parseInt(MAINNET_CHAIN_ID),
+      gas: "auto",
+      gasPrice: "auto"
+    }
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: ETHERSCAN_API_KEY,
     customChains: [
       {
-        network: 'testnet',
-        chainId: 97,
+        network: "testnet",
+        chainId: parseInt(TESTNET_CHAIN_ID),
         urls: {
-          apiURL: 'https://api-testnet.bscscan.com/api',
-          browserURL: 'https://testnet.bscscan.com',
-        },
+          apiURL: ETHERSCAN_API_URL,
+          browserURL: ETHERSCAN_BROWSER_URL
+        }
       },
       {
-        network: 'mainnet',
-        chainId: 56,
+        network: "mainnet",
+        chainId: parseInt(MAINNET_CHAIN_ID),
         urls: {
-          apiURL: 'https://api.bscscan.com/api',
-          browserURL: 'https://bscscan.com',
-        },
-      },
-    ],
-  },
-  paths: {
-    sources: './contracts',
-    artifacts: './artifacts',
-    cache: './cache',
-  },
-  mocha: {
-    timeout: 40000,
-  },
+          apiURL: ETHERSCAN_API_URL,
+          browserURL: ETHERSCAN_BROWSER_URL
+        }
+      }
+    ]
+  }
 };

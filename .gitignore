@@ -1,18 +1,53 @@
-# 依赖目录
-node_modules/
-.pnp/
-.pnp.js
+# Dependencies
+node_modules
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
 
-# 环境变量文件
+# Hardhat
+cache
+artifacts
+typechain
+typechain-types
+
+# Environment
 .env
 .env.local
 .env.*.local
 
-# Hardhat文件
-/cache
-/artifacts
-/typechain
-/typechain-types
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist
+build
+coverage
+coverage.json
+
+# Config
+config/deployment.json
+config/abi/*.json
+
+# 依赖目录
+.pnp/
+.pnp.js
 
 # 测试覆盖率文件
 /coverage
@@ -22,10 +57,6 @@ node_modules/
 /deployments
 ignition/deployments/chain-31337
 .openzeppelin
-
-# 编译输出
-/dist
-/build
 
 # 日志文件
 *.log
@@ -54,9 +85,6 @@ http-server/test-results/
 
 # 中心化数据库备份
 /db-backups
-
-# 部署信息
-deployment.json
 
 # 临时文件
 tmp/
