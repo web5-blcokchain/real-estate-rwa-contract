@@ -1,130 +1,185 @@
-# Japanese Real Estate Tokenization System
+# 日本房地产代币化平台 (Japan Real Estate Tokenization Platform)
 
-基于区块链的日本房地产代币化系统，支持房产代币的发行、交易和收益分配。
+## 项目背景
+本项目旨在通过区块链技术实现日本房地产的代币化，使投资者能够以更灵活的方式参与日本房地产市场。通过智能合约实现房地产所有权的数字化表示，并提供安全、透明的交易平台。
+
+## 核心功能
+- 房地产代币化：将实体房地产转换为可交易的代币
+- 智能合约管理：自动化的所有权转移和收益分配
+- 交易平台：支持代币的买卖和转让
+- 收益分配：自动化的租金和收益分配机制
+- 权限管理：多级权限控制系统
+- 监控系统：实时监控区块链数据和系统状态
+
+## 技术栈
+- 智能合约：Solidity 0.8.20
+- 开发框架：Hardhat
+- 网络库：ethers.js V6
+- 测试框架：Mocha, Chai
+- 代码质量：ESLint, Prettier
+- 监控工具：Winston
+- 部署工具：Hardhat Ignition
+- 验证工具：Etherscan
 
 ## 项目结构
-
 ```
-.
-├── contracts/           # 智能合约代码
-│   ├── SimpleSystemDeployer.sol    # 系统部署器
-│   ├── SimpleRoleManager.sol       # 角色管理
-│   ├── PropertyManager.sol         # 房产管理
-│   ├── PropertyToken.sol           # 房产代币
-│   ├── TradingManager.sol          # 交易管理
-│   ├── RewardManager.sol           # 奖励管理
-│   ├── SimpleRealEstateSystem.sol  # 系统核心
-│   └── RealEstateFacade.sol        # 系统门面
-├── server/             # 服务器代码
-├── monitor/            # 区块链监控
-├── shared/             # 共享代码
-├── scripts/            # 部署脚本
-├── test/               # 测试文件
-├── config/             # 配置文件
-├── logs/               # 日志文件
-└── docs/               # 文档
-    ├── dev/            # 开发文档
-    └── deploy/         # 部署报告
+├── contracts/                 # 智能合约源码
+│   ├── core/                 # 核心合约
+│   ├── interfaces/           # 接口定义
+│   ├── libraries/           # 库合约
+│   └── SimpleSystemDeployer.sol  # 系统部署器
+├── shared/                   # 共享代码
+│   └── src/
+│       ├── config/          # 配置管理
+│       ├── logger/          # 日志系统
+│       └── utils/           # 工具函数
+├── server/                   # 服务器代码
+│   └── src/
+│       ├── config/          # 服务器配置
+│       ├── controllers/     # 控制器
+│       ├── middleware/      # 中间件
+│       ├── models/          # 数据模型
+│       ├── routes/          # 路由
+│       └── services/        # 业务逻辑
+├── monitor/                  # 监控系统
+│   └── src/
+│       ├── config/          # 监控配置
+│       ├── services/        # 监控服务
+│       └── utils/           # 工具函数
+├── scripts/                  # 部署和测试脚本
+├── test/                     # 测试文件
+├── config/                   # 配置文件
+│   └── env/                 # 环境配置
+├── docs/                     # 文档
+│   ├── dev/                 # 开发文档
+│   └── deploy/              # 部署文档
+└── logs/                     # 日志文件
 ```
 
-## 环境要求
+## 开发环境配置
 
+### 前置要求
 - Node.js >= 18.0.0
-- Yarn >= 4.0.0
-- Hardhat
+- Yarn >= 1.22.0
+- Git
 
-## 安装
-
+### 安装依赖
 ```bash
-# 安装依赖
+# 安装项目依赖
 yarn install
 
-# 编译合约
-yarn compile
+# 安装全局依赖（可选）
+yarn global add hardhat
 ```
 
-## 配置
-
-1. 复制环境变量模板：
+### 环境配置
+1. 复制环境配置模板：
 ```bash
-cp .env.example .env
+cp config/env/.env.example config/env/.env
 ```
 
 2. 配置环境变量：
-- 网络配置（NETWORK_TYPE, RPC_URL等）
-- 账户配置（DEPLOYER_PRIVATE_KEY等）
-- API密钥（ETHERSCAN_API_KEY等）
-- 系统配置（LOG_LEVEL等）
+- 在 `config/env/.env` 中设置必要的环境变量
+- 支持多环境配置：development、testnet、mainnet
 
-## 部署
+### 配置说明
+- `NODE_ENV`: 运行环境（development/testnet/mainnet）
+- `LOG_LEVEL`: 日志级别（debug/info/warn/error）
+- `LOG_DIR`: 日志目录
+- `DEPLOYER_PRIVATE_KEY`: 部署者私钥
+- `ETHERSCAN_API_KEY`: Etherscan API密钥
+- 网络配置：RPC URL、Chain ID等
+- Gas配置：Gas Limit、Gas Price等
 
-### 本地网络
+## 快速启动
 
+### 本地开发
 ```bash
 # 启动本地节点
 yarn hardhat node
 
-# 部署合约
-yarn deploy:local
+# 编译合约
+yarn hardhat compile
+
+# 运行测试
+yarn test
+
+# 启动开发服务器
+yarn dev:server
+
+# 启动监控系统
+yarn dev:monitor
 ```
 
-### 测试网
-
+### 部署
 ```bash
-# 部署合约
+# 部署到测试网
 yarn deploy:testnet
 
-# 验证合约
-yarn verify:testnet
-```
-
-### 主网
-
-```bash
-# 部署合约
+# 部署到主网
 yarn deploy:mainnet
 
 # 验证合约
+yarn verify:testnet
 yarn verify:mainnet
 ```
 
-## 部署产物
+## 开发指南
 
-部署完成后，系统会在以下位置生成文件：
+### 代码规范
+- 使用 ESLint 进行代码检查
+- 使用 Prettier 进行代码格式化
+- 遵循 Solidity 0.8.20 最佳实践
+- 使用 TypeScript 进行类型检查
 
-- `config/deployment.json`: 部署信息
-- `config/abi/*.json`: 合约 ABI 文件
-- `docs/deploy/*.md`: 部署报告
+### 测试
+- 编写单元测试和集成测试
+- 使用 Hardhat 测试框架
+- 运行测试覆盖率报告
 
-## 测试
+### 文档
+- 更新开发文档（docs/dev/）
+- 记录部署信息（docs/deploy/）
+- 维护 CHANGELOG.md
 
-```bash
-# 运行测试
-yarn test
-```
+## 部署流程
+1. 环境准备
+   - 配置环境变量
+   - 准备部署账户
+   - 确保足够的原生代币
 
-## 开发
+2. 合约部署
+   - 编译合约
+   - 部署系统
+   - 初始化参数
+   - 验证合约
 
-```bash
-# 启动开发服务器
-yarn server:dev
+3. 系统配置
+   - 设置权限
+   - 配置参数
+   - 启动监控
 
-# 启动监控
-yarn monitor:dev
-```
+4. 验证部署
+   - 检查合约状态
+   - 验证系统功能
+   - 生成部署报告
 
-## 日志
+## 监控和维护
+- 实时监控区块链数据
+- 系统状态检查
+- 异常告警
+- 定期维护
 
-所有日志文件保存在 `logs/` 目录下：
-- `logs/error.log`: 错误日志
-- `logs/combined.log`: 所有日志
+## 贡献指南
+1. Fork 项目
+2. 创建特性分支
+3. 提交更改
+4. 推送到分支
+5. 创建 Pull Request
 
-## 文档
+## 许可证
+MIT License
 
-- 开发文档：`docs/dev/`
-- 部署报告：`docs/deploy/`
-- 修改记录：`CHANGELOG.md`
-
-## 贡献
-
-请查看 `CONTRIBUTING.md` 了解如何参与项目开发。 
+## 联系方式
+- 项目负责人：[联系方式]
+- 技术支持：[联系方式] 
