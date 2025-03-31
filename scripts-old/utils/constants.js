@@ -1,0 +1,65 @@
+/**
+ * 常量工具
+ * 提供统一的常量定义，避免在代码中硬编码
+ */
+
+// EIP-1967 代理存储槽
+const PROXY_SLOTS = {
+  // EIP-1967规定的实现合约存储槽
+  IMPLEMENTATION_SLOT: '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
+  // EIP-1967规定的管理员存储槽
+  ADMIN_SLOT: '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103',
+  // EIP-1967规定的信标存储槽
+  BEACON_SLOT: '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50'
+};
+
+// 以太坊零地址
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+// 常见的ERC20角色
+const ERC20_ROLES = {
+  // ERC20Permit默认角色
+  PERMIT_ROLE: '0xb5f8558df7c86987ebb5edc69f3ca299e6BA032628d39e6d4a1b606fbfca4a6c',
+  // ERC20Votes角色
+  VOTES_ROLE: '0xa6168b9a015d4da45d50dbb498f9f4f598e963d64ef24249925acd8aa3addd6d'
+};
+
+// 测试配置常量
+const TEST_CONFIG = {
+  // 测试属性参数
+  PROPERTY: {
+    DEFAULT_PRICE: '1000000000000000000', // 1 ETH
+    DEFAULT_UNITS: 100,
+    DEFAULT_MIN_INVESTMENT: '10000000000000000', // 0.01 ETH
+    DEFAULT_COUNTRY: '日本',
+    DEFAULT_CITY: '东京',
+    DEFAULT_DISTRICT: '新宿区',
+    DEFAULT_ADDRESS: '新宿1-1-1',
+    DEFAULT_SIZE: '100',
+    DEFAULT_FLOORS: '10',
+    DEFAULT_CONSTRUCTION_YEAR: '2020',
+    DEFAULT_PROPERTY_TYPE: '公寓'
+  },
+  
+  // 测试代币参数
+  TOKEN: {
+    DEFAULT_NAME_PREFIX: 'Real Estate Token ',
+    DEFAULT_SYMBOL_PREFIX: 'RET-',
+    DEFAULT_DECIMALS: 18
+  },
+  
+  // 测试费率
+  FEES: {
+    TOKENIZATION_FEE: 100, // 1%
+    TRADING_FEE: 50,       // 0.5%
+    REDEMPTION_FEE: 30,    // 0.3%
+    PLATFORM_FEE: 20       // 0.2%
+  }
+};
+
+module.exports = {
+  PROXY_SLOTS,
+  ZERO_ADDRESS,
+  ERC20_ROLES,
+  TEST_CONFIG
+}; 

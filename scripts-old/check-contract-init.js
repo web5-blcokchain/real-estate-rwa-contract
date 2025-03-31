@@ -4,6 +4,7 @@
 const { ethers, upgrades } = require('hardhat');
 const fs = require('fs');
 const path = require('path');
+const { PROXY_SLOTS, ZERO_ADDRESS } = require('./utils/constants');
 
 // 检查合约代码存在性
 async function checkContractExists(address) {
@@ -22,9 +23,8 @@ async function checkContractExists(address) {
 async function checkProxyStatus(address) {
   try {
     // 使用ERC-1967定义的存储槽直接检查
-    // 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
     // 这是UUPS代理的实现地址存储槽
-    const implSlot = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+    const implSlot = PROXY_SLOTS.IMPLEMENTATION_SLOT;
     const implStorage = await ethers.provider.getStorage(address, implSlot);
     
     // 如果存储槽是空的，则不是代理合约或未初始化

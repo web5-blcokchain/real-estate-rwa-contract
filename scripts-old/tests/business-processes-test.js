@@ -91,10 +91,10 @@ async function setupUserRoles(admin) {
     // 获取其他用户
     const [, propertyAdmin, user1] = await ethers.getSigners();
     
-    // 获取角色常量
-    const SUPER_ADMIN_ROLE = await roleManager.SUPER_ADMIN();
-    const PROPERTY_MANAGER_ROLE = await roleManager.PROPERTY_MANAGER();
-    const TOKEN_MANAGER_ROLE = await roleManager.TOKEN_MANAGER();
+    // 使用硬编码的角色哈希值代替调用合约方法
+    const SUPER_ADMIN_ROLE = ethers.keccak256(ethers.toUtf8Bytes('SUPER_ADMIN'));
+    const PROPERTY_MANAGER_ROLE = ethers.keccak256(ethers.toUtf8Bytes('PROPERTY_MANAGER'));
+    const TOKEN_MANAGER_ROLE = ethers.keccak256(ethers.toUtf8Bytes('TOKEN_MANAGER'));
     
     // 检查admin是否有SUPER_ADMIN角色
     const adminHasSuperAdmin = await roleManager.hasRole(SUPER_ADMIN_ROLE, admin.address);

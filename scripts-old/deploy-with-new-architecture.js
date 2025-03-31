@@ -33,12 +33,10 @@ const DEPLOYMENT_CONFIG = {
   // 要部署的库合约
   libraries: ['SystemDeployerLib1', 'SystemDeployerLib2'],
   
-  // 角色配置
+  // 角色配置 - 仅使用环境变量中的私钥配置
   roles: {
-    ADMIN_ROLE: process.env.ADMIN_ADDRESS,
-    OPERATOR_ROLE: process.env.OPERATOR_ADDRESS,
-    VALIDATOR_ROLE: process.env.VALIDATOR_ADDRESS,
-    TREASURY_ROLE: process.env.TREASURY_ADDRESS,
+    // 这些角色将使用部署者地址和合约地址自动设置
+    // 不再使用*_ADDRESS环境变量
     MARKETPLACE_ROLE: null, // 将在部署后自动设置为Marketplace合约地址
     TOKEN_FACTORY_ROLE: null // 将在部署后自动设置为TokenFactory合约地址
   },
@@ -345,12 +343,24 @@ async function main() {
     }
     
     // ========== 阶段6：设置系统角色 ==========
-    await setupSystemRoles();
+    try {
+      logger.info('\n执行角色设置...');
+      await setupSystemRoles();
+      logger.info('角色设置成功完成');
+    } catch (roleError) {
+      logger.error(`角色设置过程中出错: ${roleError.message}`);
+      logger.error('部署已完成，但角色设置失败。请手动运行 npm run contracts:setup:roles');
+      logger.error('错误详情:', roleError);
+    }
     
     // 输出部署摘要
     logger.info('\n🎉 部署全部完成！');
     logger.info(`📝 合约地址已保存至 ${path.join(process.cwd(), 'scripts/deploy-state.json')}`);
     logger.info(`💾 部署日志已保存至 ${path.join(process.cwd(), 'logs/deployment')}`);
+    
+    // 提示用户运行集成测试
+    logger.info('\n📋 建议接下来运行集成测试:');
+    logger.info('npm run contracts:test:integrated');
     
     return { success: true };
   } catch (error) {

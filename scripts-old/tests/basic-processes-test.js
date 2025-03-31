@@ -5,6 +5,7 @@
 const { ethers } = require('hardhat');
 const { getContractAddresses } = require('../../shared/config/contracts');
 const logger = require('../../shared/utils/logger');
+const { ROLES } = require('../utils/roles');
 
 /**
  * 测试主函数
@@ -31,7 +32,7 @@ async function main() {
     // 测试1: 角色检查
     console.log('\n--- 测试1: 角色验证 ---');
     // 检查admin是否有SUPER_ADMIN角色
-    const SUPER_ADMIN_ROLE = '0xd980155b32cf66e6af51e0972d64b9d5efe0e6f237dfaa4bdc83f990dd79e9c8';
+    const SUPER_ADMIN_ROLE = ethers.keccak256(ethers.toUtf8Bytes(ROLES.SUPER_ADMIN));
     const hasSuperAdmin = await roleManager.hasRole(SUPER_ADMIN_ROLE, admin.address);
     console.log(`管理员拥有SUPER_ADMIN角色: ${hasSuperAdmin}`);
     
