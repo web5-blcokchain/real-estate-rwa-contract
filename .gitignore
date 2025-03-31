@@ -6,12 +6,20 @@ node_modules
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+.pnp
+.pnp.js
 
 # Hardhat
 cache
 artifacts
 typechain
 typechain-types
+/deployments
+ignition/deployments/chain-31337
+.openzeppelin
+/flatten
+hardhat.config.local.ts
+hardhat.config.local.js
 
 # Environment
 .env
@@ -45,47 +53,13 @@ coverage.json
 config/deployment.json
 config/abi/*.json
 
-# 依赖目录
-.pnp/
-.pnp.js
-
-# 测试覆盖率文件
-/coverage
-/coverage.json
-
-# 部署文件
-/deployments
-ignition/deployments/chain-31337
-.openzeppelin
-
-# 日志文件
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# IDE和编辑器文件
-.idea/
-.vscode/
-*.swp
-*.swo
-*.json
-# 合约验证
-/flatten
-
-# 本地开发配置
-hardhat.config.local.ts
-hardhat.config.local.js
-
-# 密钥文件
+# Security
 *.pem
 mnemonic.txt
 
-http-server/test-results/
-
-# 中心化数据库备份
+# Database
 /db-backups
 
-# 临时文件
-tmp/
-temp/
+# Temporary
+tmp
+temp
