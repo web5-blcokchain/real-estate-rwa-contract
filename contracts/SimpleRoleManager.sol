@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /**
  * @title SimpleRoleManager
@@ -14,12 +15,14 @@ contract SimpleRoleManager is
     Initializable, 
     AccessControlUpgradeable, 
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable {
+    UUPSUpgradeable,
+    PausableUpgradeable {
     
     // 使用bytes32常量而非计算值，节省gas
     bytes32 public constant ADMIN_ROLE = 0x41444d494e5f524f4c45000000000000000000000000000000000000000000; // bytes32("ADMIN_ROLE")
     bytes32 public constant MANAGER_ROLE = 0x4d414e414745525f524f4c4500000000000000000000000000000000000000; // bytes32("MANAGER_ROLE")
     bytes32 public constant OPERATOR_ROLE = 0x4f50455241544f525f524f4c45000000000000000000000000000000000000; // bytes32("OPERATOR_ROLE")
+    bytes32 public constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
     
     // 合约版本 - uint8足够表示版本号
     uint8 public version;
@@ -36,6 +39,10 @@ contract SimpleRoleManager is
     event EmergencyModeActivated(address indexed admin);
     event EmergencyModeDeactivated(address indexed admin);
     event EmergencyRoleRestored(address indexed deployer);
+    event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
+    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
+    event EmergencyModeChanged(bool enabled);
+    event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -49,6 +56,7 @@ contract SimpleRoleManager is
         __AccessControl_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
+        __Pausable_init();
         
         deployer = msg.sender;
         version = 1;
@@ -71,6 +79,7 @@ contract SimpleRoleManager is
      */
     function activateEmergencyMode() external onlyRole(ADMIN_ROLE) {
         emergencyMode = true;
+        _pause();
         emit EmergencyModeActivated(msg.sender);
     }
     
@@ -79,6 +88,7 @@ contract SimpleRoleManager is
      */
     function deactivateEmergencyMode() external onlyRole(ADMIN_ROLE) {
         emergencyMode = false;
+        _unpause();
         emit EmergencyModeDeactivated(msg.sender);
     }
     
@@ -149,7 +159,7 @@ contract SimpleRoleManager is
     function _authorizeUpgrade(address newImplementation) 
         internal 
         override 
-        onlyRole(ADMIN_ROLE) 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
     {
         require(!emergencyMode, "Cannot upgrade during emergency");
         
@@ -157,5 +167,83 @@ contract SimpleRoleManager is
         version += 1;
         
         emit VersionUpdated(oldVersion, version);
+    }
+
+    /**
+     * @dev 检查地址是否有特定角色
+     */
+    function hasRole(bytes32 role, address account) public view override returns (bool) {
+        return super.hasRole(role, account);
+    }
+    
+    /**
+     * @dev 为地址授予特定角色
+     */
+    function grantRole(bytes32 role, address account) public override onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(role, account);
+        emit RoleGranted(role, account, msg.sender);
+    }
+    
+    /**
+     * @dev 撤销地址的特定角色
+     */
+    function revokeRole(bytes32 role, address account) public override onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(role, account);
+        emit RoleRevoked(role, account, msg.sender);
+    }
+    
+    /**
+     * @dev 转移管理员权限到新地址
+     */
+    function transferAdminRole(address newAdmin) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newAdmin != address(0), "New admin is zero address");
+        
+        // 授予新管理员默认管理员角色和ADMIN_ROLE
+        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        _setupRole(ADMIN_ROLE, newAdmin);
+        
+        // 注意：这里没有移除当前管理员的权限
+        // 如果需要完全转移权限，取消下面两行的注释
+        // renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        // renounceRole(ADMIN_ROLE, msg.sender);
+        
+        emit AdminTransferred(msg.sender, newAdmin);
+    }
+    
+    /**
+     * @dev 转移管理员权限并撤销当前管理员权限
+     */
+    function transferAndRenounceAdminRole(address newAdmin) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newAdmin != address(0), "New admin is zero address");
+        
+        // 授予新管理员默认管理员角色和ADMIN_ROLE
+        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        _setupRole(ADMIN_ROLE, newAdmin);
+        
+        // 撤销当前管理员的角色
+        renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        renounceRole(ADMIN_ROLE, msg.sender);
+        
+        emit AdminTransferred(msg.sender, newAdmin);
+    }
+    
+    /**
+     * @dev 批量授予地址特定角色
+     */
+    function batchGrantRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _grantRole(role, accounts[i]);
+            emit RoleGranted(role, accounts[i], msg.sender);
+        }
+    }
+    
+    /**
+     * @dev 批量撤销地址的特定角色
+     */
+    function batchRevokeRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _revokeRole(role, accounts[i]);
+            emit RoleRevoked(role, accounts[i], msg.sender);
+        }
     }
 } 

@@ -58,6 +58,7 @@ contract RewardManager is
         DistributionStatus status;
         DistributionType distType;
         string description;
+        address paymentToken;    // 支付代币地址，address(0)表示ETH
     }
     
     // 分配ID计数器
@@ -99,6 +100,12 @@ contract RewardManager is
     // 最低分配触发阈值
     uint256 public minDistributionThreshold;
     
+    // 支持的支付代币映射
+    mapping(address => bool) public supportedPaymentTokens;
+    
+    // 支付代币列表
+    address[] public paymentTokensList;
+    
     // 事件
     event DistributionCreated(
         uint256 indexed distributionId, 
@@ -109,14 +116,17 @@ contract RewardManager is
         DistributionType distType,
         uint256 platformFee,
         uint256 maintenanceFee,
-        uint256 netAmount
+        uint256 netAmount,
+        address paymentToken
     );
     event DistributionStatusChanged(uint256 indexed distributionId, DistributionStatus status);
-    event DistributionWithdrawn(uint256 indexed distributionId, address indexed account, uint256 amount);
+    event DistributionWithdrawn(uint256 indexed distributionId, address indexed account, uint256 amount, address paymentToken);
     event FeeRatesUpdated(uint256 platformFeeRate, uint256 maintenanceFeeRate);
     event FeeReceiverUpdated(address oldReceiver, address newReceiver);
     event EmergencyWithdrawalStatusChanged(bool enabled);
     event MinDistributionThresholdChanged(uint256 oldValue, uint256 newValue);
+    event PaymentTokenAdded(address indexed tokenAddress);
+    event PaymentTokenRemoved(address indexed tokenAddress);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -165,7 +175,40 @@ contract RewardManager is
         emergencyWithdrawalEnabled = false;
         minDistributionThreshold = 0.01 ether; // 最低分配触发阈值
         
+        // 默认支持ETH作为支付方式
+        supportedPaymentTokens[address(0)] = true;
+        
         version = 1;
+    }
+    
+    /**
+     * @dev 添加支持的支付代币
+     */
+    function addSupportedPaymentToken(address _tokenAddress) external onlyAdmin {
+        require(_tokenAddress != address(0), "Invalid token address");
+        require(IERC20(_tokenAddress).totalSupply() > 0, "Not a valid ERC20 token");
+        
+        if (!supportedPaymentTokens[_tokenAddress]) {
+            supportedPaymentTokens[_tokenAddress] = true;
+            paymentTokensList.push(_tokenAddress);
+            emit PaymentTokenAdded(_tokenAddress);
+        }
+    }
+    
+    /**
+     * @dev 移除支持的支付代币
+     */
+    function removeSupportedPaymentToken(address _tokenAddress) external onlyAdmin {
+        require(_tokenAddress != address(0), "Cannot remove ETH support");
+        supportedPaymentTokens[_tokenAddress] = false;
+        emit PaymentTokenRemoved(_tokenAddress);
+    }
+    
+    /**
+     * @dev 获取所有支持的支付代币列表
+     */
+    function getSupportedPaymentTokens() external view returns (address[] memory) {
+        return paymentTokensList;
     }
     
     /**
@@ -242,13 +285,14 @@ contract RewardManager is
     }
     
     /**
-     * @dev 创建新分配 - 使用ETH
+     * @dev 创建新分配 - 支持ETH或ERC20代币支付
      * @param _propertyIdHash 房产ID哈希
      * @param _tokenAddress 代币地址
      * @param _amount 分配金额
      * @param _distType 分配类型
      * @param _description 描述
      * @param _applyFees 是否应用费用（租金通常需要，奖励通常不需要）
+     * @param _paymentToken 支付代币地址，address(0)表示ETH
      */
     function createDistribution(
         bytes32 _propertyIdHash,
@@ -256,11 +300,12 @@ contract RewardManager is
         uint256 _amount,
         DistributionType _distType,
         string calldata _description,
-        bool _applyFees
+        bool _applyFees,
+        address _paymentToken
     ) external payable whenNotPaused nonReentrant onlyManager returns (uint256) {
         require(_tokenAddress != address(0), "Invalid token address");
-        require(msg.value >= _amount, "Insufficient funds");
         require(_amount >= minDistributionThreshold, "Below minimum threshold");
+        require(supportedPaymentTokens[_paymentToken], "Payment token not supported");
         
         // 获取快照
         PropertyToken token = PropertyToken(_tokenAddress);
@@ -274,9 +319,33 @@ contract RewardManager is
         // 计算费用
         (uint256 platformFee, uint256 maintenanceFee, uint256 netAmount) = calculateFees(_amount, _applyFees);
         
-        // 如果有费用，则转给费用接收者
-        if (_applyFees && (platformFee > 0 || maintenanceFee > 0)) {
-            payable(feeReceiver).transfer(platformFee.add(maintenanceFee));
+        // 处理支付
+        if (_paymentToken == address(0)) {
+            // ETH支付
+            require(msg.value >= _amount, "Insufficient ETH");
+            
+            // 如果有费用，则转给费用接收者
+            if (_applyFees && (platformFee > 0 || maintenanceFee > 0)) {
+                payable(feeReceiver).transfer(platformFee.add(maintenanceFee));
+            }
+            
+            // 如果发送额外的ETH，退还
+            uint256 excess = msg.value - _amount;
+            if (excess > 0) {
+                payable(msg.sender).transfer(excess);
+            }
+        } else {
+            // ERC20代币支付
+            require(msg.value == 0, "ETH not needed for token payment");
+            IERC20 paymentToken = IERC20(_paymentToken);
+            
+            // 转移代币到合约
+            require(paymentToken.transferFrom(msg.sender, address(this), _amount), "Token transfer failed");
+            
+            // 如果有费用，则转给费用接收者
+            if (_applyFees && (platformFee > 0 || maintenanceFee > 0)) {
+                require(paymentToken.transfer(feeReceiver, platformFee.add(maintenanceFee)), "Fee transfer failed");
+            }
         }
         
         // 创建分配记录
@@ -295,17 +364,12 @@ contract RewardManager is
         distribution.status = DistributionStatus.Created;
         distribution.distType = _distType;
         distribution.description = _description;
+        distribution.paymentToken = _paymentToken;
         
         // 更新索引
         _propertyDistributions[_propertyIdHash].push(distributionId);
         _distributionsByType[_distType].push(distributionId);
         _tokenDistributions[_tokenAddress].push(distributionId);
-        
-        // 如果发送额外的ETH，退还
-        uint256 excess = msg.value - _amount;
-        if (excess > 0) {
-            payable(msg.sender).transfer(excess);
-        }
         
         emit DistributionCreated(
             distributionId, 
@@ -316,7 +380,8 @@ contract RewardManager is
             _distType, 
             platformFee, 
             maintenanceFee, 
-            netAmount
+            netAmount,
+            _paymentToken
         );
         
         return distributionId;
@@ -357,7 +422,13 @@ contract RewardManager is
         
         // 将未提取的金额退还给管理员
         if (remainingAmount > 0) {
-            payable(msg.sender).transfer(remainingAmount);
+            if (distribution.paymentToken == address(0)) {
+                // ETH退还
+                payable(msg.sender).transfer(remainingAmount);
+            } else {
+                // 代币退还
+                IERC20(distribution.paymentToken).transfer(msg.sender, remainingAmount);
+            }
         }
         
         distribution.status = DistributionStatus.Cancelled;
@@ -390,10 +461,16 @@ contract RewardManager is
         _withdrawals[_distributionId][msg.sender] = true;
         _totalWithdrawn[_distributionId] = _totalWithdrawn[_distributionId].add(share);
         
-        // 转账
-        payable(msg.sender).transfer(share);
+        // 根据支付代币类型执行转账
+        if (distribution.paymentToken == address(0)) {
+            // ETH支付
+            payable(msg.sender).transfer(share);
+        } else {
+            // 代币支付
+            IERC20(distribution.paymentToken).transfer(msg.sender, share);
+        }
         
-        emit DistributionWithdrawn(_distributionId, msg.sender, share);
+        emit DistributionWithdrawn(_distributionId, msg.sender, share, distribution.paymentToken);
     }
     
     /**
@@ -423,6 +500,7 @@ contract RewardManager is
             DistributionStatus status,
             DistributionType distType,
             string memory description,
+            address paymentToken,
             uint256 totalWithdrawn
         ) 
     {
@@ -441,6 +519,7 @@ contract RewardManager is
             distribution.status,
             distribution.distType,
             distribution.description,
+            distribution.paymentToken,
             _totalWithdrawn[_distributionId]
         );
     }
@@ -451,26 +530,26 @@ contract RewardManager is
     function getAvailableDistributionAmount(uint256 _distributionId, address _account) 
         external 
         view 
-        returns (uint256 available, bool canWithdraw) 
+        returns (uint256 available, bool canWithdraw, address paymentToken) 
     {
         Distribution storage distribution = _distributions[_distributionId];
-        if (distribution.id != _distributionId) return (0, false);
+        if (distribution.id != _distributionId) return (0, false, address(0));
         
         bool isCompleted = distribution.status == DistributionStatus.Completed;
         bool isEmergencyWithdrawal = emergencyWithdrawalEnabled && distribution.status == DistributionStatus.Processing;
         
-        if (!isCompleted && !isEmergencyWithdrawal) return (0, false);
-        if (_withdrawals[_distributionId][_account]) return (0, false);
+        if (!isCompleted && !isEmergencyWithdrawal) return (0, false, distribution.paymentToken);
+        if (_withdrawals[_distributionId][_account]) return (0, false, distribution.paymentToken);
         
         PropertyToken token = PropertyToken(distribution.tokenAddress);
         uint256 balance = token.balanceOfAt(_account, distribution.snapshotId);
         
-        if (balance == 0) return (0, false);
+        if (balance == 0) return (0, false, distribution.paymentToken);
         
         uint256 totalSupply = token.totalSupplyAt(distribution.snapshotId);
         uint256 share = distribution.netAmount.mul(balance).div(totalSupply);
         
-        return (share, share > 0);
+        return (share, share > 0, distribution.paymentToken);
     }
     
     /**
@@ -519,6 +598,14 @@ contract RewardManager is
      */
     function emergencyWithdraw() external onlyAdmin {
         payable(msg.sender).transfer(address(this).balance);
+    }
+    
+    /**
+     * @dev 紧急代币提款 - 允许管理员在紧急情况下提取合约中的ERC20代币
+     */
+    function emergencyTokenWithdraw(address _token, uint256 _amount) external onlyAdmin {
+        require(_token != address(0), "Cannot withdraw ETH with this function");
+        IERC20(_token).transfer(msg.sender, _amount);
     }
     
     /**
