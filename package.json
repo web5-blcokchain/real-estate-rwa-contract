@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Japanese Real Estate Tokenization System",
   "main": "index.js",
+  "packageManager": "yarn@4.1.1",
+  "engines": {
+    "node": ">=18.0.0",
+    "yarn": ">=4.0.0"
+  },
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
