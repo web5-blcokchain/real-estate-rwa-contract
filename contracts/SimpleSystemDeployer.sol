@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
 import "./SimpleRoleManager.sol";
 import "./PropertyManager.sol";
 import "./PropertyToken.sol";
@@ -11,263 +12,206 @@ import "./SimpleRealEstateSystem.sol";
 
 /**
  * @title SimpleSystemDeployer
- * @dev 简化版系统部署合约
+ * @dev 负责部署整个不动产系统及其组件的合约
  */
 contract SimpleSystemDeployer {
-    // 部署版本
-    string public constant DEPLOYMENT_VERSION = "1.0.0";
     
-    // 部署者地址
-    address public deployer;
-    
-    // 已部署的合约地址
-    address public roleManagerAddress;
-    address public propertyManagerAddress;
-    address public propertyTokenAddress;
-    address public tradingManagerAddress;
-    address public rewardManagerAddress;
-    address public systemAddress;
-    
-    // 部署状态
-    enum DeploymentStatus { NotDeployed, Deployed }
-    mapping(string => DeploymentStatus) public deploymentStatus;
-    
-    // 事件
-    event ContractDeployed(string name, address contractAddress);
+    // 部署事件
     event SystemDeployed(
-        address roleManager,
-        address propertyManager,
-        address propertyToken,
+        address indexed system,
+        address indexed roleManager,
+        address indexed propertyManager,
+        address tokenFactory,
         address tradingManager,
         address rewardManager,
-        address system
+        address deployer
     );
     
-    constructor() {
-        deployer = msg.sender;
+    // 初始化参数结构体 - 角色管理
+    struct RoleInitParams {
+        address[] adminAddresses;       // 管理员地址列表
+        address[] managerAddresses;     // 经理地址列表
+        address[] operatorAddresses;    // 操作员地址列表
+    }
+    
+    // 初始化参数结构体 - 交易管理
+    struct TradingInitParams {
+        address tradingFeeReceiver;     // 交易费接收地址
+        uint256 tradingFeeRate;         // 交易费率
+        uint256 minTradeAmount;         // 最小交易金额
+    }
+    
+    // 初始化参数结构体 - 奖励管理
+    struct RewardInitParams {
+        address rewardFeeReceiver;      // 奖励费接收地址
+        uint256 platformFeeRate;        // 平台费率
+        uint256 maintenanceFeeRate;     // 维护费率
+        uint256 minDistributionThreshold; // 最小分配阈值
+        address[] supportedPaymentTokens; // 支持的支付代币列表
+    }
+    
+    // 初始化参数结构体 - 代币设置
+    struct TokenInitParams {
+        uint256 minTransferAmount;      // 最小转账金额
+    }
+    
+    // 初始化参数结构体 - 系统设置
+    struct SystemInitParams {
+        bool startPaused;               // 系统启动时是否暂停
     }
     
     /**
-     * @dev 部署所有合约
+     * @dev 部署整个系统及其组件
+     * @param roleParams 角色初始化参数
+     * @param tradingParams 交易初始化参数
+     * @param rewardParams 奖励初始化参数
+     * @param tokenParams 代币初始化参数
+     * @param systemParams 系统初始化参数
+     * @return systemAddress 部署的系统地址
      */
-    function deploySystem() external {
-        require(msg.sender == deployer, "Only deployer can deploy the system");
+    function deploySystem(
+        RoleInitParams calldata roleParams,
+        TradingInitParams calldata tradingParams,
+        RewardInitParams calldata rewardParams,
+        TokenInitParams calldata tokenParams,
+        SystemInitParams calldata systemParams
+    ) external returns (address systemAddress) {
         
-        // 1. 部署RoleManager
-        deployRoleManager();
+        // 1. 部署角色管理器
+        SimpleRoleManager roleManager = new SimpleRoleManager();
+        roleManager.initialize();
         
-        // 2. 部署PropertyManager
-        deployPropertyManager();
+        // 2. 部署房产管理器
+        PropertyManager propertyManager = new PropertyManager();
+        propertyManager.initialize(address(roleManager));
         
-        // 3. 部署PropertyToken
-        deployPropertyToken();
+        // 3. 部署代币工厂
+        PropertyToken tokenFactory = new PropertyToken();
+        tokenFactory.initialize(bytes32(0), "Token Factory", "TF", 0, msg.sender);
         
-        // 4. 部署TradingManager
-        deployTradingManager();
+        // 4. 部署交易管理器
+        TradingManager tradingManager = new TradingManager();
+        tradingManager.initialize(address(roleManager));
         
-        // 5. 部署RewardManager
-        deployRewardManager();
+        // 5. 部署奖励管理器
+        RewardManager rewardManager = new RewardManager();
+        rewardManager.initialize(address(roleManager));
         
-        // 6. 部署SimpleRealEstateSystem
-        deployRealEstateSystem();
+        // 6. 部署主系统合约
+        SimpleRealEstateSystem system = new SimpleRealEstateSystem();
+        system.initialize(
+            address(roleManager),
+            address(propertyManager),
+            address(tokenFactory),
+            address(tradingManager),
+            address(rewardManager)
+        );
         
+        // 7. 初始化角色管理
+        // 批量添加管理员
+        if (roleParams.adminAddresses.length > 0) {
+            roleManager.batchGrantRole(roleManager.ADMIN_ROLE(), roleParams.adminAddresses);
+        }
+        
+        // 批量添加经理
+        if (roleParams.managerAddresses.length > 0) {
+            roleManager.batchGrantRole(roleManager.MANAGER_ROLE(), roleParams.managerAddresses);
+        }
+        
+        // 批量添加操作员
+        if (roleParams.operatorAddresses.length > 0) {
+            roleManager.batchGrantRole(roleManager.OPERATOR_ROLE(), roleParams.operatorAddresses);
+        }
+        
+        // 8. 设置交易管理器参数
+        if (tradingParams.tradingFeeRate > 0) {
+            tradingManager.setFeeRate(tradingParams.tradingFeeRate);
+        }
+        
+        if (tradingParams.tradingFeeReceiver != address(0)) {
+            tradingManager.setFeeReceiver(tradingParams.tradingFeeReceiver);
+        }
+        
+        if (tradingParams.minTradeAmount > 0) {
+            tradingManager.setMinTradeAmount(tradingParams.minTradeAmount);
+        }
+        
+        // 9. 设置奖励管理器参数
+        if (rewardParams.platformFeeRate > 0 || rewardParams.maintenanceFeeRate > 0) {
+            rewardManager.setFeeRates(rewardParams.platformFeeRate, rewardParams.maintenanceFeeRate);
+        }
+        
+        if (rewardParams.rewardFeeReceiver != address(0)) {
+            rewardManager.setFeeReceiver(rewardParams.rewardFeeReceiver);
+        }
+        
+        if (rewardParams.minDistributionThreshold > 0) {
+            rewardManager.setMinDistributionThreshold(rewardParams.minDistributionThreshold);
+        }
+        
+        // 添加支持的支付代币
+        for (uint256 i = 0; i < rewardParams.supportedPaymentTokens.length; i++) {
+            if (rewardParams.supportedPaymentTokens[i] != address(0)) {
+                rewardManager.addSupportedPaymentToken(rewardParams.supportedPaymentTokens[i]);
+            }
+        }
+        
+        // 10. 设置代币参数
+        if (tokenParams.minTransferAmount > 0) {
+            tokenFactory.setMinTransferAmount(tokenParams.minTransferAmount);
+        }
+        
+        // 11. 设置系统状态
+        if (systemParams.startPaused) {
+            system.pause();
+        }
+        
+        // 12. 发出部署事件
         emit SystemDeployed(
-            roleManagerAddress,
-            propertyManagerAddress,
-            propertyTokenAddress,
-            tradingManagerAddress,
-            rewardManagerAddress,
-            systemAddress
+            address(system),
+            address(roleManager),
+            address(propertyManager),
+            address(tokenFactory),
+            address(tradingManager),
+            address(rewardManager),
+            msg.sender
         );
+        
+        return address(system);
     }
     
     /**
-     * @dev 部署RoleManager
+     * @dev 部署系统并将当前调用者设置为唯一管理员
+     * @return systemAddress 部署的系统地址
      */
-    function deployRoleManager() public {
-        require(roleManagerAddress == address(0), "RoleManager already deployed");
+    function deploySingleAdminSystem() external returns (address systemAddress) {
+        // 创建空的参数结构体
+        RoleInitParams memory roleParams;
+        TradingInitParams memory tradingParams;
+        RewardInitParams memory rewardParams;
+        TokenInitParams memory tokenParams;
+        SystemInitParams memory systemParams;
         
-        // 部署实现合约
-        SimpleRoleManager roleManagerImpl = new SimpleRoleManager();
+        // 设置当前调用者为唯一管理员
+        address[] memory admins = new address[](1);
+        admins[0] = msg.sender;
+        roleParams.adminAddresses = admins;
         
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            SimpleRoleManager(address(0)).initialize.selector
-        );
+        // 设置默认交易和奖励参数
+        tradingParams.tradingFeeRate = 100; // 1%
+        tradingParams.tradingFeeReceiver = msg.sender;
         
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(roleManagerImpl),
-            deployer,
-            initData
-        );
+        rewardParams.platformFeeRate = 500; // 5%
+        rewardParams.maintenanceFeeRate = 200; // 2%
+        rewardParams.rewardFeeReceiver = msg.sender;
         
-        roleManagerAddress = address(proxy);
-        deploymentStatus["RoleManager"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("RoleManager", roleManagerAddress);
-    }
-    
-    /**
-     * @dev 部署PropertyManager
-     */
-    function deployPropertyManager() public {
-        require(propertyManagerAddress == address(0), "PropertyManager already deployed");
-        require(roleManagerAddress != address(0), "RoleManager must be deployed first");
-        
-        // 部署实现合约
-        PropertyManager propertyManagerImpl = new PropertyManager();
-        
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            PropertyManager(address(0)).initialize.selector,
-            roleManagerAddress
-        );
-        
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(propertyManagerImpl),
-            deployer,
-            initData
-        );
-        
-        propertyManagerAddress = address(proxy);
-        deploymentStatus["PropertyManager"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("PropertyManager", propertyManagerAddress);
-    }
-    
-    /**
-     * @dev 部署PropertyToken
-     */
-    function deployPropertyToken() public {
-        require(propertyTokenAddress == address(0), "PropertyToken already deployed");
-        require(roleManagerAddress != address(0), "RoleManager must be deployed first");
-        require(propertyManagerAddress != address(0), "PropertyManager must be deployed first");
-        
-        // 部署实现合约
-        PropertyToken propertyTokenImpl = new PropertyToken();
-        
-        // 部署代理合约 - 注意PropertyToken的初始化不同于其他合约
-        // 它将作为工厂，需要单独调用createToken来创建代币实例
-        propertyTokenAddress = address(propertyTokenImpl);
-        deploymentStatus["PropertyToken"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("PropertyToken", propertyTokenAddress);
-    }
-    
-    /**
-     * @dev 部署TradingManager
-     */
-    function deployTradingManager() public {
-        require(tradingManagerAddress == address(0), "TradingManager already deployed");
-        require(roleManagerAddress != address(0), "RoleManager must be deployed first");
-        require(propertyManagerAddress != address(0), "PropertyManager must be deployed first");
-        
-        // 部署实现合约
-        TradingManager tradingManagerImpl = new TradingManager();
-        
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            TradingManager(address(0)).initialize.selector,
-            roleManagerAddress,
-            propertyManagerAddress
-        );
-        
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(tradingManagerImpl),
-            deployer,
-            initData
-        );
-        
-        tradingManagerAddress = address(proxy);
-        deploymentStatus["TradingManager"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("TradingManager", tradingManagerAddress);
-    }
-    
-    /**
-     * @dev 部署RewardManager
-     */
-    function deployRewardManager() public {
-        require(rewardManagerAddress == address(0), "RewardManager already deployed");
-        require(roleManagerAddress != address(0), "RoleManager must be deployed first");
-        require(propertyManagerAddress != address(0), "PropertyManager must be deployed first");
-        
-        // 部署实现合约
-        RewardManager rewardManagerImpl = new RewardManager();
-        
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            RewardManager(address(0)).initialize.selector,
-            roleManagerAddress,
-            propertyManagerAddress
-        );
-        
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(rewardManagerImpl),
-            deployer,
-            initData
-        );
-        
-        rewardManagerAddress = address(proxy);
-        deploymentStatus["RewardManager"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("RewardManager", rewardManagerAddress);
-    }
-    
-    /**
-     * @dev 部署SimpleRealEstateSystem
-     */
-    function deployRealEstateSystem() public {
-        require(systemAddress == address(0), "System already deployed");
-        require(roleManagerAddress != address(0), "RoleManager must be deployed first");
-        require(propertyManagerAddress != address(0), "PropertyManager must be deployed first");
-        require(propertyTokenAddress != address(0), "PropertyToken must be deployed first");
-        require(tradingManagerAddress != address(0), "TradingManager must be deployed first");
-        require(rewardManagerAddress != address(0), "RewardManager must be deployed first");
-        
-        // 部署实现合约
-        SimpleRealEstateSystem systemImpl = new SimpleRealEstateSystem();
-        
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            SimpleRealEstateSystem(address(0)).initialize.selector,
-            roleManagerAddress,
-            propertyManagerAddress,
-            propertyTokenAddress,
-            tradingManagerAddress,
-            rewardManagerAddress
-        );
-        
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(systemImpl),
-            deployer,
-            initData
-        );
-        
-        systemAddress = address(proxy);
-        deploymentStatus["SimpleRealEstateSystem"] = DeploymentStatus.Deployed;
-        
-        emit ContractDeployed("SimpleRealEstateSystem", systemAddress);
-    }
-    
-    /**
-     * @dev 获取所有已部署的合约地址
-     */
-    function getDeployedContracts() external view returns (
-        address, address, address, address, address, address
-    ) {
-        return (
-            roleManagerAddress,
-            propertyManagerAddress,
-            propertyTokenAddress,
-            tradingManagerAddress,
-            rewardManagerAddress,
-            systemAddress
+        // 使用设置的参数部署系统
+        return deploySystem(
+            roleParams,
+            tradingParams,
+            rewardParams,
+            tokenParams,
+            systemParams
         );
     }
 } 
