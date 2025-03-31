@@ -1,13 +1,12 @@
 # 依赖目录
-node_modules
-.DS_Store
+node_modules/
+.pnp/
+.pnp.js
 
 # 环境变量文件
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
 # Hardhat文件
 /cache
@@ -39,7 +38,6 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
-*.log
 *.json
 # 合约验证
 /flatten
@@ -56,3 +54,10 @@ http-server/test-results/
 
 # 中心化数据库备份
 /db-backups
+
+# 部署信息
+deployment.json
+
+# 临时文件
+tmp/
+temp/

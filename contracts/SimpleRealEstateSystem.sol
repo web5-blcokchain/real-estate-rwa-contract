@@ -10,10 +10,11 @@ import "./PropertyManager.sol";
 import "./PropertyToken.sol";
 import "./TradingManager.sol";
 import "./RewardManager.sol";
+import "./RealEstateFacade.sol";
 
 /**
  * @title SimpleRealEstateSystem
- * @dev 优化的不动产系统集成合约，简化且安全的实现
+ * @dev 不动产系统管理合约，负责系统状态和组件管理
  */
 contract SimpleRealEstateSystem is 
     Initializable, 
@@ -21,7 +22,7 @@ contract SimpleRealEstateSystem is
     PausableUpgradeable,
     ReentrancyGuardUpgradeable {
     
-    // 版本控制 - 使用uint8节省gas
+    // 版本控制
     uint8 public version;
     
     // 角色管理器
@@ -38,6 +39,9 @@ contract SimpleRealEstateSystem is
     
     // 奖励管理器
     RewardManager public rewardManager;
+    
+    // 门面合约
+    RealEstateFacade public facade;
     
     // 系统状态
     enum SystemStatus {
@@ -58,6 +62,7 @@ contract SimpleRealEstateSystem is
     event NewSystemAddressSet(address indexed newSystem);
     event SystemInitialized(address indexed deployer, uint8 version);
     event ComponentUpdated(string indexed componentName, address indexed newAddress);
+    event FacadeUpdated(address indexed oldFacade, address indexed newFacade);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -93,7 +98,8 @@ contract SimpleRealEstateSystem is
         address _propertyManager,
         address _tokenFactory,
         address _tradingManager,
-        address _rewardManager
+        address _rewardManager,
+        address _facade
     ) public initializer {
         __UUPSUpgradeable_init();
         __Pausable_init();
@@ -104,6 +110,7 @@ contract SimpleRealEstateSystem is
         tokenFactory = PropertyToken(_tokenFactory);
         tradingManager = TradingManager(_tradingManager);
         rewardManager = RewardManager(_rewardManager);
+        facade = RealEstateFacade(_facade);
         
         systemStatus = SystemStatus.Active;
         version = 1;
@@ -136,6 +143,16 @@ contract SimpleRealEstateSystem is
         
         newSystemAddress = _newSystemAddress;
         emit NewSystemAddressSet(_newSystemAddress);
+    }
+    
+    /**
+     * @dev 更新门面合约
+     */
+    function updateFacade(address _newFacade) external onlyAdmin whenSystemActive {
+        require(_newFacade != address(0), "Zero address");
+        address oldFacade = address(facade);
+        facade = RealEstateFacade(_newFacade);
+        emit FacadeUpdated(oldFacade, _newFacade);
     }
     
     /**
@@ -198,51 +215,6 @@ contract SimpleRealEstateSystem is
     }
     
     /**
-     * @dev 完整流程：注册房产、创建代币、初始化分配
-     */
-    function registerPropertyAndCreateToken(
-        bytes32 _propertyIdHash,
-        string calldata _propertyId,
-        string calldata _name,
-        string calldata _symbol,
-        string calldata _location,
-        string calldata _description,
-        uint256 _initialTokenSupply
-    ) 
-        external 
-        whenNotPaused
-        whenSystemActive
-        onlyAdmin
-        nonReentrant
-        returns (address tokenAddress) 
-    {
-        // 注册房产
-        propertyManager.registerProperty(
-            _propertyIdHash,
-            _propertyId,
-            _location,
-            _description,
-            msg.sender
-        );
-        
-        // 批准房产
-        propertyManager.updatePropertyStatus(_propertyIdHash, PropertyManager.PropertyStatus.Approved);
-        
-        // 创建代币
-        tokenAddress = tokenFactory.createToken(
-            _propertyId,
-            _name,
-            _symbol,
-            _initialTokenSupply
-        );
-        
-        // 注册代币到房产
-        propertyManager.registerTokenForProperty(_propertyIdHash, tokenAddress);
-        
-        return tokenAddress;
-    }
-    
-    /**
      * @dev 系统诊断 - 检查各组件状态并返回健康报告
      */
     function systemHealthCheck() 
@@ -257,19 +229,21 @@ contract SimpleRealEstateSystem is
             string memory statusMessage
         ) 
     {
-        componentAddresses = new address[](5);
+        componentAddresses = new address[](6);
         componentAddresses[0] = address(roleManager);
         componentAddresses[1] = address(propertyManager);
         componentAddresses[2] = address(tokenFactory);
         componentAddresses[3] = address(tradingManager);
         componentAddresses[4] = address(rewardManager);
+        componentAddresses[5] = address(facade);
         
         bool allComponentsAvailable = 
             address(roleManager) != address(0) &&
             address(propertyManager) != address(0) &&
             address(tokenFactory) != address(0) &&
             address(tradingManager) != address(0) &&
-            address(rewardManager) != address(0);
+            address(rewardManager) != address(0) &&
+            address(facade) != address(0);
         
         string memory message;
         
@@ -298,36 +272,6 @@ contract SimpleRealEstateSystem is
     }
     
     /**
-     * @dev 批量授权角色给用户
-     */
-    function batchGrantRoles(address[] calldata users, bytes32[] calldata roles) 
-        external 
-        onlyAdmin 
-        whenSystemActive 
-    {
-        require(users.length == roles.length, "Arrays length mismatch");
-        
-        for (uint256 i = 0; i < users.length; i++) {
-            roleManager.grantRole(roles[i], users[i]);
-        }
-    }
-    
-    /**
-     * @dev 批量撤销用户角色
-     */
-    function batchRevokeRoles(address[] calldata users, bytes32[] calldata roles) 
-        external 
-        onlyAdmin 
-        whenSystemActive 
-    {
-        require(users.length == roles.length, "Arrays length mismatch");
-        
-        for (uint256 i = 0; i < users.length; i++) {
-            roleManager.revokeRole(roles[i], users[i]);
-        }
-    }
-    
-    /**
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) 
@@ -350,21 +294,21 @@ contract SimpleRealEstateSystem is
             propertyManager.pause();
         }
         
-        // 交易管理器有暂停交易的特殊方法
         if (address(tradingManager) != address(0)) {
             tradingManager.pauseTrading();
             tradingManager.pause();
         }
         
-        // 奖励管理器暂停
         if (address(rewardManager) != address(0)) {
             rewardManager.pause();
         }
         
-        // 启用角色管理器的紧急模式
+        if (address(facade) != address(0)) {
+            facade.pause();
+        }
+        
         roleManager.activateEmergencyMode();
         
-        // 更新系统状态
         SystemStatus previousStatus = systemStatus;
         systemStatus = SystemStatus.Emergency;
         
@@ -381,21 +325,21 @@ contract SimpleRealEstateSystem is
             propertyManager.unpause();
         }
         
-        // 交易管理器恢复交易
         if (address(tradingManager) != address(0)) {
             tradingManager.unpauseTrading();
             tradingManager.unpause();
         }
         
-        // 奖励管理器恢复
         if (address(rewardManager) != address(0)) {
             rewardManager.unpause();
         }
         
-        // 解除角色管理器的紧急模式
+        if (address(facade) != address(0)) {
+            facade.unpause();
+        }
+        
         roleManager.deactivateEmergencyMode();
         
-        // 更新系统状态
         SystemStatus previousStatus = systemStatus;
         systemStatus = SystemStatus.Active;
         
