@@ -8,12 +8,13 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "./SimpleRoleManager.sol";
 import "./PropertyManager.sol";
 
 /**
  * @title PropertyToken
- * @dev 优化的房产代币合约，整合代币工厂功能并增强安全性
+ * @dev 表示特定房产的ERC20代币
  */
 contract PropertyToken is 
     Initializable, 
@@ -21,9 +22,15 @@ contract PropertyToken is
     ERC20SnapshotUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable {
+    UUPSUpgradeable,
+    AccessControlUpgradeable {
     
-    // 版本控制 - 使用uint8节省gas
+    // 角色常量
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    
+    // 版本控制
     uint8 public version;
     
     // 角色管理器
@@ -32,28 +39,28 @@ contract PropertyToken is
     // 房产管理器
     PropertyManager public propertyManager;
     
-    // 房产ID哈希 - 使用bytes32代替string节省gas
+    // 房产ID哈希
     bytes32 public propertyIdHash;
     
     // 最大供应量
     uint256 public maxSupply;
     
-    // 最小转账额度
+    // 最小转账金额
     uint256 public minTransferAmount;
     
-    // 代币列表 - 仅工厂实例使用
-    mapping(address => bool) private _registeredTokens;
+    // 已注册的代币
+    mapping(bytes32 => bool) private _registeredTokens;
     address[] private _allTokens;
     
     // 黑名单地址
     mapping(address => bool) public blacklisted;
     
     // 事件
-    event TokenCreated(bytes32 indexed propertyIdHash, address indexed tokenAddress, string name, string symbol);
-    event TokenMinted(address indexed to, uint256 amount);
-    event TokenBurned(address indexed from, uint256 amount);
+    event TokenCreated(address tokenAddress, bytes32 propertyIdHash, string name, string symbol, uint256 initialSupply);
+    event TokenMinted(address to, uint256 amount);
+    event TokenBurned(address from, uint256 amount);
     event MaxSupplyUpdated(uint256 oldMaxSupply, uint256 newMaxSupply);
-    event MinTransferAmountUpdated(uint256 oldMinAmount, uint256 newMinAmount);
+    event MinTransferAmountUpdated(uint256 oldAmount, uint256 newAmount);
     event SnapshotCreated(uint256 indexed snapshotId);
     event AddressBlacklisted(address indexed account, bool status);
     event TokenFactoryInitialized(address indexed deployer);
@@ -65,30 +72,6 @@ contract PropertyToken is
     }
     
     /**
-     * @dev 修饰器：只有ADMIN角色可以调用
-     */
-    modifier onlyAdmin() {
-        require(roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有MANAGER角色可以调用
-     */
-    modifier onlyManager() {
-        require(roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender), "Not manager");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有OPERATOR角色可以调用
-     */
-    modifier onlyOperator() {
-        require(roleManager.hasRole(roleManager.OPERATOR_ROLE(), msg.sender), "Not operator");
-        _;
-    }
-    
-    /**
      * @dev 修饰器：确保地址没有被列入黑名单
      */
     modifier notBlacklisted(address account) {
@@ -97,30 +80,37 @@ contract PropertyToken is
     }
     
     /**
-     * @dev 初始化函数 - 代币实例
+     * @dev 初始化函数
      */
     function initialize(
         bytes32 _propertyIdHash,
-        string memory _propertyId,
         string memory _name,
         string memory _symbol,
-        address _roleManager,
-        address _propertyManager
+        uint256 _initialSupply,
+        address _admin
     ) public initializer {
         __ERC20_init(_name, _symbol);
         __ERC20Snapshot_init();
+        __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
-        roleManager = SimpleRoleManager(_roleManager);
-        propertyManager = PropertyManager(_propertyManager);
+        _setupRole(DEFAULT_ADMIN_ROLE, _admin);
+        _setupRole(ADMIN_ROLE, _admin);
+        
+        version = 1;
         propertyIdHash = _propertyIdHash;
         maxSupply = 1000000000 * 10**decimals(); // 默认10亿代币
-        minTransferAmount = 0; // 默认无最小转账额度
-        version = 1;
+        minTransferAmount = 0; // 默认无最小转账限制
         
-        emit TokenInstanceInitialized(_propertyIdHash, _propertyId, _name, _symbol);
+        // 铸造初始代币供应
+        if (_initialSupply > 0) {
+            _mint(_admin, _initialSupply);
+        }
+        
+        emit TokenCreated(address(this), _propertyIdHash, _name, _symbol, _initialSupply);
+        emit TokenInstanceInitialized(_propertyIdHash, "", _name, _symbol);
     }
     
     /**
@@ -142,18 +132,18 @@ contract PropertyToken is
     /**
      * @dev 将地址加入黑名单或移除
      */
-    function setBlacklistStatus(address account, bool status) external onlyAdmin {
+    function setBlacklistStatus(address account, bool status) external onlyRole(ADMIN_ROLE) {
         blacklisted[account] = status;
         emit AddressBlacklisted(account, status);
     }
     
     /**
-     * @dev 设置最小转账额度
+     * @dev 设置最小转账金额
      */
-    function setMinTransferAmount(uint256 _minAmount) external onlyAdmin {
-        uint256 oldMinAmount = minTransferAmount;
+    function setMinTransferAmount(uint256 _minAmount) external onlyRole(ADMIN_ROLE) {
+        uint256 oldAmount = minTransferAmount;
         minTransferAmount = _minAmount;
-        emit MinTransferAmountUpdated(oldMinAmount, _minAmount);
+        emit MinTransferAmountUpdated(oldAmount, _minAmount);
     }
     
     /**
@@ -161,9 +151,8 @@ contract PropertyToken is
      */
     function mint(address to, uint256 amount) 
         external 
-        onlyManager 
+        onlyRole(ADMIN_ROLE) 
         whenNotPaused 
-        nonReentrant
         notBlacklisted(to)
     {
         require(totalSupply() + amount <= maxSupply, "Exceeds maximum supply");
@@ -172,71 +161,20 @@ contract PropertyToken is
     }
     
     /**
-     * @dev 批量铸造代币
-     */
-    function batchMint(address[] calldata recipients, uint256[] calldata amounts) 
-        external 
-        onlyManager 
-        whenNotPaused 
-        nonReentrant
-    {
-        require(recipients.length == amounts.length, "Arrays length mismatch");
-        
-        uint256 totalAmount = 0;
-        for (uint256 i = 0; i < amounts.length; i++) {
-            totalAmount += amounts[i];
-        }
-        
-        require(totalSupply() + totalAmount <= maxSupply, "Exceeds maximum supply");
-        
-        for (uint256 i = 0; i < recipients.length; i++) {
-            require(!blacklisted[recipients[i]], "Recipient blacklisted");
-            _mint(recipients[i], amounts[i]);
-            emit TokenMinted(recipients[i], amounts[i]);
-        }
-    }
-    
-    /**
      * @dev 销毁代币
      */
     function burn(uint256 amount) 
         external 
         whenNotPaused 
-        nonReentrant
-        notBlacklisted(msg.sender)
     {
         _burn(msg.sender, amount);
         emit TokenBurned(msg.sender, amount);
     }
     
     /**
-     * @dev 代币持有者为他们的代币创建快照
-     */
-    function burnFrom(address account, uint256 amount)
-        external
-        whenNotPaused
-        nonReentrant
-    {
-        uint256 currentAllowance = allowance(account, msg.sender);
-        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
-        require(!blacklisted[account], "Account blacklisted");
-        require(!blacklisted[msg.sender], "Sender blacklisted");
-        
-        _approve(account, msg.sender, currentAllowance - amount);
-        _burn(account, amount);
-        emit TokenBurned(account, amount);
-    }
-    
-    /**
      * @dev 创建快照
      */
-    function snapshot() 
-        external 
-        onlyOperator 
-        whenNotPaused 
-        nonReentrant
-        returns (uint256) 
-    {
+    function snapshot() external onlyRole(OPERATOR_ROLE) returns (uint256) {
         uint256 snapshotId = _snapshot();
         emit SnapshotCreated(snapshotId);
         return snapshotId;
@@ -247,7 +185,7 @@ contract PropertyToken is
      */
     function setMaxSupply(uint256 _maxSupply) 
         external 
-        onlyAdmin
+        onlyRole(ADMIN_ROLE)
         whenNotPaused
     {
         require(_maxSupply >= totalSupply(), "New max supply must be >= current total supply");
@@ -257,16 +195,16 @@ contract PropertyToken is
     }
     
     /**
-     * @dev 暂停代币
+     * @dev 暂停所有转账
      */
-    function pause() external onlyAdmin {
+    function pause() external onlyRole(ADMIN_ROLE) {
         _pause();
     }
     
     /**
-     * @dev 恢复代币
+     * @dev 恢复所有转账
      */
-    function unpause() external onlyAdmin {
+    function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
     }
     
@@ -295,69 +233,27 @@ contract PropertyToken is
     }
     
     /**
-     * @dev 覆盖transfer，添加黑名单和最小转账额度检查
+     * @dev 重写beforeTokenTransfer钩子
      */
-    function transfer(address to, uint256 amount) 
-        public 
-        override 
-        whenNotPaused 
-        notBlacklisted(msg.sender) 
-        notBlacklisted(to) 
-        returns (bool) 
-    {
-        require(amount >= minTransferAmount, "Below min transfer amount");
-        return super.transfer(to, amount);
-    }
-    
-    /**
-     * @dev 覆盖transferFrom，添加黑名单和最小转账额度检查
-     */
-    function transferFrom(address from, address to, uint256 amount) 
-        public 
-        override 
-        whenNotPaused 
-        notBlacklisted(from) 
-        notBlacklisted(to) 
-        notBlacklisted(msg.sender) 
-        returns (bool) 
-    {
-        require(amount >= minTransferAmount, "Below min transfer amount");
-        return super.transferFrom(from, to, amount);
-    }
-    
-    /**
-     * @dev 覆盖approve，添加黑名单检查
-     */
-    function approve(address spender, uint256 amount) 
-        public 
-        override 
-        whenNotPaused 
-        notBlacklisted(msg.sender) 
-        notBlacklisted(spender) 
-        returns (bool) 
-    {
-        return super.approve(spender, amount);
-    }
-    
-    // 以下为必须实现的内部函数
-    
     function _beforeTokenTransfer(
         address from,
         address to,
         uint256 amount
-    ) internal override(ERC20Upgradeable, ERC20SnapshotUpgradeable) whenNotPaused {
+    ) internal override(ERC20SnapshotUpgradeable, ERC20Upgradeable) whenNotPaused {
+        require(!blacklisted[from] && !blacklisted[to], "Blacklisted address");
+        
+        // 检查最小转账金额（除非是铸造或销毁操作）
+        if (from != address(0) && to != address(0) && minTransferAmount > 0) {
+            require(amount >= minTransferAmount, "Below minimum transfer amount");
+        }
+        
         super._beforeTokenTransfer(from, to, amount);
     }
     
     /**
      * @dev 授权升级合约的实现
      */
-    function _authorizeUpgrade(address newImplementation) 
-        internal 
-        override 
-        onlyAdmin 
-    {
-        require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {
         uint8 oldVersion = version;
         version += 1;
     }
@@ -367,52 +263,26 @@ contract PropertyToken is
      */
     function createToken(
         string memory _propertyId,
-        string memory _name, 
+        string memory _name,
         string memory _symbol,
-        uint256 initialSupply
-    ) 
-        external 
-        onlyAdmin 
-        nonReentrant 
-        returns (address) 
-    {
-        // 将字符串ID转为bytes32哈希
+        uint256 _initialSupply
+    ) external returns (address) {
+        // 计算propertyId的哈希值
         bytes32 propertyIdHash = keccak256(abi.encodePacked(_propertyId));
         
-        // 检查房产是否已批准
-        require(PropertyManager(propertyManager).isPropertyApproved(propertyIdHash), "Property not approved");
+        // 确保该房产尚未创建代币
+        require(!_registeredTokens[propertyIdHash], "Token already created for property");
         
-        // 创建初始化数据
-        bytes memory initData = abi.encodeWithSelector(
-            PropertyToken(address(0)).initialize.selector,
-            propertyIdHash,
-            _propertyId,
-            _name,
-            _symbol,
-            address(roleManager),
-            address(propertyManager)
-        );
+        // 创建新代币合约
+        PropertyToken newToken = new PropertyToken();
+        newToken.initialize(propertyIdHash, _name, _symbol, _initialSupply, msg.sender);
         
-        // 部署代理合约
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(this), // 使用当前合约作为实现
-            msg.sender,    // 管理员
-            initData
-        );
+        // 注册代币
+        _registeredTokens[propertyIdHash] = true;
+        _allTokens.push(address(newToken));
         
-        address tokenAddress = address(proxy);
-        
-        // 记录新代币
-        _registeredTokens[tokenAddress] = true;
-        _allTokens.push(tokenAddress);
-        
-        // 铸造初始供应量
-        if (initialSupply > 0) {
-            PropertyToken(tokenAddress).mint(msg.sender, initialSupply);
-        }
-        
-        emit TokenCreated(propertyIdHash, tokenAddress, _name, _symbol);
-        return tokenAddress;
+        emit TokenCreated(address(newToken), propertyIdHash, _name, _symbol, _initialSupply);
+        return address(newToken);
     }
     
     /**
@@ -426,7 +296,7 @@ contract PropertyToken is
      * @dev 检查代币地址是否已注册
      */
     function isRegisteredToken(address tokenAddress) external view returns (bool) {
-        return _registeredTokens[tokenAddress];
+        return _registeredTokens[keccak256(abi.encodePacked(tokenAddress))];
     }
     
     /**
@@ -434,5 +304,36 @@ contract PropertyToken is
      */
     function getTokenCount() external view returns (uint256) {
         return _allTokens.length;
+    }
+    
+    /**
+     * @dev 获取代币信息
+     */
+    function getTokenInfo() external view returns (
+        string memory name,
+        string memory symbol,
+        uint256 totalSupply,
+        bytes32 _propertyIdHash,
+        uint8 _version
+    ) {
+        return (
+            name(),
+            symbol(),
+            totalSupply(),
+            propertyIdHash,
+            version
+        );
+    }
+    
+    /**
+     * @dev 覆盖supportsInterface确保合约支持所有接口
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(AccessControlUpgradeable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 } 
