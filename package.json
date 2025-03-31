@@ -1,76 +1,60 @@
 {
   "name": "japan-rwa",
-  "version": "1.0.0",
-  "description": "Japanese Real Estate Tokenization System",
-  "main": "index.js",
-  "packageManager": "yarn@4.1.1",
-  "engines": {
-    "node": ">=18.0.0",
-    "yarn": ">=4.0.0"
-  },
+  "version": "0.1.0",
+  "description": "Japanese Real Estate Tokenization Platform",
+  "private": true,
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:coverage": "hardhat coverage",
-    "test:gas": "hardhat test --gas",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,ts,json,md}\"",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "deploy:testnet": "hardhat run scripts/deploy.js --network testnet",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "verify:testnet": "hardhat run scripts/verify-deployment.js --network testnet",
     "verify:mainnet": "hardhat run scripts/verify-deployment.js --network mainnet",
-    "server:start": "node server/src/index.js",
-    "server:dev": "nodemon server/src/index.js",
-    "monitor:start": "node monitor/src/index.js",
-    "monitor:dev": "nodemon monitor/src/index.js",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "prepare": "husky install",
-    "analyze": "hardhat analyze",
-    "size": "hardhat size-contracts"
+    "dev:server": "cd server && yarn dev",
+    "dev:monitor": "cd monitor && yarn dev"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.0",
-    "@openzeppelin/contracts-upgradeable": "^4.9.0",
-    "@openzeppelin/hardhat-upgrades": "^1.22.0",
-    "dotenv": "^16.0.3",
+    "@openzeppelin/contracts": "^5.0.1",
+    "@openzeppelin/contracts-upgradeable": "^5.0.1",
+    "dotenv": "^16.4.5",
     "ethers": "^6.11.1",
-    "hardhat": "^2.14.0",
     "express": "^4.18.3",
-    "winston": "^3.11.0",
-    "winston-daily-rotate-file": "^4.7.1"
+    "winston": "^3.11.0"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "^3.0.8",
-    "@nomicfoundation/hardhat-verify": "^2.0.13",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.1.0",
-    "@typescript-eslint/parser": "^7.1.0",
-    "chai": "^4.3.7",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@openzeppelin/hardhat-upgrades": "^1.28.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.11",
+    "@types/express": "^4.17.21",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.24",
+    "chai": "^4.3.10",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
-    "eslint-plugin-solidity": "^1.0.0",
-    "ethereum-waffle": "^4.0.10",
+    "hardhat": "^2.20.1",
     "hardhat-gas-reporter": "^1.0.10",
-    "husky": "^9.0.11",
-    "lint-staged": "^15.2.2",
-    "mocha": "^10.2.0",
-    "nodemon": "^3.1.0",
     "prettier": "^3.2.5",
+    "prettier-plugin-solidity": "^1.3.1",
     "solidity-coverage": "^0.8.5",
-    "solidity-parser": "^0.16.1"
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.0",
+    "typescript": "^5.3.3"
   },
-  "lint-staged": {
-    "*.{js,ts}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md}": [
-      "prettier --write"
-    ],
-    "*.sol": [
-      "prettier --write"
-    ]
-  }
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "packageManager": "yarn@1.22.19"
 }

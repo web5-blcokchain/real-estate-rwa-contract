@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { logger } = require("../shared/src/logger");
 const { ethers, upgrades } = require("hardhat");
+const envConfig = require("../shared/src/config/env");
 
 async function verifyContract(address, name) {
   try {
@@ -16,6 +17,25 @@ async function verifyContract(address, name) {
   }
 }
 
+async function deployTestToken(signer) {
+  logger.info("Deploying TestToken...");
+  const TestToken = await ethers.getContractFactory("TestToken");
+  const testToken = await TestToken.deploy(
+    "Test Token",
+    "TEST",
+    ethers.utils.parseEther("1000000") // 部署 1,000,000 个测试代币
+  );
+  await testToken.deployed();
+  logger.info("TestToken deployed at:", testToken.address);
+  
+  // 验证测试代币合约
+  if (envConfig.getBoolean('CONTRACT_VERIFY') && hre.network.name !== "hardhat") {
+    await verifyContract(testToken.address, "TestToken");
+  }
+  
+  return testToken;
+}
+
 async function main() {
   try {
     logger.info("Starting system deployment...");
@@ -23,6 +43,9 @@ async function main() {
     // 获取部署账户
     const [signer] = await ethers.getSigners();
     logger.info("Deployer address:", signer.address);
+    
+    // 部署测试代币
+    const testToken = await deployTestToken(signer);
     
     // 部署 SimpleSystemDeployer
     logger.info("Deploying SimpleSystemDeployer...");
@@ -33,9 +56,22 @@ async function main() {
     await systemDeployer.deployed();
     logger.info("SimpleSystemDeployer deployed at:", systemDeployer.address);
     
+    // 获取合约初始化参数
+    const initParams = envConfig.getContractInitParams();
+    
+    // 将测试代币添加到支持的支付代币列表中
+    const supportedTokens = [...initParams.reward.supportedPaymentTokens, testToken.address];
+    initParams.reward.supportedPaymentTokens = supportedTokens;
+    
     // 使用 SimpleSystemDeployer 部署系统
     logger.info("Deploying system using SimpleSystemDeployer...");
-    const tx = await systemDeployer.deploySystem();
+    const tx = await systemDeployer.deploySystem(
+      initParams.role,
+      initParams.trading,
+      initParams.reward,
+      initParams.token,
+      initParams.system
+    );
     await tx.wait();
     logger.info("System deployment transaction confirmed");
     
@@ -54,7 +90,7 @@ async function main() {
     logger.info("System status:", systemStatus);
     
     // 验证合约
-    if (hre.network.name !== "hardhat") {
+    if (envConfig.getBoolean('CONTRACT_VERIFY') && hre.network.name !== "hardhat") {
       logger.info("Verifying contracts on Etherscan...");
       await verifyContract(systemDeployer.address, "SimpleSystemDeployer");
       await verifyContract(system.address, "SimpleRealEstateSystem");
@@ -80,8 +116,10 @@ async function main() {
         tokenFactory: tokenFactory.address,
         tradingManager: tradingManager.address,
         rewardManager: rewardManager.address,
+        testToken: testToken.address
       },
-      systemStatus: systemStatus
+      systemStatus: systemStatus,
+      initializationParams: initParams
     };
     
     // 保存部署信息到 config/deployment.json
@@ -108,7 +146,8 @@ async function main() {
       "TradingManager",
       "RewardManager",
       "SimpleRealEstateSystem",
-      "RealEstateFacade"
+      "RealEstateFacade",
+      "TestToken"
     ];
 
     for (const contractName of contracts) {
@@ -142,6 +181,45 @@ ${deploymentInfo.systemStatus}
 ${Object.entries(deploymentInfo.contracts)
   .map(([key, value]) => `- ${key}: ${value}`)
   .join("\n")}
+
+## 初始化参数
+### 角色管理
+- 管理员地址: ${initParams.role.adminAddresses.join(", ")}
+- 经理地址: ${initParams.role.managerAddresses.join(", ")}
+- 操作员地址: ${initParams.role.operatorAddresses.join(", ")}
+
+### 交易管理
+- 交易费接收地址: ${initParams.trading.tradingFeeReceiver}
+- 交易费率: ${initParams.trading.tradingFeeRate} 基点
+- 最小交易金额: ${initParams.trading.minTradeAmount}
+
+### 奖励管理
+- 奖励费接收地址: ${initParams.reward.rewardFeeReceiver}
+- 平台费率: ${initParams.reward.platformFeeRate} 基点
+- 维护费率: ${initParams.reward.maintenanceFeeRate} 基点
+- 最小分配阈值: ${initParams.reward.minDistributionThreshold}
+- 支持的支付代币: ${initParams.reward.supportedPaymentTokens.join(", ")}
+
+### 代币配置
+- 最小转账金额: ${initParams.token.minTransferAmount}
+
+### 系统配置
+- 启动时暂停: ${initParams.system.startPaused}
+
+### 代币工厂配置
+- 名称: ${initParams.tokenFactory.name}
+- 符号: ${initParams.tokenFactory.symbol}
+- 初始供应量: ${initParams.tokenFactory.initialSupply}
+
+### 房产管理配置
+- 国家: ${initParams.property.country}
+- 元数据URI: ${initParams.property.metadataURI}
+
+### 测试代币配置
+- 名称: Test Token
+- 符号: TEST
+- 初始供应量: 1,000,000
+- 部署地址: ${testToken.address}
 
 ## 部署产物
 - 部署信息: \`config/deployment.json\`

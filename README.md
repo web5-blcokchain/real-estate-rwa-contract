@@ -91,6 +91,26 @@ cp config/env/.env.example config/env/.env
 - 网络配置：RPC URL、Chain ID等
 - Gas配置：Gas Limit、Gas Price等
 
+### 开发工具配置
+1. ESLint 配置
+```bash
+# 运行代码检查
+yarn lint
+
+# 自动修复代码问题
+yarn lint:fix
+```
+
+2. Prettier 配置
+```bash
+# 格式化代码
+yarn format
+```
+
+3. TypeScript 配置
+- 项目使用 TypeScript 进行开发
+- 配置文件位于 `tsconfig.json`
+
 ## 快速启动
 
 ### 本地开发

@@ -1,26 +1,120 @@
+// 导入依赖
 require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-verify");
 require("@nomicfoundation/hardhat-ethers");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
 
+// 加载环境配置
 const envConfig = require("./shared/src/config/env");
-envConfig.load();
 
+// 获取账户配置
+const getAccounts = () => {
+  const privateKey = envConfig.get('DEPLOYER_PRIVATE_KEY');
+  const formattedKey = privateKey.replace(/^0x/, '');
+  if (formattedKey.length !== 64) {
+    throw new Error(`Invalid private key length: ${formattedKey.length}, expected 64 characters`);
+  }
+  return [formattedKey];
+};
+
+// 获取基础网络配置
+const getBaseConfig = () => ({
+  accounts: getAccounts(),
+  gas: "auto",
+  gasPrice: "auto"
+});
+
+// 获取特定网络配置
+const getNetworkConfig = (network) => {
+  const baseConfig = getBaseConfig();
+
+  switch (network) {
+    case 'hardhat':
+      return {
+        ...baseConfig,
+        chainId: envConfig.getInt('HARDHAT_CHAIN_ID'),
+        blockGasLimit: 30000000,
+        allowUnlimitedContractSize: false,
+        loggingEnabled: false,
+        // 为 hardhat 网络使用默认账户
+        accounts: {
+          mnemonic: "test test test test test test test test test test test junk",
+          path: "m/44'/60'/0'/0",
+          initialIndex: 0,
+          count: 20,
+          accountsBalance: "10000000000000000000000"
+        }
+      };
+    case 'testnet':
+      return {
+        ...baseConfig,
+        url: envConfig.get('TESTNET_RPC_URL'),
+        chainId: envConfig.getInt('TESTNET_CHAIN_ID')
+      };
+    case 'mainnet':
+      return {
+        ...baseConfig,
+        url: envConfig.get('MAINNET_RPC_URL'),
+        chainId: envConfig.getInt('MAINNET_CHAIN_ID')
+      };
+    default:
+      throw new Error(`Unsupported network: ${network}`);
+  }
+};
+
+// Hardhat 配置
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
+  // Solidity 编译器配置
   solidity: {
     version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: envConfig.getInt('CONTRACT_OPTIMIZER_RUNS'),
       },
     },
   },
-  networks: envConfig.getNetworkConfig(),
-  etherscan: envConfig.getEtherscanConfig(),
-  gasReporter: envConfig.getGasReporterConfig(),
-  paths: envConfig.getPathsConfig(),
-  mocha: envConfig.getMochaConfig(),
+
+  // 网络配置
+  networks: {
+    hardhat: getNetworkConfig('hardhat'),
+    testnet: getNetworkConfig('testnet'),
+    mainnet: getNetworkConfig('mainnet')
+  },
+
+  // Etherscan 配置
+  etherscan: {
+    apiKey: envConfig.get('ETHERSCAN_API_KEY'),
+    customChains: [
+      {
+        network: "testnet",
+        chainId: envConfig.getInt('TESTNET_CHAIN_ID'),
+        urls: {
+          apiURL: envConfig.get('ETHERSCAN_API_URL'),
+          browserURL: envConfig.get('ETHERSCAN_BROWSER_URL'),
+        },
+      },
+    ],
+  },
+
+  // Gas 报告配置
+  gasReporter: {
+    enabled: envConfig.getBoolean('REPORT_GAS'),
+    currency: "USD",
+  },
+
+  // 路径配置
+  paths: {
+    sources: "./contracts",
+    artifacts: "./artifacts",
+    cache: "./cache",
+    deployments: "./deployments",
+  },
+
+  // Mocha 测试配置
+  mocha: {
+    timeout: 40000,
+  },
 };

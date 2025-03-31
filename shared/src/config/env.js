@@ -1,158 +1,230 @@
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const dotenv = require('dotenv');
 
 class EnvConfig {
   constructor() {
+    // 获取项目根目录（shared 目录的父目录的父目录）
+    this.projectRoot = path.resolve(__dirname, '../../..');
+    
+    // 获取当前环境
     this.env = process.env.NODE_ENV || 'development';
-    this.config = {};
-    this.configDir = path.join(__dirname, '../../../config/env');
-  }
-
-  load() {
-    // 加载基础配置
-    this.loadBaseConfig();
-
-    // 加载环境特定配置
+    
+    // 加载环境配置
     this.loadEnvConfig();
-
-    // 设置环境变量
-    this.setEnvVars();
-
-    return this.config;
-  }
-
-  loadBaseConfig() {
-    const basePath = path.join(this.configDir, '.env');
-    if (fs.existsSync(basePath)) {
-      const result = dotenv.config({ path: basePath });
-      if (result.error) {
-        throw new Error(`Error loading base config: ${result.error}`);
-      }
-      this.config = { ...process.env };
-    }
+    
+    // 验证必需的环境变量
+    this.validateRequiredEnvVars();
   }
 
   loadEnvConfig() {
-    const envPath = path.join(this.configDir, `${this.env}.env`);
-    if (fs.existsSync(envPath)) {
-      const result = dotenv.config({ path: envPath });
-      if (result.error) {
-        throw new Error(`Error loading ${this.env} config: ${result.error}`);
-      }
-      this.config = { ...this.config, ...process.env };
+    // 基础配置文件路径
+    const baseConfigPath = path.join(this.projectRoot, 'config', 'env', '.env');
+    // 环境特定配置文件路径
+    const envConfigPath = path.join(this.projectRoot, 'config', 'env', `${this.env}.env`);
+
+    // 检查配置文件是否存在
+    if (!fs.existsSync(baseConfigPath)) {
+      throw new Error(`Base configuration file not found at ${baseConfigPath}`);
+    }
+
+    // 加载基础配置
+    const baseConfig = dotenv.parse(fs.readFileSync(baseConfigPath));
+    this.config = { ...baseConfig };
+
+    // 如果存在环境特定配置，则加载并覆盖基础配置
+    if (fs.existsSync(envConfigPath)) {
+      const envConfig = dotenv.parse(fs.readFileSync(envConfigPath));
+      this.config = { ...this.config, ...envConfig };
     }
   }
 
-  setEnvVars() {
-    Object.entries(this.config).forEach(([key, value]) => {
-      process.env[key] = value;
-    });
-  }
+  // 验证必需的环境变量
+  validateRequiredEnvVars() {
+    const requiredVars = {
+      // 网络配置
+      HARDHAT_CHAIN_ID: 'number',
+      TESTNET_CHAIN_ID: 'number',
+      MAINNET_CHAIN_ID: 'number',
+      TESTNET_RPC_URL: 'string',
+      MAINNET_RPC_URL: 'string',
+      
+      // 账户配置
+      DEPLOYER_PRIVATE_KEY: 'string',
+      
+      // Etherscan配置
+      ETHERSCAN_API_KEY: 'string',
+      ETHERSCAN_API_URL: 'string',
+      ETHERSCAN_BROWSER_URL: 'string',
+      
+      // 合约初始化参数
+      ADMIN_ADDRESSES: 'array',
+      MANAGER_ADDRESSES: 'array',
+      OPERATOR_ADDRESSES: 'array',
+      TRADING_FEE_RECEIVER: 'address',
+      TRADING_FEE_RATE: 'number',
+      MIN_TRADE_AMOUNT: 'number',
+      REWARD_FEE_RECEIVER: 'address',
+      PLATFORM_FEE_RATE: 'number',
+      MAINTENANCE_FEE_RATE: 'number',
+      MIN_DISTRIBUTION_THRESHOLD: 'number',
+      SUPPORTED_PAYMENT_TOKENS: 'array',
+      MIN_TRANSFER_AMOUNT: 'number',
+      SYSTEM_START_PAUSED: 'boolean',
+      TOKEN_FACTORY_NAME: 'string',
+      TOKEN_FACTORY_SYMBOL: 'string',
+      TOKEN_FACTORY_INITIAL_SUPPLY: 'number',
+      PROPERTY_COUNTRY: 'string',
+      PROPERTY_METADATA_URI: 'string'
+    };
 
-  getConfig() {
-    return this.config;
-  }
-
-  getEnv() {
-    return this.env;
-  }
-
-  // 获取网络配置
-  getNetworkConfig() {
-    return {
-      hardhat: {
-        url: this.config.HARDHAT_RPC_URL,
-        chainId: parseInt(this.config.HARDHAT_CHAIN_ID),
-        accounts: [this.config.DEPLOYER_PRIVATE_KEY],
-        blockGasLimit: 30000000,
-        gas: "auto",
-        gasPrice: "auto",
-        allowUnlimitedContractSize: false,
-        loggingEnabled: false
-      },
-      testnet: {
-        url: this.config.TESTNET_RPC_URL,
-        chainId: parseInt(this.config.TESTNET_CHAIN_ID),
-        accounts: [this.config.DEPLOYER_PRIVATE_KEY],
-        gas: "auto",
-        gasPrice: "auto"
-      },
-      mainnet: {
-        url: this.config.MAINNET_RPC_URL,
-        chainId: parseInt(this.config.MAINNET_CHAIN_ID),
-        accounts: [this.config.DEPLOYER_PRIVATE_KEY],
-        gas: "auto",
-        gasPrice: "auto"
+    for (const [key, type] of Object.entries(requiredVars)) {
+      if (!this.config[key]) {
+        throw new Error(`Missing required environment variable: ${key}`);
       }
-    };
+
+      // 类型验证
+      switch (type) {
+        case 'number':
+          if (isNaN(Number(this.config[key]))) {
+            throw new Error(`Invalid number value for ${key}`);
+          }
+          break;
+        case 'boolean':
+          if (this.config[key].toLowerCase() !== 'true' && this.config[key].toLowerCase() !== 'false') {
+            throw new Error(`Invalid boolean value for ${key}`);
+          }
+          break;
+        case 'array':
+          if (!Array.isArray(this.config[key].split(','))) {
+            throw new Error(`Invalid array value for ${key}`);
+          }
+          break;
+        case 'address':
+          if (!this.isValidAddress(this.config[key])) {
+            throw new Error(`Invalid Ethereum address for ${key}`);
+          }
+          break;
+      }
+    }
   }
 
-  // 获取 Etherscan 配置
-  getEtherscanConfig() {
+  // 验证以太坊地址
+  isValidAddress(address) {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
+  }
+
+  // 基础配置获取方法
+  get(key) {
+    const value = this.config[key];
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${key}`);
+    }
+    return value;
+  }
+
+  getOptional(key, defaultValue) {
+    return this.config[key] || defaultValue;
+  }
+
+  getInt(key) {
+    return parseInt(this.get(key));
+  }
+
+  getBoolean(key) {
+    return this.get(key).toLowerCase() === 'true';
+  }
+
+  getArray(key) {
+    return this.get(key).split(',').map(item => item.trim());
+  }
+
+  getFloat(key) {
+    return parseFloat(this.get(key));
+  }
+
+  // 合约配置
+  getContractConfig() {
     return {
-      apiKey: this.config.ETHERSCAN_API_KEY,
-      customChains: [
-        {
-          network: "testnet",
-          chainId: parseInt(this.config.TESTNET_CHAIN_ID),
-          urls: {
-            apiURL: this.config.ETHERSCAN_API_URL,
-            browserURL: this.config.ETHERSCAN_BROWSER_URL,
-          },
-        },
-      ],
+      optimizer: {
+        enabled: true,
+        runs: this.getInt('CONTRACT_OPTIMIZER_RUNS'),
+      },
     };
   }
 
-  // 获取 Gas 报告配置
-  getGasReporterConfig() {
-    return {
-      enabled: process.env.REPORT_GAS !== undefined,
-      currency: "USD",
-    };
-  }
-
-  // 获取路径配置
-  getPathsConfig() {
-    return {
-      sources: "./contracts",
-      artifacts: "./artifacts",
-      cache: "./cache",
-      deployments: "./deployments",
-    };
-  }
-
-  // 获取 Mocha 配置
-  getMochaConfig() {
-    return {
-      timeout: 40000,
-    };
-  }
-
-  // 获取日志配置
-  getLogConfig() {
-    return {
-      level: this.config.LOG_LEVEL || 'info',
-      dir: this.config.LOG_DIR || 'logs',
-    };
-  }
-
-  // 获取服务器配置
+  // 服务器配置
   getServerConfig() {
     return {
-      port: parseInt(this.config.SERVER_PORT) || 3000,
-      host: this.config.SERVER_HOST || 'localhost',
+      port: this.getInt('PORT'),
+      host: this.get('HOST'),
     };
   }
 
-  // 获取监控配置
+  // 日志配置
+  getLogConfig() {
+    return {
+      level: this.get('LOG_LEVEL'),
+      dir: this.get('LOG_DIR'),
+    };
+  }
+
+  // 监控配置
   getMonitorConfig() {
     return {
-      interval: parseInt(this.config.MONITOR_INTERVAL) || 60000,
-      blockConfirmations: parseInt(this.config.BLOCK_CONFIRMATIONS) || 12,
+      interval: this.getInt('MONITOR_INTERVAL'),
+      alertThreshold: this.getFloat('ALERT_THRESHOLD'),
+    };
+  }
+
+  // 业务配置
+  getBusinessConfig() {
+    return {
+      minInvestmentAmount: this.getFloat('MIN_INVESTMENT_AMOUNT'),
+      maxInvestmentAmount: this.getFloat('MAX_INVESTMENT_AMOUNT'),
+      rewardRate: this.getFloat('REWARD_RATE'),
+    };
+  }
+
+  // 获取合约初始化参数
+  getContractInitParams() {
+    return {
+      role: {
+        adminAddresses: this.getArray('ADMIN_ADDRESSES'),
+        managerAddresses: this.getArray('MANAGER_ADDRESSES'),
+        operatorAddresses: this.getArray('OPERATOR_ADDRESSES')
+      },
+      trading: {
+        tradingFeeReceiver: this.get('TRADING_FEE_RECEIVER'),
+        tradingFeeRate: this.getInt('TRADING_FEE_RATE'),
+        minTradeAmount: this.getFloat('MIN_TRADE_AMOUNT')
+      },
+      reward: {
+        rewardFeeReceiver: this.get('REWARD_FEE_RECEIVER'),
+        platformFeeRate: this.getInt('PLATFORM_FEE_RATE'),
+        maintenanceFeeRate: this.getInt('MAINTENANCE_FEE_RATE'),
+        minDistributionThreshold: this.getFloat('MIN_DISTRIBUTION_THRESHOLD'),
+        supportedPaymentTokens: this.getArray('SUPPORTED_PAYMENT_TOKENS')
+      },
+      token: {
+        minTransferAmount: this.getFloat('MIN_TRANSFER_AMOUNT')
+      },
+      system: {
+        startPaused: this.getBoolean('SYSTEM_START_PAUSED')
+      },
+      tokenFactory: {
+        name: this.get('TOKEN_FACTORY_NAME'),
+        symbol: this.get('TOKEN_FACTORY_SYMBOL'),
+        initialSupply: this.getInt('TOKEN_FACTORY_INITIAL_SUPPLY')
+      },
+      property: {
+        country: this.get('PROPERTY_COUNTRY'),
+        metadataURI: this.get('PROPERTY_METADATA_URI')
+      }
     };
   }
 }
 
-module.exports = new EnvConfig(); 
+// 创建单例实例
+const envConfig = new EnvConfig();
+module.exports = envConfig; 
