@@ -98,7 +98,7 @@ describe("完整不动产流程集成测试", function () {
     
     // 5. 部署 PropertyToken (仅作为工厂模板)
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    const tokenFactory = await upgrades.deployProxy(PropertyToken, [
+    const propertyToken = await upgrades.deployProxy(PropertyToken, [
       ethers.ZeroHash,
       "Template",
       "TPL",
@@ -108,7 +108,7 @@ describe("完整不动产流程集成测试", function () {
     ], {
       kind: "uups",
     });
-    await tokenFactory.waitForDeployment();
+    await propertyToken.waitForDeployment();
     
     // 6. 部署 RewardManager
     const RewardManager = await ethers.getContractFactory("RewardManager");

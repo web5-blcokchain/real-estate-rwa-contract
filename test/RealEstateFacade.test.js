@@ -5,7 +5,7 @@ describe("RealEstateFacade", function () {
   let system;
   let roleManager;
   let propertyManager;
-  let tokenFactory;
+  let propertyToken;
   let tradingManager;
   let rewardManager;
   let facade;
@@ -31,7 +31,7 @@ describe("RealEstateFacade", function () {
     
     // 部署 PropertyToken
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    tokenFactory = await upgrades.deployProxy(PropertyToken, [], {
+    propertyToken = await upgrades.deployProxy(PropertyToken, [], {
       kind: "uups",
     });
     
@@ -54,7 +54,7 @@ describe("RealEstateFacade", function () {
       [
         roleManager.address,
         propertyManager.address,
-        tokenFactory.address,
+        propertyToken.address,
         tradingManager.address,
         rewardManager.address,
       ],
@@ -71,7 +71,7 @@ describe("RealEstateFacade", function () {
         system.address,
         roleManager.address,
         propertyManager.address,
-        tokenFactory.address,
+        propertyToken.address,
         tradingManager.address,
         rewardManager.address,
       ],

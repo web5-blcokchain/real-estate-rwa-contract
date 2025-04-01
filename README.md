@@ -1,482 +1,188 @@
 # 日本房地产代币化平台 (Japan Real Estate Tokenization Platform)
 
-## 项目背景
-本项目旨在通过区块链技术实现日本房地产的代币化，使投资者能够以更灵活的方式参与日本房地产市场。通过智能合约实现房地产所有权的数字化表示，并提供安全、透明的交易平台。
+## 项目概述
 
-## 核心功能
-- 房地产代币化：将实体房地产转换为可交易的代币
-- 智能合约管理：自动化的所有权转移和收益分配
-- 交易平台：支持代币的买卖和转让
-- 收益分配：自动化的租金和收益分配机制
-- 权限管理：多级权限控制系统
-- 监控系统：实时监控区块链数据和系统状态
+本项目实现了基于区块链的房地产代币化平台，专注于日本房地产市场，使投资者能够通过智能合约以更灵活、透明的方式参与房地产投资。系统支持房产代币化、交易、收益分配等全流程操作。
+
+### 核心功能
+
+- **房地产代币化**：将房产资产转换为区块链上可交易的代币
+- **交易管理**：支持代币的买卖、转让和交易记录追踪
+- **收益分配**：自动化的租金收益和分红发放系统
+- **权限控制**：多级角色权限管理
+- **可升级合约**：支持合约升级以适应未来需求变化
+- **系统监控**：区块链交易监控和系统状态追踪
 
 ## 技术栈
-- 智能合约：Solidity 0.8.20
-- 开发框架：Hardhat
-- 网络库：ethers.js V6
-- 测试框架：Mocha, Chai
-- 代码质量：ESLint, Prettier
-- 监控工具：Winston
-- 部署工具：Hardhat Ignition
-- 验证工具：Etherscan
+
+- **智能合约**：Solidity 0.8.20
+- **开发框架**：Hardhat
+- **网络库**：ethers.js V6
+- **测试框架**：Mocha, Chai
+- **API服务器**：Express.js
+- **日志系统**：Winston
+- **文档工具**：Swagger
 
 ## 项目结构
+
 ```
-├── contracts/                 # 智能合约源码
-│   ├── core/                 # 核心合约
-│   ├── interfaces/           # 接口定义
-│   ├── libraries/           # 库合约
-│   └── SimpleSystemDeployer.sol  # 系统部署器
-├── shared/                   # 共享代码
+├── contracts/             # 智能合约代码
+│   ├── RealEstateFacade.sol    # 系统门面合约
+│   ├── RealEstateSystem.sol    # 核心系统合约
+│   ├── PropertyManager.sol     # 房产管理合约
+│   ├── PropertyToken.sol       # 房产代币合约
+│   ├── TradingManager.sol      # 交易管理合约
+│   ├── RewardManager.sol       # 收益管理合约
+│   ├── RoleManager.sol         # 角色权限管理合约
+│   └── utils/                 # 工具合约和库
+├── scripts/               # 部署和管理脚本
+├── shared/                # 共享代码库
 │   └── src/
-│       ├── config/          # 配置管理
-│       ├── logger/          # 日志系统
-│       └── utils/           # 工具函数
-├── server/                   # 服务器代码
-│   └── src/
-│       ├── config/          # 服务器配置
-│       ├── controllers/     # 控制器
-│       ├── middleware/      # 中间件
-│       ├── models/          # 数据模型
-│       ├── routes/          # 路由
-│       └── services/        # 业务逻辑
-├── monitor/                  # 监控系统
-│   └── src/
-│       ├── config/          # 监控配置
-│       ├── services/        # 监控服务
-│       └── utils/           # 工具函数
-├── scripts/                  # 部署和测试脚本
-├── test/                     # 测试文件
-├── config/                   # 配置文件
-│   └── env/                 # 环境配置
-├── docs/                     # 文档
-│   ├── dev/                 # 开发文档
-│   └── deploy/              # 部署文档
-└── logs/                     # 日志文件
+│       ├── config/        # 配置管理
+│       ├── utils/         # 工具函数
+│       └── logger.js      # 日志系统
+├── http-server/           # REST API服务器
+├── config/                # 项目配置
+│   └── abi/              # 合约ABI目录
+├── test/                  # 测试代码
+├── docs/                  # 项目文档
+└── logs/                  # 日志文件
 ```
 
-## 开发环境配置
+## 快速开始
 
-### 前置要求
+### 环境要求
+
 - Node.js >= 18.0.0
 - Yarn >= 1.22.0
 - Git
 
-### 安装依赖
-```bash
-# 安装项目依赖
-yarn install
+### 安装
 
-# 安装全局依赖（可选）
-yarn global add hardhat
+```bash
+# 克隆仓库
+git clone https://github.com/your-org/japan-rwa.git
+cd japan-rwa
+
+# 安装依赖
+yarn install
 ```
 
 ### 环境配置
-1. 复制环境配置模板：
+
+1. 复制环境变量模板：
+
 ```bash
-cp config/env/.env.example config/env/.env
+cp .env.example .env
 ```
 
-2. 配置环境变量：
-- 在 `config/env/.env` 中设置必要的环境变量
-- 支持多环境配置：development、testnet、mainnet
+2. 编辑 `.env` 文件，设置必要的环境变量：
+   - 区块链节点RPC URL
+   - 部署私钥
+   - 合约初始化参数
+   - 其他配置项
 
-### 环境选择与使用
-项目支持以下三种环境配置：
-- `development`: 开发环境（本地开发和测试）
-- `testnet`: 测试网环境（Sepolia等测试网络）
-- `mainnet`: 主网环境（以太坊主网）
+### 合约编译
 
-对应的配置文件位于：
-```
-config/env/.env             # 基础配置文件（所有环境共享）
-config/env/development.env  # 开发环境特定配置
-config/env/testnet.env      # 测试网环境特定配置
-config/env/mainnet.env      # 主网环境特定配置
-```
-
-环境选择方式：
-缺省是development环境！！！
-1. 通过`NODE_ENV`环境变量指定：
-```bash
-# Linux/Mac
-export NODE_ENV=development
-# 或
-export NODE_ENV=testnet
-# 或
-export NODE_ENV=mainnet
-
-# Windows
-set NODE_ENV=development
-```
-
-2. 通过命令行参数指定：
-```bash
-# 部署到测试网
-yarn hardhat run scripts/deploy.ts --network sepolia
-# 等同于使用testnet.env配置
-
-# 部署到主网
-yarn hardhat run scripts/deploy.ts --network mainnet
-# 等同于使用mainnet.env配置
-```
-
-3. 配置优先级：
-   - 环境特定配置文件（如`development.env`）中的设置会覆盖基础配置文件（`.env`）中的同名设置
-   - 命令行参数优先级最高
-
-### 配置说明
-- `NODE_ENV`: 运行环境（development/testnet/mainnet）
-- `LOG_LEVEL`: 日志级别（debug/info/warn/error）
-- `LOG_DIR`: 日志目录
-- `DEPLOYER_PRIVATE_KEY`: 部署者私钥
-- `ADMIN_PRIVATE_KEY`, `MANAGER_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY`: 各角色私钥
-- `ADMIN_ADDRESSES`, `MANAGER_ADDRESSES`, `OPERATOR_ADDRESSES`: 各角色地址列表
-- `ETHERSCAN_API_KEY`: Etherscan API密钥
-- `BLOCK_CONFIRMATIONS`: 区块确认数（默认：5）
-- 更多配置详见 `config/env/README.md`
-
-### 开发工具配置
-1. ESLint 配置
-```bash
-# 运行代码检查
-yarn lint
-
-# 自动修复代码问题
-yarn lint:fix
-```
-
-2. Prettier 配置
-```bash
-# 格式化代码
-yarn format
-```
-
-3. TypeScript 配置
-- 项目使用 TypeScript 进行开发
-- 配置文件位于 `tsconfig.json`
-
-## 合约开发命令
-
-### 编译合约
 ```bash
 # 编译所有合约
-yarn hardhat compile
+yarn compile
 
 # 清理缓存并重新编译
-yarn hardhat clean && yarn hardhat compile
-
-# 编译指定合约
-yarn hardhat compile --config hardhat.config.ts
+yarn hardhat clean && yarn compile
 ```
-
-### 部署合约
-
-```bash
-# 部署到本地网络（使用development环境配置）
-yarn hardhat run scripts/deploy-step.js --network localhost
-
-# 部署到测试网（使用testnet环境配置）
-yarn hardhat run scripts/deploy-step.js --network sepolia
-
-# 部署到主网（使用mainnet环境配置）
-yarn hardhat run scripts/deploy-step.js --network mainnet
-
-# 使用Ignition部署
-yarn hardhat ignition deploy ./ignition/modules/PropertySystem.js --network sepolia
-```
-
-### 合约验证
-```bash
-# 验证单个合约（使用testnet环境配置）
-yarn hardhat verify --network sepolia 0xContractAddress "Constructor Arg 1" "Constructor Arg 2"
-
-# 验证代理合约
-yarn hardhat verify:proxy --network sepolia 0xProxyAddress
-
-# 批量验证合约
-yarn hardhat run scripts/verify.ts --network sepolia
-```
-
-### 合约测试
-```bash
-# 运行所有测试（默认使用development环境配置）
-yarn hardhat test
-
-# 运行特定测试文件
-yarn hardhat test test/PropertyManager.test.js
-
-# 运行带标签的测试
-yarn hardhat test --grep "PropertyManager"
-
-# 使用指定环境运行测试
-NODE_ENV=testnet yarn hardhat test
-
-# 测试覆盖率报告
-yarn hardhat coverage
-
-# 生成测试覆盖率报告并在浏览器中查看
-yarn hardhat coverage && open coverage/index.html
-```
-
-### 调试与分析
-```bash
-# 本地节点（开发模式，使用development环境配置）
-yarn hardhat node
-
-# 运行控制台（交互模式）
-yarn hardhat console --network localhost
-
-# 运行脚本
-yarn hardhat run scripts/debug.js --network localhost
-
-# 调试特定交易
-yarn hardhat debug 0xTransactionHash --network sepolia
-
-# Gas 报告
-REPORT_GAS=true yarn hardhat test
-
-# Size 报告
-yarn hardhat size-contracts
-```
-
-### 脚本执行
-```bash
-# 执行合约交互脚本（使用development环境配置）
-yarn hardhat run scripts/interact.js --network localhost
-
-# 执行数据查询脚本（使用testnet环境配置）
-yarn hardhat run scripts/query.js --network sepolia
-
-# 执行管理员操作（使用mainnet环境配置）
-yarn hardhat run scripts/admin/setFees.js --network mainnet
-```
-
-### 其他实用命令
-```bash
-# 查看可用任务
-yarn hardhat help
-
-# 查看账户信息
-yarn hardhat accounts
-
-# 检查ABI是否缺少函数
-yarn hardhat check-abi
-
-# 估算部署成本
-yarn hardhat estimate-deploy-cost
-
-# 生成typechain类型
-yarn hardhat typechain
-```
-
-## 快速启动
 
 ### 本地开发
+
 ```bash
-# 启动本地节点（使用development环境配置）
-yarn hardhat node
+# 启动本地测试节点
+yarn start:node
 
-# 编译合约
-yarn hardhat compile
+# 部署到本地网络
+yarn deploy:local
 
-# 运行测试
+# 验证部署
+yarn hardhat run scripts/verify-deployment.js --network localhost
+```
+
+### 测试
+
+```bash
+# 运行所有测试
 yarn test
 
-# 启动开发服务器
-yarn dev:server
-
-# 启动监控系统
-yarn dev:monitor
+# 生成测试覆盖率报告
+yarn test:coverage
 ```
 
 ### 部署
+
 ```bash
-# 部署到测试网（使用testnet环境配置）
+# 部署到测试网
 yarn deploy:testnet
 
-# 部署到主网（使用mainnet环境配置）
+# 部署到主网
 yarn deploy:mainnet
 
-# 验证合约
+# 验证测试网部署
 yarn verify:testnet
+
+# 验证主网部署
 yarn verify:mainnet
 ```
 
+### API服务器
 
-## 开发指南
+```bash
+# 启动HTTP服务器
+yarn dev:http
+```
 
-### 代码规范
-- 使用 ESLint 进行代码检查
-- 使用 Prettier 进行代码格式化
-- 遵循 Solidity 0.8.20 最佳实践
-- 使用 TypeScript 进行类型检查
+详细文档请参阅 [http-server/README.md](./http-server/README.md)
 
-### 测试
-- 编写单元测试和集成测试
-- 使用 Hardhat 测试框架
-- 运行测试覆盖率报告
+## 模块文档
 
-### 文档
-- 更新开发文档（docs/dev/）
-- 记录部署信息（docs/deploy/）
-- 维护 CHANGELOG.md
+- [合约架构设计](./docs/architecture.md)
+- [共享模块文档](./shared/README.md)
+- [配置说明](./config/README.md)
+- [HTTP API服务器](./http-server/README.md)
+- [部署指南](./docs/deployment.md)
+
+## 合约架构
+
+系统由以下主要合约组成：
+
+1. **RealEstateFacade** - 统一入口，提供所有业务操作接口
+2. **RealEstateSystem** - 核心系统合约，管理各组件状态
+3. **PropertyManager** - 管理房产资产信息和状态
+4. **PropertyToken** - 实现房产代币化功能
+5. **TradingManager** - 管理代币交易和订单系统
+6. **RewardManager** - 管理收益分配和分红
+7. **RoleManager** - 管理系统角色和权限
 
 ## 部署流程
-1. 环境准备
-   - 配置环境变量（选择适合的环境：development、testnet或mainnet）
-   - 准备部署账户
-   - 确保足够的原生代币
 
-2. 合约部署
-   - 编译合约
-   - 部署系统
-   - 初始化参数
-   - 验证合约
+部署系统的完整步骤：
 
-3. 系统配置
-   - 设置权限
-   - 配置参数
-   - 启动监控
+1. 部署 `RoleManager` 合约
+2. 部署 `PropertyManager` 合约
+3. 部署 `PropertyToken` 合约
+4. 部署 `TradingManager` 合约
+5. 部署 `RewardManager` 合约
+6. 部署 `RealEstateSystem` 合约
+7. 部署 `RealEstateFacade` 合约
+8. 设置各合约之间的引用关系
 
-4. 验证部署
-   - 检查合约状态
-   - 验证系统功能
-   - 生成部署报告
-
-## 监控和维护
-- 实时监控区块链数据
-- 系统状态检查
-- 异常告警
-- 定期维护
+详细的部署流程可在 [scripts/deploy-step.js](./scripts/deploy-step.js) 中查看。
 
 ## 贡献指南
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
+
+1. Fork 仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 创建 Pull Request
 
-## 常见问题解决方案
-
-### 合约部署失败
-- 检查网络连接和RPC URL
-- 确保部署账户有足够的ETH
-- 验证环境变量配置正确（确认使用的是正确的环境配置文件）
-- 检查合约代码中的初始化参数
-- 确认BLOCK_CONFIRMATIONS设置合理（对于繁忙网络，可能需要增加确认数）
-
-### 测试失败
-- 使用 `--verbose` 查看详细日志
-- 检查测试用例中的环境依赖
-- 使用 `console.log` 调试合约状态
-- 隔离失败的测试用例单独运行
-- 确认测试使用的是正确的环境配置
-
-### Gas优化
-- 使用 `hardhat-gas-reporter` 分析gas消耗
-- 优化循环和存储结构
-- 使用库合约复用代码
-- 减少状态变量数量
-- 根据当前网络状况调整GAS_PRICE和GAS_LIMIT配置
-
-### 权限问题
-- 检查角色地址配置是否正确
-- 确认交易签名者有相应权限
-- 通过`getRoleAddresses`函数验证角色配置
-- 使用console调试模式检查权限校验过程
-- 确认环境配置文件中的角色地址列表正确无误
-
 ## 许可证
-MIT License
 
-## 联系方式
-- 项目负责人：[联系方式]
-- 技术支持：[联系方式]
-
-## Environment Configuration
-
-The project uses two types of environment configurations:
-
-### 1. Runtime Environment (NODE_ENV)
-Controls the application's runtime behavior and features.
-
-- `development`: Development environment
-  - Enables debug logging
-  - Shows detailed error messages
-  - Enables development features
-
-- `test`: Testing environment
-  - Used for running tests
-  - Disables certain features for testing
-  - Uses test-specific configurations
-
-- `production`: Production environment
-  - Optimized for performance
-  - Minimal logging
-  - Disabled development features
-
-### 2. Blockchain Network Environment (BLOCKCHAIN_NETWORK)
-Controls which blockchain network the application connects to.
-
-- `localhost`: Local development network
-  - Uses Hardhat local network
-  - Default RPC URL: http://127.0.0.1:8545
-  - Chain ID: 31337
-
-- `testnet`: Test network
-  - Uses Sepolia testnet
-  - For testing and development
-  - Uses testnet-specific contracts
-
-- `mainnet`: Main network
-  - Uses Ethereum mainnet
-  - For production deployment
-  - Uses mainnet contracts
-
-### Configuration Example
-
-In your `.env` file:
-
-```env
-# Runtime Environment
-NODE_ENV=development
-
-# Blockchain Network
-BLOCKCHAIN_NETWORK=localhost
-
-# Network-specific RPC URLs
-LOCALHOST_RPC_URL=http://127.0.0.1:8545
-TESTNET_RPC_URL=https://sepolia.infura.io/v3/your-project-id
-MAINNET_RPC_URL=https://mainnet.infura.io/v3/your-project-id
-
-# Other configurations...
-```
-
-### Testing Different Environments
-
-To test different configurations:
-
-1. Development with local network:
-```env
-NODE_ENV=development
-BLOCKCHAIN_NETWORK=localhost
-```
-
-2. Testing with testnet:
-```env
-NODE_ENV=test
-BLOCKCHAIN_NETWORK=testnet
-```
-
-3. Production with mainnet:
-```env
-NODE_ENV=production
-BLOCKCHAIN_NETWORK=mainnet
-```
-
-You can use the test script to verify your configuration:
-```bash
-node test-env.js
-``` 
+MIT © [Your Organization]

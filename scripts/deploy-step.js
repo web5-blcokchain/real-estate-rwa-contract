@@ -138,10 +138,10 @@ async function deploySystemStep(signer) {
   const rewardManagerAddress = await rewardManager.getAddress();
   logger.info("RewardManager deployed at:", rewardManagerAddress);
   
-  // 部署 TokenFactory
-  logger.info("Deploying TokenFactory...");
-  const TokenFactory = await ethers.getContractFactory("PropertyToken");
-  const tokenFactory = await upgrades.deployProxy(TokenFactory, [
+  // 部署 PropertyToken
+  logger.info("Deploying PropertyToken...");
+  const PropertyToken = await ethers.getContractFactory("PropertyToken");
+  const propertyToken = await upgrades.deployProxy(PropertyToken, [
     ethers.ZeroHash,
     initParams.tokenFactory.name,
     initParams.tokenFactory.symbol,
@@ -151,9 +151,9 @@ async function deploySystemStep(signer) {
   ], {
     kind: "uups",
   });
-  await tokenFactory.waitForDeployment();
-  const tokenFactoryAddress = await tokenFactory.getAddress();
-  logger.info("TokenFactory deployed at:", tokenFactoryAddress);
+  await propertyToken.waitForDeployment();
+  const propertyTokenAddress = await propertyToken.getAddress();
+  logger.info("PropertyToken deployed at:", propertyTokenAddress);
   
   // 部署 System
   logger.info("Deploying System...");
@@ -191,7 +191,7 @@ async function deploySystemStep(signer) {
     propertyManager,
     tradingManager,
     rewardManager,
-    tokenFactory,
+    propertyToken,
     system,
     facade
   };
@@ -262,7 +262,7 @@ async function main() {
         PropertyManager: await contracts.propertyManager.getAddress(),
         TradingManager: await contracts.tradingManager.getAddress(),
         RewardManager: await contracts.rewardManager.getAddress(),
-        TokenFactory: await contracts.tokenFactory.getAddress(),
+        PropertyToken: await contracts.propertyToken.getAddress(),
         System: await contracts.system.getAddress(),
         Facade: await contracts.facade.getAddress()
       },

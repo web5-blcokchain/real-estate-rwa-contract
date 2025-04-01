@@ -59,7 +59,7 @@ describe("紧急情况端到端测试", function () {
     
     // 5. 部署 PropertyToken (仅作为工厂模板)
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    const tokenFactory = await upgrades.deployProxy(PropertyToken, [
+    propertyToken = await upgrades.deployProxy(PropertyToken, [
       ethers.constants.HashZero,
       "Template",
       "TPL",

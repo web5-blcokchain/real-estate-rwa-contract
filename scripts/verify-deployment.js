@@ -62,13 +62,13 @@ async function verifyPropertyManager(propertyManager) {
   }
 }
 
-async function verifyTokenFactory(tokenFactory) {
+async function verifyPropertyToken(propertyToken) {
   try {
-    const tokenCount = await tokenFactory.getTokenCount();
+    const tokenCount = await propertyToken.getTokenCount();
     logger.info("Token count:", tokenCount.toString());
     return tokenCount;
   } catch (error) {
-    logger.error("Failed to verify token factory:", error);
+    logger.error("Failed to verify property token:", error);
     return null;
   }
 }
@@ -121,9 +121,9 @@ async function main() {
       "PropertyManager",
       deploymentInfo.contracts.propertyManager
     );
-    const tokenFactory = await hre.ethers.getContractAt(
+    const propertyToken = await hre.ethers.getContractAt(
       "PropertyToken",
-      deploymentInfo.contracts.tokenFactory
+      deploymentInfo.contracts.PropertyToken
     );
     const tradingManager = await hre.ethers.getContractAt(
       "TradingManager",
@@ -142,7 +142,7 @@ async function main() {
       await verifyContract(deploymentInfo.contracts.facade, "RealEstateFacade");
       await verifyContract(deploymentInfo.contracts.roleManager, "RoleManager");
       await verifyContract(deploymentInfo.contracts.propertyManager, "PropertyManager");
-      await verifyContract(deploymentInfo.contracts.tokenFactory, "PropertyToken");
+      await verifyContract(deploymentInfo.contracts.PropertyToken, "PropertyToken");
       await verifyContract(deploymentInfo.contracts.tradingManager, "TradingManager");
       await verifyContract(deploymentInfo.contracts.rewardManager, "RewardManager");
     }
@@ -155,7 +155,7 @@ async function main() {
 
     // 验证各个管理器
     await verifyPropertyManager(propertyManager);
-    await verifyTokenFactory(tokenFactory);
+    await verifyPropertyToken(propertyToken);
     await verifyTradingManager(tradingManager);
     await verifyRewardManager(rewardManager);
 

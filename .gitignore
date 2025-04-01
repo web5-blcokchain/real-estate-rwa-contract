@@ -50,7 +50,7 @@ coverage
 coverage.json
 
 # Config
-config/deployment.json
+# config/deployment.json
 config/abi/*.json
 
 # Security

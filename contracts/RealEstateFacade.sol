@@ -47,7 +47,7 @@ contract RealEstateFacade is
     PropertyManager public propertyManager;
     
     // 代币工厂
-    PropertyToken public tokenFactory;
+    PropertyToken public propertyTokenContract;
     
     // 交易管理器
     TradingManager public tradingManager;

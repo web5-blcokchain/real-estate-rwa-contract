@@ -209,7 +209,7 @@ class EnvConfig {
       system: {
         startPaused: this.getBoolean('SYSTEM_START_PAUSED')
       },
-      tokenFactory: {
+      tokenFactory: { // PropertyToken配置
         name: this.get('TOKEN_FACTORY_NAME'),
         symbol: this.get('TOKEN_FACTORY_SYMBOL'),
         initialSupply: this.getInt('TOKEN_FACTORY_INITIAL_SUPPLY')
