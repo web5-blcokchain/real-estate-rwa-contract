@@ -82,6 +82,50 @@ cp config/env/.env.example config/env/.env
 - 在 `config/env/.env` 中设置必要的环境变量
 - 支持多环境配置：development、testnet、mainnet
 
+### 环境选择与使用
+项目支持以下三种环境配置：
+- `development`: 开发环境（本地开发和测试）
+- `testnet`: 测试网环境（Sepolia等测试网络）
+- `mainnet`: 主网环境（以太坊主网）
+
+对应的配置文件位于：
+```
+config/env/.env             # 基础配置文件（所有环境共享）
+config/env/development.env  # 开发环境特定配置
+config/env/testnet.env      # 测试网环境特定配置
+config/env/mainnet.env      # 主网环境特定配置
+```
+
+环境选择方式：
+缺省是development环境！！！
+1. 通过`NODE_ENV`环境变量指定：
+```bash
+# Linux/Mac
+export NODE_ENV=development
+# 或
+export NODE_ENV=testnet
+# 或
+export NODE_ENV=mainnet
+
+# Windows
+set NODE_ENV=development
+```
+
+2. 通过命令行参数指定：
+```bash
+# 部署到测试网
+yarn hardhat run scripts/deploy.ts --network sepolia
+# 等同于使用testnet.env配置
+
+# 部署到主网
+yarn hardhat run scripts/deploy.ts --network mainnet
+# 等同于使用mainnet.env配置
+```
+
+3. 配置优先级：
+   - 环境特定配置文件（如`development.env`）中的设置会覆盖基础配置文件（`.env`）中的同名设置
+   - 命令行参数优先级最高
+
 ### 配置说明
 - `NODE_ENV`: 运行环境（development/testnet/mainnet）
 - `LOG_LEVEL`: 日志级别（debug/info/warn/error）
@@ -90,8 +134,8 @@ cp config/env/.env.example config/env/.env
 - `ADMIN_PRIVATE_KEY`, `MANAGER_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY`: 各角色私钥
 - `ADMIN_ADDRESSES`, `MANAGER_ADDRESSES`, `OPERATOR_ADDRESSES`: 各角色地址列表
 - `ETHERSCAN_API_KEY`: Etherscan API密钥
-- 网络配置：RPC URL、Chain ID等
-- Gas配置：Gas Limit、Gas Price等
+- `BLOCK_CONFIRMATIONS`: 区块确认数（默认：5）
+- 更多配置详见 `config/env/README.md`
 
 ### 开发工具配置
 1. ESLint 配置
@@ -128,15 +172,16 @@ yarn hardhat compile --config hardhat.config.ts
 ```
 
 ### 部署合约
+
 ```bash
-# 部署到本地网络
-yarn hardhat run scripts/deploy.ts --network localhost
+# 部署到本地网络（使用development环境配置）
+yarn hardhat run scripts/deploy-step.js --network localhost
 
-# 部署到测试网
-yarn hardhat run scripts/deploy.ts --network sepolia
+# 部署到测试网（使用testnet环境配置）
+yarn hardhat run scripts/deploy-step.js --network sepolia
 
-# 部署到主网
-yarn hardhat run scripts/deploy.ts --network mainnet
+# 部署到主网（使用mainnet环境配置）
+yarn hardhat run scripts/deploy-step.js --network mainnet
 
 # 使用Ignition部署
 yarn hardhat ignition deploy ./ignition/modules/PropertySystem.js --network sepolia
@@ -144,7 +189,7 @@ yarn hardhat ignition deploy ./ignition/modules/PropertySystem.js --network sepo
 
 ### 合约验证
 ```bash
-# 验证单个合约
+# 验证单个合约（使用testnet环境配置）
 yarn hardhat verify --network sepolia 0xContractAddress "Constructor Arg 1" "Constructor Arg 2"
 
 # 验证代理合约
@@ -156,7 +201,7 @@ yarn hardhat run scripts/verify.ts --network sepolia
 
 ### 合约测试
 ```bash
-# 运行所有测试
+# 运行所有测试（默认使用development环境配置）
 yarn hardhat test
 
 # 运行特定测试文件
@@ -164,6 +209,9 @@ yarn hardhat test test/PropertyManager.test.js
 
 # 运行带标签的测试
 yarn hardhat test --grep "PropertyManager"
+
+# 使用指定环境运行测试
+NODE_ENV=testnet yarn hardhat test
 
 # 测试覆盖率报告
 yarn hardhat coverage
@@ -174,7 +222,7 @@ yarn hardhat coverage && open coverage/index.html
 
 ### 调试与分析
 ```bash
-# 本地节点（开发模式）
+# 本地节点（开发模式，使用development环境配置）
 yarn hardhat node
 
 # 运行控制台（交互模式）
@@ -195,13 +243,13 @@ yarn hardhat size-contracts
 
 ### 脚本执行
 ```bash
-# 执行合约交互脚本
+# 执行合约交互脚本（使用development环境配置）
 yarn hardhat run scripts/interact.js --network localhost
 
-# 执行数据查询脚本
+# 执行数据查询脚本（使用testnet环境配置）
 yarn hardhat run scripts/query.js --network sepolia
 
-# 执行管理员操作
+# 执行管理员操作（使用mainnet环境配置）
 yarn hardhat run scripts/admin/setFees.js --network mainnet
 ```
 
@@ -227,7 +275,7 @@ yarn hardhat typechain
 
 ### 本地开发
 ```bash
-# 启动本地节点
+# 启动本地节点（使用development环境配置）
 yarn hardhat node
 
 # 编译合约
@@ -245,10 +293,10 @@ yarn dev:monitor
 
 ### 部署
 ```bash
-# 部署到测试网
+# 部署到测试网（使用testnet环境配置）
 yarn deploy:testnet
 
-# 部署到主网
+# 部署到主网（使用mainnet环境配置）
 yarn deploy:mainnet
 
 # 验证合约
@@ -276,7 +324,7 @@ yarn verify:mainnet
 
 ## 部署流程
 1. 环境准备
-   - 配置环境变量
+   - 配置环境变量（选择适合的环境：development、testnet或mainnet）
    - 准备部署账户
    - 确保足够的原生代币
 
@@ -314,26 +362,30 @@ yarn verify:mainnet
 ### 合约部署失败
 - 检查网络连接和RPC URL
 - 确保部署账户有足够的ETH
-- 验证环境变量配置正确
+- 验证环境变量配置正确（确认使用的是正确的环境配置文件）
 - 检查合约代码中的初始化参数
+- 确认BLOCK_CONFIRMATIONS设置合理（对于繁忙网络，可能需要增加确认数）
 
 ### 测试失败
 - 使用 `--verbose` 查看详细日志
 - 检查测试用例中的环境依赖
 - 使用 `console.log` 调试合约状态
 - 隔离失败的测试用例单独运行
+- 确认测试使用的是正确的环境配置
 
 ### Gas优化
 - 使用 `hardhat-gas-reporter` 分析gas消耗
 - 优化循环和存储结构
 - 使用库合约复用代码
 - 减少状态变量数量
+- 根据当前网络状况调整GAS_PRICE和GAS_LIMIT配置
 
 ### 权限问题
 - 检查角色地址配置是否正确
 - 确认交易签名者有相应权限
 - 通过`getRoleAddresses`函数验证角色配置
 - 使用console调试模式检查权限校验过程
+- 确认环境配置文件中的角色地址列表正确无误
 
 ## 许可证
 MIT License
