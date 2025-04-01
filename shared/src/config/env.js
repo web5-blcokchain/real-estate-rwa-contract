@@ -7,9 +7,6 @@ class EnvConfig {
     // 获取项目根目录（shared 目录的父目录的父目录）
     this.projectRoot = path.resolve(__dirname, '../../..');
     
-    // 获取当前环境
-    this.env = process.env.NODE_ENV || 'development';
-    
     // 加载环境配置
     this.loadEnvConfig();
     
@@ -18,10 +15,8 @@ class EnvConfig {
   }
 
   loadEnvConfig() {
-    // 基础配置文件路径
-    const baseConfigPath = path.join(this.projectRoot, 'config', 'env', '.env');
-    // 环境特定配置文件路径
-    const envConfigPath = path.join(this.projectRoot, 'config', 'env', `${this.env}.env`);
+    // 基础配置文件路径（根目录的.env文件）
+    const baseConfigPath = path.join(this.projectRoot, '.env');
 
     // 检查配置文件是否存在
     if (!fs.existsSync(baseConfigPath)) {
@@ -31,19 +26,21 @@ class EnvConfig {
     // 加载基础配置
     const baseConfig = dotenv.parse(fs.readFileSync(baseConfigPath));
     this.config = { ...baseConfig };
+    console.log(`[EnvConfig] Loaded configuration from ${baseConfigPath}`);
 
-    // 如果存在环境特定配置，则加载并覆盖基础配置
-    if (fs.existsSync(envConfigPath)) {
-      const envConfig = dotenv.parse(fs.readFileSync(envConfigPath));
-      this.config = { ...this.config, ...envConfig };
-    }
+    // 将配置加载到process.env中，以便dotenv能够访问
+    Object.entries(this.config).forEach(([key, value]) => {
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    });
   }
 
   // 验证必需的环境变量
   validateRequiredEnvVars() {
     const requiredVars = {
       // 网络配置
-      HARDHAT_CHAIN_ID: 'number',
+      LOCALHOST_CHAIN_ID: 'number',
       TESTNET_CHAIN_ID: 'number',
       MAINNET_CHAIN_ID: 'number',
       TESTNET_RPC_URL: 'string',

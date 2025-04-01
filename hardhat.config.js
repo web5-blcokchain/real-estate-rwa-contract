@@ -33,7 +33,7 @@ const getNetworkConfig = (network) => {
   switch (network) {
     case 'hardhat':
       return {
-        chainId: envConfig.getInt('HARDHAT_CHAIN_ID', 31337),
+        chainId: envConfig.getInt('LOCALHOST_CHAIN_ID', 31337),
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -50,7 +50,7 @@ const getNetworkConfig = (network) => {
       return {
         ...baseConfig,
         url: "http://127.0.0.1:8545",
-        chainId: envConfig.getInt('HARDHAT_CHAIN_ID', 31337),
+        chainId: envConfig.getInt('LOCALHOST_CHAIN_ID', 31337),
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,

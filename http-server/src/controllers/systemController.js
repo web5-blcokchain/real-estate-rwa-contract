@@ -3,12 +3,16 @@ import utils from '../utils/index.js';
 
 const { 
   getContract, 
-  getContractWithSigner
+  getContractWithSigner,
+  NetworkUtils
 } = utils;
 const EnvConfig = utils.EnvConfig;
 
 // 创建环境配置实例
 const env = new EnvConfig();
+
+// 创建网络工具实例
+const networkUtils = new NetworkUtils();
 
 /**
  * 获取系统状态
@@ -28,6 +32,14 @@ export const getSystemStatus = async (req, res) => {
     // 获取系统概况
     const propertyCount = await propertyManager.getPropertyCount();
     
+    // 获取网络信息
+    const networkInfo = {
+      name: networkUtils.getNetworkName(),
+      chainId: networkUtils.getChainId(),
+      isTestnet: networkUtils.isTestnet(),
+      isMainnet: networkUtils.isMainnet()
+    };
+    
     res.status(200).json({
       success: true,
       data: {
@@ -37,7 +49,8 @@ export const getSystemStatus = async (req, res) => {
         },
         statistics: {
           propertyCount: Number(propertyCount)
-        }
+        },
+        network: networkInfo
       }
     });
   } catch (error) {

@@ -3,19 +3,13 @@
  * 提供测试中常用的功能和数据
  */
 import supertest from 'supertest';
+import app from '../src/index.js';
 
-// 延迟导入app，避免在测试前启动服务器
-let _app;
-let _request;
+// 创建测试请求对象
+const request = supertest(app);
 
 export const getRequest = async () => {
-  if (!_request) {
-    if (!_app) {
-      _app = (await import('../src/index.js')).default;
-    }
-    _request = supertest(_app);
-  }
-  return _request;
+  return request;
 };
 
 // 获取development.env中的API密钥
@@ -57,7 +51,6 @@ export const TEST_REWARD = {
 
 // 工具方法: 测试API是否需要API KEY
 export const testRequiresApiKey = async (endpoint, method = 'get') => {
-  const request = await getRequest();
   const response = await request[method](endpoint);
   expect(response.status).toBe(401);
   expect(response.body.error).toBeTruthy();
@@ -66,7 +59,6 @@ export const testRequiresApiKey = async (endpoint, method = 'get') => {
 
 // 工具方法: 带API密钥的请求
 export const apiRequest = async (endpoint, method = 'get', data = null) => {
-  const request = await getRequest();
   const url = `${endpoint}?api_key=${API_KEY}`;
   if (method === 'get') {
     return request.get(url);

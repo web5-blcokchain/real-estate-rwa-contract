@@ -3,9 +3,13 @@
  * 方便统一导入各种工具
  */
 
+import { ethers } from 'ethers';
+import envConfig from './env.js';
+import networkUtils, { NetworkUtils } from './network.js';
+import deploymentUtils, { DeploymentUtils } from './deployment.js';
+
 // 重新导出工具模块
 const abiUtils = require('./abi');
-const networkUtils = require('./network');
 const walletUtils = require('./wallet');
 const contractUtils = require('./contract');
 
@@ -48,5 +52,8 @@ module.exports = {
   abi: abiUtils,
   network: networkUtils,
   wallet: walletUtils,
-  contract: contractUtils
+  contract: contractUtils,
+  
+  deploymentUtils,
+  DeploymentUtils
 }; 

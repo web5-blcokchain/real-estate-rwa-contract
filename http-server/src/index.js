@@ -5,25 +5,17 @@ import http from 'http';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 import helmet from 'helmet';
-import utils from './utils/index.js';
+import dotenv from 'dotenv';
+import logger from './utils/logger.js';
+import propertyManagerRouter from './routes/propertyManager.js';
+import contractInteractionRouter from './routes/contractInteraction.js';
 
-// 导入路由
-import roleManagerRoutes from './routes/roleManager.js';
-import propertyManagerRoutes from './routes/propertyManager.js';
-import tradingManagerRoutes from './routes/tradingManager.js';
-import rewardManagerRoutes from './routes/rewardManager.js';
-import systemRoutes from './routes/system.js';
-
-// 导入中间件
-import { apiKeyMiddleware } from './middlewares/auth.js';
-
-// 创建环境配置实例
-const EnvConfig = utils.EnvConfig;
-const env = new EnvConfig();
+// 初始化环境变量
+dotenv.config();
 
 // 创建Express应用
 const app = express();
-const PORT = env.getServerConfig().port || 3000;
+const PORT = process.env.PORT || 3000;
 
 // 配置跨域请求
 app.use(cors());
@@ -71,19 +63,71 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// 注册API路由，并应用API密钥中间件进行保护
-app.use('/api/role-manager', apiKeyMiddleware, roleManagerRoutes);
-app.use('/api/property-manager', apiKeyMiddleware, propertyManagerRoutes);
-app.use('/api/trading-manager', apiKeyMiddleware, tradingManagerRoutes);
-app.use('/api/reward-manager', apiKeyMiddleware, rewardManagerRoutes);
-app.use('/api/system', apiKeyMiddleware, systemRoutes);
+// API密钥中间件
+const apiKeyMiddleware = (req, res, next) => {
+  try {
+    // 从请求头或查询参数中获取API Key
+    const apiKey = req.header('x-api-key') || req.query.api_key;
+    
+    // 检查API Key是否存在
+    if (!apiKey) {
+      logger.warn('请求缺少API Key');
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: '未提供API密钥'
+      });
+    }
+    
+    // 检查API Key是否有效
+    const validApiKey = process.env.API_KEY || 'dev-api-key';
+    if (apiKey !== validApiKey) {
+      logger.warn('API Key验证失败');
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'API密钥无效'
+      });
+    }
+    
+    // API Key验证通过
+    next();
+  } catch (error) {
+    logger.error('API Key验证发生错误:', error);
+    // 确保认证错误总是返回401而不是500
+    res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
+      message: 'API认证失败'
+    });
+  }
+};
 
 // 健康检查路由
 app.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
     message: '服务器运行正常',
+    status: 'ok',
     time: new Date().toISOString()
+  });
+});
+
+// 注册API路由
+// 先应用API密钥中间件
+app.use('/api', apiKeyMiddleware);
+
+// 注册路由
+app.use('/api/property-manager', propertyManagerRouter);
+app.use('/api/contract', contractInteractionRouter);
+
+// 示例角色管理路由 (保留原有示例)
+app.get('/api/role-manager/roles/:address', (req, res) => {
+  const { address } = req.params;
+  res.status(200).json({
+    success: true,
+    address,
+    roles: ['admin', 'user']
   });
 });
 
@@ -96,13 +140,18 @@ app.use((req, res) => {
   });
 });
 
-// 全局错误处理中间件
+// 添加全局错误处理中间件
 app.use((err, req, res, next) => {
-  console.error('服务器错误:', err);
+  logger.error('服务器错误:', err.stack);
+  
+  // 根据环境返回不同的错误信息
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
   res.status(500).json({
     success: false,
-    error: '服务器错误',
-    message: process.env.NODE_ENV === 'development' ? err.message : '内部服务器错误'
+    error: 'Internal Server Error',
+    message: '服务器内部错误',
+    ...(isDevelopment && { stack: err.stack }) // 只在开发环境返回堆栈信息
   });
 });
 
@@ -118,4 +167,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // 导出app实例用于测试
-export { app }; 
+export default app; 

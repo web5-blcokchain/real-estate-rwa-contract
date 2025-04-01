@@ -16,55 +16,97 @@ const env = EnvConfig;
 // 合约实例缓存，避免重复创建
 const contractCache = {};
 
+// 缓存部署配置，避免重复读取
+let cachedDeploymentConfig = null;
+
 /**
- * 从部署配置文件读取合约地址
+ * 读取部署配置文件
+ * @param {boolean} force - 是否强制重新读取
+ * @returns {Object|null} 部署配置对象，读取失败则返回null
+ */
+const readDeploymentConfig = (force = false) => {
+  // 如果已缓存且不强制重新读取，则返回缓存
+  if (cachedDeploymentConfig && !force) {
+    return cachedDeploymentConfig;
+  }
+  
+  // 可能的部署配置文件路径
+  const possiblePaths = [
+    // 直接使用相对路径
+    'config/deployment.json'
+  ];
+  
+  console.log('尝试查找部署配置文件...');
+  
+  for (const deploymentPath of possiblePaths) {
+    try {
+      // 检查文件是否存在
+      if (fs.existsSync(deploymentPath)) {
+        console.log(`找到部署配置文件: ${deploymentPath}`);
+        
+        // 读取配置文件
+        const configData = fs.readFileSync(deploymentPath, 'utf8');
+        cachedDeploymentConfig = JSON.parse(configData);
+        
+        // 如果读取成功，输出合约列表进行调试
+        if (cachedDeploymentConfig && cachedDeploymentConfig.contracts) {
+          console.log('已找到以下合约地址:');
+          Object.entries(cachedDeploymentConfig.contracts).forEach(([name, address]) => {
+            console.log(`- ${name}: ${address}`);
+          });
+        }
+        
+        return cachedDeploymentConfig;
+      }
+    } catch (error) {
+      console.warn(`尝试读取 ${deploymentPath} 失败: ${error.message}`);
+    }
+  }
+  
+  console.warn('未能在任何路径找到有效的部署配置文件');
+  return null;
+};
+
+/**
+ * 获取合约地址
  * @param {string} contractName - 合约名称
  * @returns {string} 合约地址
  */
 const getContractAddress = (contractName) => {
-  // 尝试从部署配置文件读取合约地址
+  // 标准化合约名称为小写
   const normalizedName = contractName.toLowerCase();
+  console.log(`尝试获取合约地址，原始名称: ${contractName}, 标准化名称: ${normalizedName}`);
+  
+  // 可能的合约名称变体
+  const possibleNames = [
+    normalizedName,
+    normalizedName.replace('manager', ''),  // 尝试移除manager后缀
+    normalizedName.endsWith('manager') ? normalizedName.slice(0, -7) : normalizedName, // 另一种移除manager的方式
+    // 特殊处理propertymanager
+    contractName === 'PropertyManager' ? 'propertymanager' : normalizedName,
+    contractName === 'PropertyManager' ? 'property' : normalizedName,
+  ];
+  
+  console.log(`尝试以下可能的合约名称: ${possibleNames.join(', ')}`);
+  
+  // 读取部署配置
+  const deploymentConfig = readDeploymentConfig();
+  
+  // 如果在部署配置中找不到，尝试从环境变量获取（兼容旧方式）
+  console.warn(`在部署配置中找不到合约 ${contractName} 的地址，尝试从环境变量获取`);
+  const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
   
   try {
-    // 从项目根目录读取配置文件
-    // 这里假设shared模块位于项目根目录的shared文件夹下
-    const projectRoot = path.resolve(__dirname, '../../../..');
-    const deploymentPath = path.join(projectRoot, 'config/deployment.json');
-    
-    // 读取部署配置文件
-    const deploymentConfig = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-    
-    // 从配置中获取合约地址
-    if (deploymentConfig.contracts && deploymentConfig.contracts[normalizedName]) {
-      return deploymentConfig.contracts[normalizedName];
-    }
-    
-    // 如果在配置文件中找不到，尝试从环境变量获取（兼容旧方式）
-    console.warn(`在部署配置中找不到合约 ${contractName} 的地址，尝试从环境变量获取`);
-    const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
     const address = env.get(addressKey);
-    
     if (address) {
+      console.log(`从环境变量获取到合约地址: ${addressKey} => ${address}`);
       return address;
     }
-    
-    throw new Error(`未找到合约 ${contractName} 的地址配置`);
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      console.warn('部署配置文件不存在，尝试从环境变量获取');
-      // 尝试从环境变量获取
-      const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
-      const address = env.get(addressKey);
-      
-      if (!address) {
-        throw new Error(`未找到合约 ${contractName} 的地址配置，请检查环境变量: ${addressKey}`);
-      }
-      
-      return address;
-    }
-    
-    throw error;
+    console.warn(`环境变量 ${addressKey} 不存在: ${error.message}`);
   }
+  
+  throw new Error(`未找到合约 ${contractName} 的地址配置，请检查部署配置文件 (config/deployment.json) 或环境变量。已尝试的合约名称: ${possibleNames.join(', ')}`);
 };
 
 /**

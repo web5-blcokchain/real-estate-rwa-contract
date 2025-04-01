@@ -393,4 +393,90 @@ MIT License
 
 ## 联系方式
 - 项目负责人：[联系方式]
-- 技术支持：[联系方式] 
+- 技术支持：[联系方式]
+
+## Environment Configuration
+
+The project uses two types of environment configurations:
+
+### 1. Runtime Environment (NODE_ENV)
+Controls the application's runtime behavior and features.
+
+- `development`: Development environment
+  - Enables debug logging
+  - Shows detailed error messages
+  - Enables development features
+
+- `test`: Testing environment
+  - Used for running tests
+  - Disables certain features for testing
+  - Uses test-specific configurations
+
+- `production`: Production environment
+  - Optimized for performance
+  - Minimal logging
+  - Disabled development features
+
+### 2. Blockchain Network Environment (BLOCKCHAIN_NETWORK)
+Controls which blockchain network the application connects to.
+
+- `localhost`: Local development network
+  - Uses Hardhat local network
+  - Default RPC URL: http://127.0.0.1:8545
+  - Chain ID: 31337
+
+- `testnet`: Test network
+  - Uses Sepolia testnet
+  - For testing and development
+  - Uses testnet-specific contracts
+
+- `mainnet`: Main network
+  - Uses Ethereum mainnet
+  - For production deployment
+  - Uses mainnet contracts
+
+### Configuration Example
+
+In your `.env` file:
+
+```env
+# Runtime Environment
+NODE_ENV=development
+
+# Blockchain Network
+BLOCKCHAIN_NETWORK=localhost
+
+# Network-specific RPC URLs
+LOCAL_RPC_URL=http://127.0.0.1:8545
+TESTNET_RPC_URL=https://sepolia.infura.io/v3/your-project-id
+MAINNET_RPC_URL=https://mainnet.infura.io/v3/your-project-id
+
+# Other configurations...
+```
+
+### Testing Different Environments
+
+To test different configurations:
+
+1. Development with local network:
+```env
+NODE_ENV=development
+BLOCKCHAIN_NETWORK=localhost
+```
+
+2. Testing with testnet:
+```env
+NODE_ENV=test
+BLOCKCHAIN_NETWORK=testnet
+```
+
+3. Production with mainnet:
+```env
+NODE_ENV=production
+BLOCKCHAIN_NETWORK=mainnet
+```
+
+You can use the test script to verify your configuration:
+```bash
+node test-env.js
+``` 

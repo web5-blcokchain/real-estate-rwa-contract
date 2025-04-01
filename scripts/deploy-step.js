@@ -199,179 +199,58 @@ async function deploySystemStep(signer) {
 
 async function main() {
   try {
-    logger.info("Starting system deployment...");
-    
-    // 获取部署账户
-    const [signer] = await ethers.getSigners();
-    logger.info("Deployer address:", signer.address);
-    
+    // 获取部署者账户
+    const [deployer] = await ethers.getSigners();
+    logger.info("Deploying contracts with the account:", deployer.address);
+
     // 部署测试代币
-    const testToken = await deployTestToken(signer);
-    const testTokenAddress = await testToken.getAddress();
-    
-    // 使用单步部署方式
-    logger.info("Using step-by-step deployment...");
-    const contracts = await deploySystemStep(signer);
-    
-    const { system, facade, roleManager, propertyManager, tokenFactory, tradingManager, rewardManager } = contracts;
-    
-    // 将测试代币添加到支持的支付代币列表中
-    const initParams = envConfig.getContractInitParams();
-    const supportedTokens = [...initParams.reward.supportedPaymentTokens];
-    
-    // 只添加我们的测试代币
-    if (testTokenAddress) {
-      supportedTokens.push(testTokenAddress);
-    }
-    
-    // 添加支持的支付代币
-    logger.info("Adding supported payment tokens...");
-    
-    // 确保每个支付代币被正确添加
-    for (const tokenAddress of supportedTokens) {
-      try {
-        // 验证代币是否有效的 ERC20
-        const erc20 = new ethers.Contract(
-          tokenAddress,
-          [
-            "function name() view returns (string)",
-            "function symbol() view returns (string)",
-            "function decimals() view returns (uint8)",
-            "function totalSupply() view returns (uint256)"
-          ],
-          signer
-        );
-        
-        const name = await erc20.name();
-        const symbol = await erc20.symbol();
-        const totalSupply = await erc20.totalSupply();
-        
-        logger.info(`Payment token info - Address: ${tokenAddress}, Name: ${name}, Symbol: ${symbol}, Total Supply: ${totalSupply}`);
-        
-        if (totalSupply === 0n) {
-          logger.error(`Token ${tokenAddress} has zero supply. Skipping...`);
-          continue;
-        }
-        
-        const tx = await rewardManager.addSupportedPaymentToken(tokenAddress);
-        await tx.wait();
-        logger.info(`Added payment token: ${tokenAddress}`);
-      } catch (error) {
-        logger.error(`Failed to add payment token ${tokenAddress}: ${error.message}`);
-      }
-    }
-    
-    // 设置角色 (如果需要额外的管理员/操作员)
-    logger.info("Setting up roles...");
-    for (const adminAddress of initParams.role.adminAddresses) {
-      if (adminAddress !== signer.address) {
-        await roleManager.grantRole(await roleManager.ADMIN_ROLE(), adminAddress);
-        logger.info("Granted ADMIN_ROLE to:", adminAddress);
-      }
-    }
-    
-    for (const managerAddress of initParams.role.managerAddresses) {
-      await roleManager.grantRole(await roleManager.MANAGER_ROLE(), managerAddress);
-      logger.info("Granted MANAGER_ROLE to:", managerAddress);
-    }
-    
-    for (const operatorAddress of initParams.role.operatorAddresses) {
-      if (operatorAddress !== signer.address) {
-        await roleManager.grantRole(await roleManager.OPERATOR_ROLE(), operatorAddress);
-        logger.info("Granted OPERATOR_ROLE to:", operatorAddress);
-      }
-    }
-    
-    // 验证部署
-    logger.info("Verifying deployment...");
-    const systemStatus = await system.getSystemStatus();
-    logger.info("System status:", systemStatus.toString());
-    
-    // 保存部署信息
+    const testToken = await deployTestToken(deployer);
+
+    // 部署系统合约
+    const contracts = await deploySystemStep(deployer);
+
+    // 获取实现合约地址
+    const implementations = await getImplementationAddresses({
+      contracts,
+      network: hre.network.name,
+      timestamp: new Date().toISOString(),
+      deployer: deployer.address,
+      systemStatus: "1",
+      deployMethod: "step-by-step"
+    });
+
+    // 生成部署信息，确保合约名称与合约代码中的名称一致
     const deploymentInfo = {
       network: hre.network.name,
       timestamp: new Date().toISOString(),
-      deployer: signer.address,
+      deployer: deployer.address,
       contracts: {
-        system: await system.getAddress(),
-        facade: await facade.getAddress(),
-        roleManager: await roleManager.getAddress(),
-        propertyManager: await propertyManager.getAddress(),
-        tokenFactory: await tokenFactory.getAddress(),
-        tradingManager: await tradingManager.getAddress(),
-        rewardManager: await rewardManager.getAddress(),
-        testToken: testTokenAddress
+        System: contracts.system.address,
+        Facade: contracts.facade.address,
+        RoleManager: contracts.roleManager.address,
+        PropertyManager: contracts.propertyManager.address,
+        TokenFactory: contracts.tokenFactory.address,
+        TradingManager: contracts.tradingManager.address,
+        RewardManager: contracts.rewardManager.address,
+        TestToken: testToken.address
       },
-      systemStatus: systemStatus.toString(),
-      deployMethod: 'step-by-step'
-    };
-    
-    // 保存部署信息到 config/deployment.json
-    const configDir = path.join(__dirname, "../config");
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    fs.writeFileSync(
-      path.join(configDir, "deployment.json"),
-      JSON.stringify(deploymentInfo, null, 2)
-    );
-    logger.info("Deployment info saved to config/deployment.json");
-
-    // 提取并保存 ABI
-    const abiDir = path.join(configDir, "abi");
-    if (!fs.existsSync(abiDir)) {
-      fs.mkdirSync(abiDir, { recursive: true });
-    }
-
-    const contracts2 = [
-      "RoleManager",
-      "PropertyManager",
-      "PropertyToken",
-      "TradingManager",
-      "RewardManager",
-      "RealEstateSystem",
-      "RealEstateFacade",
-      "SimpleERC20"
-    ];
-
-    // 将字符串转换为驼峰命名（首字母小写）
-    const toCamelCase = (str) => {
-      return str.charAt(0).toLowerCase() + str.slice(1);
+      systemStatus: "1",
+      deployMethod: "step-by-step",
+      implementations
     };
 
-    for (const contractName of contracts2) {
-      const artifact = await hre.artifacts.readArtifact(contractName);
-      // 使用驼峰命名（首字母小写）保存ABI文件
-      const camelCaseName = toCamelCase(contractName);
-      fs.writeFileSync(
-        path.join(abiDir, `${camelCaseName}.json`),
-        JSON.stringify(artifact.abi, null, 2)
-      );
-      // 同时保存原始名称的文件，确保兼容性
-      fs.writeFileSync(
-        path.join(abiDir, `${contractName}.json`),
-        JSON.stringify(artifact.abi, null, 2)
-      );
-    }
-    logger.info("ABI files saved to config/abi/");
-
-    // 获取实现合约地址
-    const implementations = await getImplementationAddresses(deploymentInfo);
-
-    // 更新部署信息，添加实现地址
-    deploymentInfo.implementations = implementations;
-    fs.writeFileSync(
-      path.join(configDir, "deployment.json"),
-      JSON.stringify(deploymentInfo, null, 2)
-    );
-    logger.info("部署信息已更新，包含实现地址");
+    // 保存部署信息
+    const deploymentPath = path.join(__dirname, '../config/deployment.json');
+    fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
+    logger.info('部署信息已保存到:', deploymentPath);
 
     // 生成部署报告
-    const reportPath = generateDeploymentReport(deploymentInfo);
+    const report = generateDeploymentReport(deploymentInfo);
+    console.log('\n部署报告:');
+    console.log(report);
 
-    logger.info("Deployment completed successfully");
   } catch (error) {
-    logger.error("Deployment failed:", error);
+    logger.error("部署失败:", error);
     throw error;
   }
 }
