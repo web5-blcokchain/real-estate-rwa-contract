@@ -73,24 +73,28 @@ const readDeploymentConfig = (force = false) => {
  * @returns {string} 合约地址
  */
 const getContractAddress = (contractName) => {
-  // 标准化合约名称为小写
-  const normalizedName = contractName.toLowerCase();
-  console.log(`尝试获取合约地址，原始名称: ${contractName}, 标准化名称: ${normalizedName}`);
-  
-  // 可能的合约名称变体
-  const possibleNames = [
-    normalizedName,
-    normalizedName.replace('manager', ''),  // 尝试移除manager后缀
-    normalizedName.endsWith('manager') ? normalizedName.slice(0, -7) : normalizedName, // 另一种移除manager的方式
-    // 特殊处理propertymanager
-    contractName === 'PropertyManager' ? 'propertymanager' : normalizedName,
-    contractName === 'PropertyManager' ? 'property' : normalizedName,
-  ];
-  
-  console.log(`尝试以下可能的合约名称: ${possibleNames.join(', ')}`);
+  console.log(`尝试获取合约地址: ${contractName}`);
   
   // 读取部署配置
   const deploymentConfig = readDeploymentConfig();
+  
+  // 如果找到部署配置并且合约存在
+  if (deploymentConfig && deploymentConfig.contracts) {
+    // 首先尝试直接匹配（保持原始大小写）
+    if (deploymentConfig.contracts[contractName]) {
+      console.log(`找到合约地址（精确匹配）: ${deploymentConfig.contracts[contractName]}`);
+      return deploymentConfig.contracts[contractName];
+    }
+    
+    // 如果找不到精确匹配，尝试大小写不敏感匹配
+    const contracts = deploymentConfig.contracts;
+    for (const key in contracts) {
+      if (key.toLowerCase() === contractName.toLowerCase()) {
+        console.log(`找到合约地址（大小写不敏感匹配）: ${contracts[key]}`);
+        return contracts[key];
+      }
+    }
+  }
   
   // 如果在部署配置中找不到，尝试从环境变量获取（兼容旧方式）
   console.warn(`在部署配置中找不到合约 ${contractName} 的地址，尝试从环境变量获取`);
@@ -106,7 +110,7 @@ const getContractAddress = (contractName) => {
     console.warn(`环境变量 ${addressKey} 不存在: ${error.message}`);
   }
   
-  throw new Error(`未找到合约 ${contractName} 的地址配置，请检查部署配置文件 (config/deployment.json) 或环境变量。已尝试的合约名称: ${possibleNames.join(', ')}`);
+  throw new Error(`未找到合约 ${contractName} 的地址配置，请检查部署配置文件 (config/deployment.json) 或环境变量。`);
 };
 
 /**
@@ -116,8 +120,8 @@ const getContractAddress = (contractName) => {
  * @returns {ethers.Contract} 合约实例
  */
 const getContract = (contractName, network = null) => {
-  // 创建缓存键
-  const cacheKey = network ? `${contractName.toLowerCase()}_${network}` : contractName.toLowerCase();
+  // 创建缓存键，保持原始大小写
+  const cacheKey = network ? `${contractName}_${network}` : contractName;
   
   // 如果缓存中已存在，则直接返回
   if (contractCache[cacheKey]) {
@@ -209,11 +213,88 @@ const connectContractWithRole = (contract, role, network = null) => {
   return contract.connect(wallet);
 };
 
+/**
+ * 创建房产代币合约实例
+ * @param {string} initialSupply - 初始供应量
+ * @param {string} name - 代币名称
+ * @param {string} symbol - 代币符号
+ * @param {string} owner - 所有者地址
+ * @param {string} manager - 管理者地址
+ * @param {string} network - 可选，网络名称
+ * @returns {Promise<ethers.Contract>} 创建的PropertyToken合约实例
+ */
+const createPropertyToken = async (initialSupply, name, symbol, owner, manager, network = null) => {
+  try {
+    // 获取Provider
+    const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
+    
+    // 获取钱包（使用部署者角色）
+    const wallet = walletUtils.getWallet('deployer', network);
+    
+    // 获取PropertyToken的ABI
+    const abi = getContractABI('PropertyToken');
+    
+    // 获取PropertyToken的bytecode
+    // 注意：这里需要从artifacts中获取bytecode，如果没有可以从环境变量或其他地方获取
+    const bytecode = env.get('PROPERTY_TOKEN_BYTECODE');
+    if (!bytecode) {
+      throw new Error('无法获取PropertyToken的bytecode');
+    }
+    
+    // 创建合约工厂
+    const factory = new ethers.ContractFactory(abi, bytecode, wallet);
+    
+    // 部署合约
+    console.log(`开始部署PropertyToken，参数: ${initialSupply}, ${name}, ${symbol}, ${owner}, ${manager}`);
+    const contract = await factory.deploy(initialSupply, name, symbol, owner, manager);
+    
+    // 等待部署完成
+    const tx = await contract.deploymentTransaction();
+    await tx.wait();
+    console.log(`PropertyToken部署完成，地址: ${contract.address}`);
+    
+    return contract;
+  } catch (error) {
+    console.error('创建PropertyToken失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 为房产注册代币
+ * @param {string} propertyId - 房产ID
+ * @param {string} tokenAddress - 代币地址
+ * @param {string} role - 可选，调用者角色
+ * @param {string} network - 可选，网络名称
+ * @returns {Promise<Object>} 交易结果
+ */
+const registerTokenForProperty = async (propertyId, tokenAddress, role = 'manager', network = null) => {
+  try {
+    // 获取PropertyManager合约实例（带签名者）
+    const propertyManager = getContractWithSigner('PropertyManager', role, network);
+    
+    // 调用合约方法
+    console.log(`为房产 ${propertyId} 注册代币 ${tokenAddress}`);
+    const tx = await propertyManager.registerTokenForProperty(propertyId, tokenAddress);
+    
+    // 等待交易确认
+    const receipt = await tx.wait();
+    console.log(`注册代币成功，交易哈希: ${tx.hash}`);
+    
+    return receipt;
+  } catch (error) {
+    console.error(`为房产 ${propertyId} 注册代币失败:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
   getContractAddress,
   getContract,
   getContractWithSigner,
   getContractWithPrivateKey,
   createContractFromAddress,
-  connectContractWithRole
+  connectContractWithRole,
+  createPropertyToken,
+  registerTokenForProperty
 }; 

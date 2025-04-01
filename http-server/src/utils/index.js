@@ -14,7 +14,7 @@ const sharedPath = path.resolve(__dirname, '../../../shared/src');
 
 // 导入shared模块的公共功能
 const envModule = await import(`${sharedPath}/config/env.js`);
-const networkModule = await import(`${sharedPath}/config/network.js`);
+const networkModule = await import(`${sharedPath}/utils/network.js`);
 const sharedUtils = await import(`${sharedPath}/utils/index.js`);
 const utils = sharedUtils.default;
 
@@ -24,7 +24,7 @@ export default {
   EnvConfig: envModule.EnvConfig || utils.EnvConfig,
   
   // 网络配置
-  NetworkConfig: networkModule.NetworkConfig || networkModule.default,
+  NetworkUtils: networkModule.NetworkUtils || utils.NetworkUtils,
   
   // 合约工具
   getContract: utils.getContract,
@@ -32,6 +32,8 @@ export default {
   getContractWithPrivateKey: utils.getContractWithPrivateKey,
   createContractFromAddress: utils.createContractFromAddress,
   connectContractWithRole: utils.connectContractWithRole,
+  createPropertyToken: utils.createPropertyToken,
+  registerTokenForProperty: utils.registerTokenForProperty,
   
   // 钱包工具
   getWallet: utils.getWallet,

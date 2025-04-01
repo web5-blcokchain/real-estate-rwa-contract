@@ -3,20 +3,13 @@
  * 方便统一导入各种工具
  */
 
-import { ethers } from 'ethers';
-import envConfig from './env.js';
-import networkUtils, { NetworkUtils } from './network.js';
-import deploymentUtils, { DeploymentUtils } from './deployment.js';
-
-// 重新导出工具模块
+// 使用CommonJS方式导入所有模块
+const { ethers } = require('ethers');
 const abiUtils = require('./abi');
 const walletUtils = require('./wallet');
 const contractUtils = require('./contract');
-
-// 日志工具
+const networkUtils = require('./network');
 const logger = require('../logger');
-
-// 环境配置
 const EnvConfig = require('../config/env');
 
 // 导出所有工具
@@ -41,6 +34,8 @@ module.exports = {
   getContractWithPrivateKey: contractUtils.getContractWithPrivateKey,
   createContractFromAddress: contractUtils.createContractFromAddress,
   connectContractWithRole: contractUtils.connectContractWithRole,
+  createPropertyToken: contractUtils.createPropertyToken,
+  registerTokenForProperty: contractUtils.registerTokenForProperty,
   
   // 日志工具
   logger,
@@ -52,8 +47,5 @@ module.exports = {
   abi: abiUtils,
   network: networkUtils,
   wallet: walletUtils,
-  contract: contractUtils,
-  
-  deploymentUtils,
-  DeploymentUtils
+  contract: contractUtils
 }; 

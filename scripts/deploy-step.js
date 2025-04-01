@@ -197,6 +197,38 @@ async function deploySystemStep(signer) {
   };
 }
 
+/**
+ * 导出合约 ABI 到 config/abi 目录
+ * @param {Object} contractNames - 要导出 ABI 的合约名称列表
+ */
+async function exportContractABIs(contractNames) {
+  logger.info("导出合约 ABI...");
+  
+  // 确保 config/abi 目录存在
+  const abiDir = path.join(__dirname, "../config/abi");
+  if (!fs.existsSync(abiDir)) {
+    fs.mkdirSync(abiDir, { recursive: true });
+  }
+  
+  // 为每个合约生成 ABI 文件
+  for (const contractName of contractNames) {
+    try {
+      // 读取合约 artifact
+      const artifact = await hre.artifacts.readArtifact(contractName);
+      
+      // 保存 ABI 文件，文件名与合约名称完全一致
+      fs.writeFileSync(
+        path.join(abiDir, `${contractName}.json`),
+        JSON.stringify(artifact.abi, null, 2)
+      );
+      
+      logger.info(`已导出 ${contractName}.json ABI`);
+    } catch (error) {
+      logger.error(`导出 ${contractName} ABI 失败: ${error.message}`);
+    }
+  }
+}
+
 async function main() {
   try {
     // 获取部署者账户
@@ -243,6 +275,20 @@ async function main() {
     const deploymentPath = path.join(__dirname, '../config/deployment.json');
     fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
     logger.info('部署信息已保存到:', deploymentPath);
+    
+    // 导出合约 ABI
+    const contractNames = [
+      "System",
+      "Facade",
+      "RoleManager",
+      "PropertyManager",
+      "TokenFactory",
+      "TradingManager",
+      "RewardManager",
+      "PropertyToken", 
+      "SimpleERC20"
+    ];
+    await exportContractABIs(contractNames);
 
     // 生成部署报告
     const report = generateDeploymentReport(deploymentInfo);

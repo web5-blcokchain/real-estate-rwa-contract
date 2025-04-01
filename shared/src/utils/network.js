@@ -2,8 +2,8 @@
  * 网络连接工具
  * 统一管理Provider的获取逻辑
  */
-import { ethers } from 'ethers';
-import envConfig from './env.js';
+const { ethers } = require('ethers');
+const envConfig = require('./env');
 
 /**
  * 区块链网络配置工具
@@ -173,6 +173,52 @@ class NetworkUtils {
 
 // 创建单例实例
 const networkUtils = new NetworkUtils();
-export default networkUtils;
-// 同时导出类，以便可以创建新实例
-export { NetworkUtils }; 
+
+// 导出通用的网络功能
+function getDefaultProvider() {
+  return networkUtils.getProvider();
+}
+
+function getNetworkProvider(network) {
+  // 可以根据需要创建特定网络的提供者
+  return new ethers.JsonRpcProvider(
+    network === 'localhost' ? envConfig.get('LOCAL_RPC_URL') :
+    network === 'testnet' ? envConfig.get('TESTNET_RPC_URL') :
+    network === 'mainnet' ? envConfig.get('MAINNET_RPC_URL') :
+    envConfig.get('LOCAL_RPC_URL')
+  );
+}
+
+function getProviderByChainId(chainId) {
+  // 根据链ID获取提供者
+  return new ethers.JsonRpcProvider(
+    chainId === envConfig.getInt('HARDHAT_CHAIN_ID') ? envConfig.get('LOCAL_RPC_URL') :
+    chainId === envConfig.getInt('TESTNET_CHAIN_ID') ? envConfig.get('TESTNET_RPC_URL') :
+    chainId === envConfig.getInt('MAINNET_CHAIN_ID') ? envConfig.get('MAINNET_RPC_URL') :
+    envConfig.get('LOCAL_RPC_URL')
+  );
+}
+
+// 导出模块
+module.exports = {
+  getDefaultProvider,
+  getNetworkProvider,
+  getProviderByChainId,
+  NetworkUtils,
+  // 导出单例实例
+  networkUtils,
+  // 导出实例方法
+  getCurrentNetwork: networkUtils.getCurrentNetwork.bind(networkUtils),
+  getBlockchainNetwork: networkUtils.getBlockchainNetwork.bind(networkUtils),
+  getRpcUrl: networkUtils.getRpcUrl.bind(networkUtils),
+  getChainId: networkUtils.getChainId.bind(networkUtils),
+  getNetworkName: networkUtils.getNetworkName.bind(networkUtils),
+  isTestnet: networkUtils.isTestnet.bind(networkUtils),
+  isMainnet: networkUtils.isMainnet.bind(networkUtils),
+  getExplorerUrl: networkUtils.getExplorerUrl.bind(networkUtils),
+  getExplorerApiUrl: networkUtils.getExplorerApiUrl.bind(networkUtils),
+  getExplorerApiKey: networkUtils.getExplorerApiKey.bind(networkUtils),
+  getConfig: networkUtils.getConfig.bind(networkUtils),
+  getProvider: networkUtils.getProvider.bind(networkUtils),
+  getSigner: networkUtils.getSigner.bind(networkUtils)
+}; 
