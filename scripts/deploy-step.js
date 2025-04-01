@@ -241,17 +241,7 @@ async function main() {
     // 部署系统合约
     const contracts = await deploySystemStep(deployer);
 
-    // 获取实现合约地址
-    const implementations = await getImplementationAddresses({
-      contracts,
-      network: hre.network.name,
-      timestamp: new Date().toISOString(),
-      deployer: deployer.address,
-      systemStatus: "1",
-      deployMethod: "step-by-step"
-    });
-
-    // 生成部署信息，确保合约名称与合约代码中的名称一致
+    // 先创建部署信息对象，带有正确的合约地址字符串
     const deploymentInfo = {
       network: hre.network.name,
       timestamp: new Date().toISOString(),
@@ -267,9 +257,14 @@ async function main() {
         Facade: await contracts.facade.getAddress()
       },
       systemStatus: "1",
-      deployMethod: "step-by-step",
-      implementations
+      deployMethod: "step-by-step"
     };
+
+    // 获取实现合约地址
+    const implementations = await getImplementationAddresses(deploymentInfo);
+
+    // 更新部署信息，添加实现地址
+    deploymentInfo.implementations = implementations;
 
     // 保存部署信息
     const deploymentPath = path.join(__dirname, '../config/deployment.json');
