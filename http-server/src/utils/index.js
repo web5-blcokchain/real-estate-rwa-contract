@@ -2,29 +2,25 @@
  * 工具模块 - 从shared模块导入公共功能
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// 获取当前目录
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const path = require('path');
+const fs = require('fs');
 
 // 计算shared模块的路径
 const sharedPath = path.resolve(__dirname, '../../../shared/src');
 
 // 导入shared模块的公共功能
-const envModule = await import(`${sharedPath}/config/env.js`);
-const networkModule = await import(`${sharedPath}/utils/network.js`);
-const sharedUtils = await import(`${sharedPath}/utils/index.js`);
-const utils = sharedUtils.default;
+const envConfig = require(`${sharedPath}/config/env`);
+const utils = require(`${sharedPath}/utils/index`);
 
-// 导出所有工具
-export default {
+// 创建一个统一的导出对象
+const sharedUtils = {
   // 环境配置
-  EnvConfig: envModule.EnvConfig || utils.EnvConfig,
+  EnvConfig: envConfig.EnvConfig,
+  env: envConfig,
   
   // 网络配置
-  NetworkUtils: networkModule.NetworkUtils || utils.NetworkUtils,
+  NetworkUtils: utils.NetworkUtils,
+  networkUtils: utils.networkUtils,
   
   // 合约工具
   getContract: utils.getContract,
@@ -47,6 +43,8 @@ export default {
   // ABI工具
   getContractABI: utils.getContractABI,
   
-  // 日志工具
+  // 日志工具 - 使用共享模块的logger
   logger: utils.logger
-}; 
+};
+
+module.exports = sharedUtils; 

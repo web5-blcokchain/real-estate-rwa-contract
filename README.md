@@ -447,7 +447,7 @@ NODE_ENV=development
 BLOCKCHAIN_NETWORK=localhost
 
 # Network-specific RPC URLs
-LOCAL_RPC_URL=http://127.0.0.1:8545
+LOCALHOST_RPC_URL=http://127.0.0.1:8545
 TESTNET_RPC_URL=https://sepolia.infura.io/v3/your-project-id
 MAINNET_RPC_URL=https://mainnet.infura.io/v3/your-project-id
 

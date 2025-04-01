@@ -1,14 +1,17 @@
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import http from 'http';
-import swaggerUi from 'swagger-ui-express';
-import swaggerJsDoc from 'swagger-jsdoc';
-import helmet from 'helmet';
-import dotenv from 'dotenv';
-import logger from './utils/logger.js';
-import propertyManagerRouter from './routes/propertyManager.js';
-import contractInteractionRouter from './routes/contractInteraction.js';
+/**
+ * HTTP服务器入口文件
+ */
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const http = require('http');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsDoc = require('swagger-jsdoc');
+const helmet = require('helmet');
+const dotenv = require('dotenv');
+const logger = require('./utils/logger');
+const propertyManagerRouter = require('./routes/propertyManager');
+const contractInteractionRouter = require('./routes/contractInteraction');
 
 // 初始化环境变量
 dotenv.config();
@@ -26,6 +29,9 @@ app.use(helmet());
 // 解析请求体
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// 添加请求日志中间件
+app.use(logger.request);
 
 // Swagger配置
 const swaggerOptions = {
@@ -121,7 +127,7 @@ app.use('/api', apiKeyMiddleware);
 app.use('/api/property-manager', propertyManagerRouter);
 app.use('/api/contract', contractInteractionRouter);
 
-// 示例角色管理路由 (保留原有示例)
+// 示例角色管理路由
 app.get('/api/role-manager/roles/:address', (req, res) => {
   const { address } = req.params;
   res.status(200).json({
@@ -161,10 +167,10 @@ const server = http.createServer(app);
 // 只有在非测试环境才启动服务器
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
-    console.log(`HTTP服务器运行在端口 ${PORT}`);
-    console.log(`API文档地址: http://localhost:${PORT}/api-docs`);
+    logger.info(`HTTP服务器运行在端口 ${PORT}`);
+    logger.info(`API文档地址: http://localhost:${PORT}/api-docs`);
   });
 }
 
 // 导出app实例用于测试
-export default app; 
+module.exports = app; 

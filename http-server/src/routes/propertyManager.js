@@ -1,10 +1,13 @@
-import { Router } from 'express';
-import { 
+/**
+ * 不动产管理路由
+ */
+const { Router } = require('express');
+const { 
   registerProperty, 
   getPropertyInfo, 
   updatePropertyInfo, 
   getAllProperties 
-} from '../controllers/propertyManagerController.js';
+} = require('../controllers/propertyManagerController');
 
 const router = Router();
 
@@ -373,4 +376,4 @@ router.post('/update', updatePropertyInfo);
  */
 router.get('/all', getAllProperties);
 
-export default router; 
+module.exports = router; 

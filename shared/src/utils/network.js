@@ -26,7 +26,7 @@ class NetworkUtils {
       case 'localhost':
         return {
           chainId: envConfig.getInt('HARDHAT_CHAIN_ID'),
-          rpcUrl: envConfig.get('LOCAL_RPC_URL'),
+          rpcUrl: envConfig.get('LOCALHOST_RPC_URL'),
           name: 'Local Development',
           isTestnet: true,
           isMainnet: false,
@@ -182,20 +182,20 @@ function getDefaultProvider() {
 function getNetworkProvider(network) {
   // 可以根据需要创建特定网络的提供者
   return new ethers.JsonRpcProvider(
-    network === 'localhost' ? envConfig.get('LOCAL_RPC_URL') :
+    network === 'localhost' ? envConfig.get('LOCALHOST_RPC_URL') :
     network === 'testnet' ? envConfig.get('TESTNET_RPC_URL') :
     network === 'mainnet' ? envConfig.get('MAINNET_RPC_URL') :
-    envConfig.get('LOCAL_RPC_URL')
+    envConfig.get('LOCALHOST_RPC_URL')
   );
 }
 
 function getProviderByChainId(chainId) {
   // 根据链ID获取提供者
   return new ethers.JsonRpcProvider(
-    chainId === envConfig.getInt('HARDHAT_CHAIN_ID') ? envConfig.get('LOCAL_RPC_URL') :
+    chainId === envConfig.getInt('HARDHAT_CHAIN_ID') ? envConfig.get('LOCALHOST_RPC_URL') :
     chainId === envConfig.getInt('TESTNET_CHAIN_ID') ? envConfig.get('TESTNET_RPC_URL') :
     chainId === envConfig.getInt('MAINNET_CHAIN_ID') ? envConfig.get('MAINNET_RPC_URL') :
-    envConfig.get('LOCAL_RPC_URL')
+    envConfig.get('LOCALHOST_RPC_URL')
   );
 }
 

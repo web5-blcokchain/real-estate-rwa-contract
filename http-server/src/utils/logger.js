@@ -1,52 +1,50 @@
 /**
- * 简单日志模块
+ * 日志模块 - 使用shared中的日志功能
  */
 
-// 日志级别
-const LOG_LEVELS = {
-  ERROR: 'error',
-  WARN: 'warn',
-  INFO: 'info',
-  DEBUG: 'debug'
-};
+const path = require('path');
+const sharedPath = path.resolve(__dirname, '../../../shared/src');
 
-// 获取当前时间戳
-const getTimestamp = () => {
-  return new Date().toISOString();
-};
+// 导入shared的日志模块
+const sharedLogger = require(`${sharedPath}/logger`);
 
-// 格式化日志消息
-const formatMessage = (level, message, ...args) => {
-  const timestamp = getTimestamp();
-  const formattedArgs = args.length > 0 ? args.map(arg => {
-    if (typeof arg === 'object') {
-      return JSON.stringify(arg);
-    }
-    return arg;
-  }).join(' ') : '';
-  
-  return `[${timestamp}] [${level.toUpperCase()}] ${message} ${formattedArgs}`;
-};
-
-// 创建日志对象
+// 扩展shared的日志模块，添加HTTP服务器特定的功能
 const logger = {
   error: (message, ...args) => {
-    console.error(formatMessage(LOG_LEVELS.ERROR, message, ...args));
+    sharedLogger.error(`[HTTP] ${message}`, ...args);
   },
   
   warn: (message, ...args) => {
-    console.warn(formatMessage(LOG_LEVELS.WARN, message, ...args));
+    sharedLogger.warn(`[HTTP] ${message}`, ...args);
   },
   
   info: (message, ...args) => {
-    console.info(formatMessage(LOG_LEVELS.INFO, message, ...args));
+    sharedLogger.info(`[HTTP] ${message}`, ...args);
   },
   
   debug: (message, ...args) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(formatMessage(LOG_LEVELS.DEBUG, message, ...args));
-    }
+    sharedLogger.debug(`[HTTP] ${message}`, ...args);
+  },
+  
+  // HTTP特定的日志方法
+  request: (req, res, next) => {
+    const start = Date.now();
+    
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`;
+      
+      if (res.statusCode >= 500) {
+        logger.error(message);
+      } else if (res.statusCode >= 400) {
+        logger.warn(message);
+      } else {
+        logger.info(message);
+      }
+    });
+    
+    next();
   }
 };
 
-export default logger; 
+module.exports = logger; 

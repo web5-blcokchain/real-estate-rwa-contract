@@ -1,23 +1,20 @@
-import { ethers } from 'ethers';
-import utils from '../utils/index.js';
+const { ethers } = require('ethers');
+const utils = require('../utils/index');
+const logger = require('../utils/logger');
+const contractHelpers = require('../utils/contractHelpers');
 
+// 使用工具模块中的函数和实例
 const { 
   getContract, 
   getContractWithSigner,
-  NetworkUtils
+  networkUtils, // 直接使用shared导出的单例实例
+  env // 使用环境配置单例
 } = utils;
-const EnvConfig = utils.EnvConfig;
-
-// 创建环境配置实例
-const env = new EnvConfig();
-
-// 创建网络工具实例
-const networkUtils = new NetworkUtils();
 
 /**
  * 获取系统状态
  */
-export const getSystemStatus = async (req, res) => {
+const getSystemStatus = async (req, res) => {
   try {
     // 获取各合约实例
     const roleManager = await getContract('RoleManager');
@@ -32,7 +29,7 @@ export const getSystemStatus = async (req, res) => {
     // 获取系统概况
     const propertyCount = await propertyManager.getPropertyCount();
     
-    // 获取网络信息
+    // 获取网络信息 - 使用networkUtils单例
     const networkInfo = {
       name: networkUtils.getNetworkName(),
       chainId: networkUtils.getChainId(),
@@ -54,7 +51,7 @@ export const getSystemStatus = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取系统状态失败:', error);
+    logger.error('获取系统状态失败:', error);
     res.status(500).json({
       success: false,
       error: '获取系统状态失败',
@@ -66,7 +63,7 @@ export const getSystemStatus = async (req, res) => {
 /**
  * 开启/关闭紧急模式
  */
-export const toggleEmergencyMode = async (req, res) => {
+const toggleEmergencyMode = async (req, res) => {
   try {
     const { enable, adminRole = 'admin' } = req.body;
     
@@ -86,18 +83,21 @@ export const toggleEmergencyMode = async (req, res) => {
     
     // 只有状态需要改变时才执行
     if (currentState !== enable) {
-      // 调用合约方法
-      const tx = enable ? 
-        await roleManager.enableEmergency() : 
-        await roleManager.disableEmergency();
+      // 使用contractHelpers执行交易
+      const txFunc = () => enable ? 
+        roleManager.enableEmergency() : 
+        roleManager.disableEmergency();
       
-      await tx.wait();
+      const result = await contractHelpers.executeTransaction(
+        txFunc, 
+        `${enable ? '启用' : '关闭'}紧急模式`
+      );
       
       res.status(200).json({
         success: true,
         data: {
           isEmergency: enable,
-          transaction: tx.hash,
+          transaction: result.transaction.hash,
           message: enable ? '已启用紧急模式' : '已关闭紧急模式'
         }
       });
@@ -111,7 +111,7 @@ export const toggleEmergencyMode = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('切换紧急模式失败:', error);
+    logger.error('切换紧急模式失败:', error);
     res.status(500).json({
       success: false,
       error: '切换紧急模式失败',
@@ -123,7 +123,7 @@ export const toggleEmergencyMode = async (req, res) => {
 /**
  * 暂停/恢复交易
  */
-export const toggleTradingPause = async (req, res) => {
+const toggleTradingPause = async (req, res) => {
   try {
     const { enable, adminRole = 'admin' } = req.body;
     
@@ -143,18 +143,21 @@ export const toggleTradingPause = async (req, res) => {
     
     // 只有状态需要改变时才执行
     if (currentState !== enable) {
-      // 调用合约方法
-      const tx = enable ? 
-        await tradingManager.pause() : 
-        await tradingManager.unpause();
+      // 使用contractHelpers执行交易
+      const txFunc = () => enable ? 
+        tradingManager.pause() : 
+        tradingManager.unpause();
       
-      await tx.wait();
+      const result = await contractHelpers.executeTransaction(
+        txFunc, 
+        `${enable ? '暂停' : '恢复'}交易`
+      );
       
       res.status(200).json({
         success: true,
         data: {
           isPaused: enable,
-          transaction: tx.hash,
+          transaction: result.transaction.hash,
           message: enable ? '已暂停交易' : '已恢复交易'
         }
       });
@@ -168,7 +171,7 @@ export const toggleTradingPause = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('切换交易暂停状态失败:', error);
+    logger.error('切换交易暂停状态失败:', error);
     res.status(500).json({
       success: false,
       error: '切换交易暂停状态失败',
@@ -180,7 +183,7 @@ export const toggleTradingPause = async (req, res) => {
 /**
  * 暂停/恢复合约功能
  */
-export const togglePause = async (req, res) => {
+const togglePause = async (req, res) => {
   try {
     const { contractName, enable, adminRole = 'admin' } = req.body;
     
@@ -211,20 +214,23 @@ export const togglePause = async (req, res) => {
     }
     
     // 执行暂停/恢复操作
-    let tx;
     if (currentState !== enable) {
-      tx = enable ? 
-        await contract.pause() : 
-        await contract.unpause();
+      // 使用contractHelpers执行交易
+      const txFunc = () => enable ? 
+        contract.pause() : 
+        contract.unpause();
       
-      await tx.wait();
+      const result = await contractHelpers.executeTransaction(
+        txFunc, 
+        `${enable ? '暂停' : '恢复'}合约 ${contractName}`
+      );
       
       res.status(200).json({
         success: true,
         data: {
           contractName,
           isPaused: enable,
-          transaction: tx.hash,
+          transaction: result.transaction.hash,
           message: enable ? `已暂停 ${contractName}` : `已恢复 ${contractName}`
         }
       });
@@ -239,11 +245,18 @@ export const togglePause = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('切换合约暂停状态失败:', error);
+    logger.error('切换合约暂停状态失败:', error);
     res.status(500).json({
       success: false,
       error: '切换合约暂停状态失败',
       message: error.message
     });
   }
+};
+
+module.exports = {
+  getSystemStatus,
+  toggleEmergencyMode,
+  toggleTradingPause,
+  togglePause
 }; 

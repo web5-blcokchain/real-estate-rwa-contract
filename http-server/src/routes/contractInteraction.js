@@ -1,4 +1,8 @@
-import { Router } from 'express';
+/**
+ * 合约交互路由
+ */
+const { Router } = require('express');
+const { getContractHelpers, logger } = require('../utils');
 
 const router = Router();
 
@@ -71,11 +75,10 @@ router.post('/call', async (req, res) => {
       });
     }
     
-    // 导入工具函数
-    const { getContract } = (await import('../utils/index.js')).default;
-    
     // 获取合约实例
-    const contract = await getContract(contractName);
+    const { getContractInstance } = getContractHelpers;
+    const contract = await getContractInstance(contractName);
+    
     if (!contract) {
       return res.status(400).json({
         success: false,
@@ -101,7 +104,7 @@ router.post('/call', async (req, res) => {
       data: { result }
     });
   } catch (error) {
-    console.error('调用合约方法失败:', error);
+    logger.error('调用合约方法失败:', error);
     return res.status(500).json({
       success: false,
       error: '调用合约方法失败',
@@ -190,11 +193,15 @@ router.post('/transaction', async (req, res) => {
       });
     }
     
-    // 导入工具函数
-    const { getContractWithSigner } = (await import('../utils/index.js')).default;
+    // 获取合约实例并执行交易
+    const { getContractWithOptions, executeTransaction } = getContractHelpers;
     
-    // 获取合约实例
-    const contract = await getContractWithSigner(contractName, role);
+    // 获取带签名者的合约实例
+    const contract = await getContractWithOptions({
+      contractName,
+      role
+    });
+    
     if (!contract) {
       return res.status(400).json({
         success: false,
@@ -213,10 +220,7 @@ router.post('/transaction', async (req, res) => {
     }
     
     // 执行合约交易
-    const tx = await contract[method](...args);
-    
-    // 等待交易确认
-    const receipt = await tx.wait();
+    const receipt = await executeTransaction(contract, method, args);
     
     return res.status(200).json({
       success: true,
@@ -233,7 +237,7 @@ router.post('/transaction', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('执行合约交易失败:', error);
+    logger.error('执行合约交易失败:', error);
     return res.status(500).json({
       success: false,
       error: '执行合约交易失败',
@@ -242,4 +246,4 @@ router.post('/transaction', async (req, res) => {
   }
 });
 
-export default router; 
+module.exports = router; 
