@@ -2,18 +2,18 @@ import { Request, Response } from 'express';
 import { ethers } from 'ethers';
 
 // 导入共享工具
-const {
+import {
   getContract,
   getContractWithSigner,
   getContractWithPrivateKey,
   createContractFromAddress,
   createWalletFromPrivateKey
-} = require('../../../shared/src/utils');
+} from '../../../shared/src/utils/index.js';
 
 /**
  * 注册新房产
  */
-export const registerProperty = async (req: Request, res: Response) => {
+export const registerProperty = async (req:, res:) => {
   try {
     const { 
       propertyId, 
@@ -28,9 +28,9 @@ export const registerProperty = async (req: Request, res: Response) => {
     // 参数验证
     if (!propertyId || !location || !area || !description || !initialSupply) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的房产信息'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的房产信息'
       });
     }
     
@@ -51,20 +51,20 @@ export const registerProperty = async (req: Request, res: Response) => {
     
     // 从事件中获取代币地址
     const propertyRegisteredEvent = receipt.logs
-      .filter((log: any) => {
+      .filter((log:) => {
         try {
           return connectedPropertyManager.interface.parseLog(log)?.name === 'PropertyRegistered';
         } catch (e) {
           return false;
         }
       })
-      .map((log: any) => connectedPropertyManager.interface.parseLog(log))[0];
+      .map((log:) => connectedPropertyManager.interface.parseLog(log))[0];
     
     const tokenAddress = propertyRegisteredEvent?.args?.tokenAddress;
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         propertyId,
         tokenAddress,
         location,
@@ -72,16 +72,16 @@ export const registerProperty = async (req: Request, res: Response) => {
         description,
         initialSupply,
         decimals,
-        transaction: tx.hash,
-        message: `已成功注册房产 ${propertyId}`
+        transaction:.hash,
+        message:`已成功注册房产 ${propertyId}`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('注册房产失败:', error);
     res.status(500).json({
-      success: false,
-      error: '注册房产失败',
-      message: error.message
+      success:,
+      error:'注册房产失败',
+      message:.message
     });
   }
 };
@@ -89,15 +89,15 @@ export const registerProperty = async (req: Request, res: Response) => {
 /**
  * 获取房产信息
  */
-export const getPropertyInfo = async (req: Request, res: Response) => {
+export const getPropertyInfo = async (req:, res:) => {
   try {
     const { propertyId, field } = req.params;
     
     if (!propertyId) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供房产ID'
+        success:,
+        error:'参数不完整',
+        message:'请提供房产ID'
       });
     }
     
@@ -109,9 +109,9 @@ export const getPropertyInfo = async (req: Request, res: Response) => {
     
     if (tokenAddress === ethers.ZeroAddress) {
       return res.status(404).json({
-        success: false,
-        error: '房产不存在',
-        message: `未找到ID为 ${propertyId} 的房产`
+        success:,
+        error:'房产不存在',
+        message:`未找到ID为 ${propertyId} 的房产`
       });
     }
     
@@ -120,11 +120,11 @@ export const getPropertyInfo = async (req: Request, res: Response) => {
       const fieldValue = await propertyManager.getPropertyInfo(propertyId, field);
       
       return res.status(200).json({
-        success: true,
-        data: {
+        success:,
+        data:{
           propertyId,
           tokenAddress,
-          [field]: fieldValue
+          [field]:
         }
       });
     }
@@ -146,27 +146,27 @@ export const getPropertyInfo = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         propertyId,
         tokenAddress,
         location,
         area,
         description,
-        token: {
+        token:{
           name,
           symbol,
-          totalSupply: ethers.formatUnits(totalSupply, decimals),
+          totalSupply:.formatUnits(totalSupply, decimals),
           decimals
         }
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取房产信息失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取房产信息失败',
-      message: error.message
+      success:,
+      error:'获取房产信息失败',
+      message:.message
     });
   }
 };
@@ -174,16 +174,16 @@ export const getPropertyInfo = async (req: Request, res: Response) => {
 /**
  * 更新房产信息
  */
-export const updatePropertyInfo = async (req: Request, res: Response) => {
+export const updatePropertyInfo = async (req:, res:) => {
   try {
     const { propertyId, field, value, managerPrivateKey } = req.body;
     
     // 参数验证
     if (!propertyId || !field || !value || !managerPrivateKey) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -198,20 +198,20 @@ export const updatePropertyInfo = async (req: Request, res: Response) => {
     const receipt = await tx.wait();
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         propertyId,
         field,
-        transaction: tx.hash,
-        message: `已成功更新房产 ${propertyId} 的 ${field} 为 ${value}`
+        transaction:.hash,
+        message:`已成功更新房产 ${propertyId} 的 ${field} 为 ${value}`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('更新房产信息失败:', error);
     res.status(500).json({
-      success: false,
-      error: '更新房产信息失败',
-      message: error.message
+      success:,
+      error:'更新房产信息失败',
+      message:.message
     });
   }
 };
@@ -219,7 +219,7 @@ export const updatePropertyInfo = async (req: Request, res: Response) => {
 /**
  * 获取所有房产
  */
-export const getAllProperties = async (req: Request, res: Response) => {
+export const getAllProperties = async (req:, res:) => {
   try {
     // 使用共享工具获取合约实例
     const propertyManager = await getContract('PropertyManager');
@@ -256,18 +256,18 @@ export const getAllProperties = async (req: Request, res: Response) => {
     );
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         properties,
-        count: propertyCount.toString()
+        count:.toString()
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取所有房产失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取所有房产失败',
-      message: error.message
+      success:,
+      error:'获取所有房产失败',
+      message:.message
     });
   }
 };

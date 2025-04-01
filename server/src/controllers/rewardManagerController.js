@@ -6,7 +6,7 @@ const envConfig = require('../../../shared/src/config/env');
 const env = new envConfig();
 
 // 获取合约实例
-const getContract = async (contractName: string) => {
+const getContract = async (contractName:) => {
   const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
   const contractAddress = env.get(`${contractName.toUpperCase()}_ADDRESS`);
   const contractABI = require(`../../../config/abi/${contractName}.json`);
@@ -14,7 +14,7 @@ const getContract = async (contractName: string) => {
 };
 
 // 获取钱包实例
-const getWallet = (role: string) => {
+const getWallet = (role:) => {
   const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
   if (!privateKey) {
     throw new Error(`未找到角色 ${role} 的私钥配置`);
@@ -26,24 +26,24 @@ const getWallet = (role: string) => {
 /**
  * 分发奖励
  */
-export const distributeRewards = async (req: Request, res: Response) => {
+export const distributeRewards = async (req:, res:) => {
   try {
     const { token, recipients, amounts, managerRole = 'manager' } = req.body;
     
     // 参数验证
     if (!token || !ethers.isAddress(token) || !recipients || !amounts) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
     if (recipients.length !== amounts.length) {
       return res.status(400).json({
-        success: false,
-        error: '参数错误',
-        message: '接收者数组和金额数组长度必须相同'
+        success:,
+        error:'参数错误',
+        message:'接收者数组和金额数组长度必须相同'
       });
     }
     
@@ -58,13 +58,13 @@ export const distributeRewards = async (req: Request, res: Response) => {
     const decimals = await connectedToken.decimals();
     
     // 将金额转换为BigInt
-    const amountsBigInt = amounts.map((amount: string | number) => 
+    const amountsBigInt = amounts.map((amount: | number) => 
       ethers.parseUnits(amount.toString(), decimals)
     );
     
     // 检查代币授权
     const managerAddress = wallet.address;
-    const totalAmount = amountsBigInt.reduce((a: bigint, b: bigint) => a + b, 0n);
+    const totalAmount = amountsBigInt.reduce((a:, b:) => a + b, 0n);
     const allowance = await connectedToken.allowance(managerAddress, rewardManager.target);
     
     // 如果授权不足，先进行授权
@@ -81,22 +81,22 @@ export const distributeRewards = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         token,
         symbol,
         recipients,
-        amounts: amounts.map(String),
-        transaction: tx.hash,
-        message: `已成功分发 ${symbol} 代币奖励给 ${recipients.length} 个接收者`
+        amounts:.map(String),
+        transaction:.hash,
+        message:`已成功分发 ${symbol} 代币奖励给 ${recipients.length} 个接收者`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('分发奖励失败:', error);
     res.status(500).json({
-      success: false,
-      error: '分发奖励失败',
-      message: error.message
+      success:,
+      error:'分发奖励失败',
+      message:.message
     });
   }
 };
@@ -104,16 +104,16 @@ export const distributeRewards = async (req: Request, res: Response) => {
 /**
  * 领取奖励
  */
-export const claimRewards = async (req: Request, res: Response) => {
+export const claimRewards = async (req:, res:) => {
   try {
     const { token, userRole = 'user' } = req.body;
     
     // 参数验证
     if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -134,9 +134,9 @@ export const claimRewards = async (req: Request, res: Response) => {
     // 如果没有可领取的奖励
     if (claimableAmount === 0n) {
       return res.status(400).json({
-        success: false,
-        error: '没有可领取的奖励',
-        message: '该用户没有可领取的奖励'
+        success:,
+        error:'没有可领取的奖励',
+        message:'该用户没有可领取的奖励'
       });
     }
     
@@ -148,22 +148,22 @@ export const claimRewards = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
-        user: userAddress,
+      success:,
+      data:{
+        user:,
         token,
         symbol,
-        amount: ethers.formatUnits(claimableAmount, decimals),
-        transaction: tx.hash,
-        message: `已成功领取 ${ethers.formatUnits(claimableAmount, decimals)} ${symbol} 代币奖励`
+        amount:.formatUnits(claimableAmount, decimals),
+        transaction:.hash,
+        message:`已成功领取 ${ethers.formatUnits(claimableAmount, decimals)} ${symbol} 代币奖励`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('领取奖励失败:', error);
     res.status(500).json({
-      success: false,
-      error: '领取奖励失败',
-      message: error.message
+      success:,
+      error:'领取奖励失败',
+      message:.message
     });
   }
 };
@@ -171,16 +171,16 @@ export const claimRewards = async (req: Request, res: Response) => {
 /**
  * 获取可领取的奖励
  */
-export const getClaimableRewards = async (req: Request, res: Response) => {
+export const getClaimableRewards = async (req:, res:) => {
   try {
     const { address, token } = req.params;
     
     // 参数验证
     if (!address || !ethers.isAddress(address) || !token || !ethers.isAddress(token)) {
       return res.status(400).json({
-        success: false,
-        error: '参数错误',
-        message: '请提供有效的地址和代币地址'
+        success:,
+        error:'参数错误',
+        message:'请提供有效的地址和代币地址'
       });
     }
     
@@ -197,21 +197,21 @@ export const getClaimableRewards = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
-        user: address,
+      success:,
+      data:{
+        user:,
         token,
         symbol,
-        amount: ethers.formatUnits(claimableAmount, decimals),
-        message: `用户 ${address} 可领取 ${ethers.formatUnits(claimableAmount, decimals)} ${symbol} 代币奖励`
+        amount:.formatUnits(claimableAmount, decimals),
+        message:`用户 ${address} 可领取 ${ethers.formatUnits(claimableAmount, decimals)} ${symbol} 代币奖励`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取可领取奖励失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取可领取奖励失败',
-      message: error.message
+      success:,
+      error:'获取可领取奖励失败',
+      message:.message
     });
   }
 };
@@ -219,16 +219,16 @@ export const getClaimableRewards = async (req: Request, res: Response) => {
 /**
  * 添加奖励代币
  */
-export const addRewardToken = async (req: Request, res: Response) => {
+export const addRewardToken = async (req:, res:) => {
   try {
     const { token, managerRole = 'manager' } = req.body;
     
     // 参数验证
     if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -241,9 +241,9 @@ export const addRewardToken = async (req: Request, res: Response) => {
     const isRewardToken = await rewardManager.isRewardToken(token);
     if (isRewardToken) {
       return res.status(400).json({
-        success: false,
-        error: '代币已存在',
-        message: '该代币已经是奖励代币'
+        success:,
+        error:'代币已存在',
+        message:'该代币已经是奖励代币'
       });
     }
     
@@ -257,20 +257,20 @@ export const addRewardToken = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         token,
         symbol,
-        transaction: tx.hash,
-        message: `已成功添加 ${symbol} 作为奖励代币`
+        transaction:.hash,
+        message:`已成功添加 ${symbol} 作为奖励代币`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('添加奖励代币失败:', error);
     res.status(500).json({
-      success: false,
-      error: '添加奖励代币失败',
-      message: error.message
+      success:,
+      error:'添加奖励代币失败',
+      message:.message
     });
   }
 };
@@ -278,16 +278,16 @@ export const addRewardToken = async (req: Request, res: Response) => {
 /**
  * 移除奖励代币
  */
-export const removeRewardToken = async (req: Request, res: Response) => {
+export const removeRewardToken = async (req:, res:) => {
   try {
     const { token, managerRole = 'manager' } = req.body;
     
     // 参数验证
     if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -300,9 +300,9 @@ export const removeRewardToken = async (req: Request, res: Response) => {
     const isRewardToken = await rewardManager.isRewardToken(token);
     if (!isRewardToken) {
       return res.status(400).json({
-        success: false,
-        error: '代币不存在',
-        message: '该代币不是奖励代币'
+        success:,
+        error:'代币不存在',
+        message:'该代币不是奖励代币'
       });
     }
     
@@ -316,20 +316,20 @@ export const removeRewardToken = async (req: Request, res: Response) => {
     const symbol = await connectedToken.symbol();
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         token,
         symbol,
-        transaction: tx.hash,
-        message: `已成功移除 ${symbol} 作为奖励代币`
+        transaction:.hash,
+        message:`已成功移除 ${symbol} 作为奖励代币`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('移除奖励代币失败:', error);
     res.status(500).json({
-      success: false,
-      error: '移除奖励代币失败',
-      message: error.message
+      success:,
+      error:'移除奖励代币失败',
+      message:.message
     });
   }
 };

@@ -3,20 +3,21 @@ import cors from 'cors';
 import helmet from 'helmet';
 import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
+import utils from './utils/mock.js';
 
 // 导入路由
-import roleManagerRoutes from './routes/roleManager';
-import propertyManagerRoutes from './routes/propertyManager';
-import tradingManagerRoutes from './routes/tradingManager';
-import rewardManagerRoutes from './routes/rewardManager';
-import systemRoutes from './routes/system';
+import roleManagerRoutes from './routes/roleManager.js';
+import propertyManagerRoutes from './routes/propertyManager.js';
+import tradingManagerRoutes from './routes/tradingManager.js';
+import rewardManagerRoutes from './routes/rewardManager.js';
+import systemRoutes from './routes/system.js';
 
 // 导入中间件
-import { apiKeyMiddleware } from './middlewares/auth';
+import { apiKeyMiddleware } from './middlewares/auth.js';
 
-// 导入环境配置
-const envConfig = require('../../shared/src/config/env');
-const env = new envConfig();
+// 创建环境配置实例
+const EnvConfig = utils.EnvConfig;
+const env = new EnvConfig();
 
 // 初始化Express应用
 const app = express();
@@ -43,8 +44,22 @@ const swaggerOptions = {
         description: '开发服务器',
       },
     ],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'query',
+          name: 'api_key',
+        },
+      },
+    },
+    security: [
+      {
+        ApiKeyAuth: [],
+      },
+    ],
   },
-  apis: ['./src/routes/*.ts'], // 路由文件路径
+  apis: ['./src/routes/*.js'], // 路由文件路径
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
@@ -71,4 +86,4 @@ app.listen(PORT, () => {
   console.log(`API文档可在 http://localhost:${PORT}/api-docs 访问`);
 });
 
-export default app;
+export default app; 

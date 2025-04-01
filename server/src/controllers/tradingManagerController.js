@@ -6,7 +6,7 @@ const envConfig = require('../../../shared/src/config/env');
 const env = new envConfig();
 
 // 获取合约实例
-const getContract = async (contractName: string) => {
+const getContract = async (contractName:) => {
   const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
   const contractAddress = env.get(`${contractName.toUpperCase()}_ADDRESS`);
   const contractABI = require(`../../../config/abi/${contractName}.json`);
@@ -14,7 +14,7 @@ const getContract = async (contractName: string) => {
 };
 
 // 获取钱包实例
-const getWallet = (role: string) => {
+const getWallet = (role:) => {
   const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
   if (!privateKey) {
     throw new Error(`未找到角色 ${role} 的私钥配置`);
@@ -26,16 +26,16 @@ const getWallet = (role: string) => {
 /**
  * 创建订单
  */
-export const createOrder = async (req: Request, res: Response) => {
+export const createOrder = async (req:, res:) => {
   try {
     const { token, amount, price, sellerRole = 'seller' } = req.body;
     
     // 参数验证
     if (!token || !ethers.isAddress(token) || !amount || !price) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的订单信息'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的订单信息'
       });
     }
     
@@ -70,35 +70,35 @@ export const createOrder = async (req: Request, res: Response) => {
     
     // 从事件中获取订单ID
     const orderCreatedEvent = receipt.logs
-      .filter((log: any) => {
+      .filter((log:) => {
         try {
           return tradingManager.interface.parseLog(log)?.name === 'OrderCreated';
         } catch (e) {
           return false;
         }
       })
-      .map((log: any) => tradingManager.interface.parseLog(log))[0];
+      .map((log:) => tradingManager.interface.parseLog(log))[0];
     
     const orderId = orderCreatedEvent?.args?.orderId;
     
     res.status(200).json({
-      success: true,
-      data: {
-        orderId: orderId.toString(),
-        seller: sellerAddress,
+      success:,
+      data:{
+        orderId:.toString(),
+        seller:,
         token,
-        amount: amount.toString(),
-        price: price.toString(),
-        transaction: tx.hash,
-        message: `已成功创建订单 #${orderId}`
+        amount:.toString(),
+        price:.toString(),
+        transaction:.hash,
+        message:`已成功创建订单 #${orderId}`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('创建订单失败:', error);
     res.status(500).json({
-      success: false,
-      error: '创建订单失败',
-      message: error.message
+      success:,
+      error:'创建订单失败',
+      message:.message
     });
   }
 };
@@ -106,16 +106,16 @@ export const createOrder = async (req: Request, res: Response) => {
 /**
  * 执行订单
  */
-export const executeOrder = async (req: Request, res: Response) => {
+export const executeOrder = async (req:, res:) => {
   try {
     const { orderId, buyerRole = 'buyer' } = req.body;
     
     // 参数验证
     if (!orderId) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -129,30 +129,30 @@ export const executeOrder = async (req: Request, res: Response) => {
     
     // 执行订单
     const tx = await connectedTradingManager.executeOrder(orderId, {
-      value: order[4] // price
+      value:[4] // price
     });
     
     const receipt = await tx.wait();
     
     res.status(200).json({
-      success: true,
-      data: {
-        orderId: orderId.toString(),
-        buyer: wallet.address,
-        seller: order[1],
-        token: order[2],
-        amount: ethers.formatUnits(order[3], 18), // 假设代币有18位小数
-        price: ethers.formatEther(order[4]),
-        transaction: tx.hash,
-        message: `已成功执行订单 #${orderId}`
+      success:,
+      data:{
+        orderId:.toString(),
+        buyer:.address,
+        seller:[1],
+        token:[2],
+        amount:.formatUnits(order[3], 18), // 假设代币有18位小数
+        price:.formatEther(order[4]),
+        transaction:.hash,
+        message:`已成功执行订单 #${orderId}`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('执行订单失败:', error);
     res.status(500).json({
-      success: false,
-      error: '执行订单失败',
-      message: error.message
+      success:,
+      error:'执行订单失败',
+      message:.message
     });
   }
 };
@@ -160,16 +160,16 @@ export const executeOrder = async (req: Request, res: Response) => {
 /**
  * 取消订单
  */
-export const cancelOrder = async (req: Request, res: Response) => {
+export const cancelOrder = async (req:, res:) => {
   try {
     const { orderId, sellerRole = 'seller' } = req.body;
     
     // 参数验证
     if (!orderId) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
+        success:,
+        error:'参数不完整',
+        message:'请提供所有必要的参数'
       });
     }
     
@@ -183,19 +183,19 @@ export const cancelOrder = async (req: Request, res: Response) => {
     const receipt = await tx.wait();
     
     res.status(200).json({
-      success: true,
-      data: {
-        orderId: orderId.toString(),
-        transaction: tx.hash,
-        message: `已成功取消订单 #${orderId}`
+      success:,
+      data:{
+        orderId:.toString(),
+        transaction:.hash,
+        message:`已成功取消订单 #${orderId}`
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('取消订单失败:', error);
     res.status(500).json({
-      success: false,
-      error: '取消订单失败',
-      message: error.message
+      success:,
+      error:'取消订单失败',
+      message:.message
     });
   }
 };
@@ -203,16 +203,16 @@ export const cancelOrder = async (req: Request, res: Response) => {
 /**
  * 获取订单信息
  */
-export const getOrder = async (req: Request, res: Response) => {
+export const getOrder = async (req:, res:) => {
   try {
     const { orderId } = req.params;
     
     // 参数验证
     if (!orderId) {
       return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供订单ID'
+        success:,
+        error:'参数不完整',
+        message:'请提供订单ID'
       });
     }
     
@@ -228,24 +228,24 @@ export const getOrder = async (req: Request, res: Response) => {
     const decimals = await connectedToken.decimals();
     
     res.status(200).json({
-      success: true,
-      data: {
-        orderId: order[0].toString(),
-        seller: order[1],
-        token: order[2],
-        amount: ethers.formatUnits(order[3], decimals),
-        price: ethers.formatEther(order[4]),
-        timestamp: new Date(Number(order[5]) * 1000).toISOString(),
-        active: order[6],
-        propertyIdHash: order[7]
+      success:,
+      data:{
+        orderId:[0].toString(),
+        seller:[1],
+        token:[2],
+        amount:.formatUnits(order[3], decimals),
+        price:.formatEther(order[4]),
+        timestamp: Date(Number(order[5]) * 1000).toISOString(),
+        active:[6],
+        propertyIdHash:[7]
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取订单信息失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取订单信息失败',
-      message: error.message
+      success:,
+      error:'获取订单信息失败',
+      message:.message
     });
   }
 };
@@ -253,7 +253,7 @@ export const getOrder = async (req: Request, res: Response) => {
 /**
  * 获取活跃订单列表
  */
-export const getActiveOrders = async (req: Request, res: Response) => {
+export const getActiveOrders = async (req:, res:) => {
   try {
     // 获取合约实例
     const tradingManager = await getContract('TradingManager');
@@ -272,30 +272,30 @@ export const getActiveOrders = async (req: Request, res: Response) => {
       const decimals = await connectedToken.decimals();
       
       orders.push({
-        orderId: order[0].toString(),
-        seller: order[1],
-        token: order[2],
-        amount: ethers.formatUnits(order[3], decimals),
-        price: ethers.formatEther(order[4]),
-        timestamp: new Date(Number(order[5]) * 1000).toISOString(),
-        active: order[6],
-        propertyIdHash: order[7]
+        orderId:[0].toString(),
+        seller:[1],
+        token:[2],
+        amount:.formatUnits(order[3], decimals),
+        price:.formatEther(order[4]),
+        timestamp: Date(Number(order[5]) * 1000).toISOString(),
+        active:[6],
+        propertyIdHash:[7]
       });
     }
     
     res.status(200).json({
-      success: true,
-      data: {
-        count: orders.length,
+      success:,
+      data:{
+        count:.length,
         orders
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取活跃订单列表失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取活跃订单列表失败',
-      message: error.message
+      success:,
+      error:'获取活跃订单列表失败',
+      message:.message
     });
   }
 };
@@ -303,16 +303,16 @@ export const getActiveOrders = async (req: Request, res: Response) => {
 /**
  * 获取用户订单列表
  */
-export const getUserOrders = async (req: Request, res: Response) => {
+export const getUserOrders = async (req:, res:) => {
   try {
     const { address } = req.params;
     
     // 参数验证
     if (!address || !ethers.isAddress(address)) {
       return res.status(400).json({
-        success: false,
-        error: '无效的地址',
-        message: '请提供有效的以太坊地址'
+        success:,
+        error:'无效的地址',
+        message:'请提供有效的以太坊地址'
       });
     }
     
@@ -333,31 +333,31 @@ export const getUserOrders = async (req: Request, res: Response) => {
       const decimals = await connectedToken.decimals();
       
       orders.push({
-        orderId: order[0].toString(),
-        seller: order[1],
-        token: order[2],
-        amount: ethers.formatUnits(order[3], decimals),
-        price: ethers.formatEther(order[4]),
-        timestamp: new Date(Number(order[5]) * 1000).toISOString(),
-        active: order[6],
-        propertyIdHash: order[7]
+        orderId:[0].toString(),
+        seller:[1],
+        token:[2],
+        amount:.formatUnits(order[3], decimals),
+        price:.formatEther(order[4]),
+        timestamp: Date(Number(order[5]) * 1000).toISOString(),
+        active:[6],
+        propertyIdHash:[7]
       });
     }
     
     res.status(200).json({
-      success: true,
-      data: {
+      success:,
+      data:{
         address,
-        count: orders.length,
+        count:.length,
         orders
       }
     });
-  } catch (error: any) {
+  } catch (error:) {
     console.error('获取用户订单列表失败:', error);
     res.status(500).json({
-      success: false,
-      error: '获取用户订单列表失败',
-      message: error.message
+      success:,
+      error:'获取用户订单列表失败',
+      message:.message
     });
   }
 };

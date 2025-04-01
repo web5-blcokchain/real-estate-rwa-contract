@@ -1,14 +1,14 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 
 // 导入环境配置
-const envConfig = require('../../../shared/src/config/env');
-const env = new envConfig();
+import EnvConfig from '../../../shared/src/config/env.js';
+const env = new EnvConfig();
 
 /**
  * API密钥鉴权中间件
  * 通过URL参数api_key验证请求
  */
-export const apiKeyMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const apiKeyMiddleware = (req, res, next) => {
   // 健康检查接口不需要鉴权
   if (req.path === '/health') {
     return next();
@@ -19,7 +19,7 @@ export const apiKeyMiddleware = (req: Request, res: Response, next: NextFunction
     return next();
   }
 
-  const apiKey = req.query.api_key as string;
+  const apiKey = req.query.api_key;
   
   // 从环境变量获取有效的API Key
   const validApiKey = env.get('API_KEY');

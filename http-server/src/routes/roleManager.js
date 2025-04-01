@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getRoles, grantRole, revokeRole } from '../controllers/roleManagerController';
+import { getRoles, grantRole, revokeRole, getRoleAddresses } from '../controllers/roleManagerController.js';
 
 const router = Router();
 
@@ -9,6 +9,7 @@ const router = Router();
  *   get:
  *     summary: 获取地址的角色信息
  *     description: 查询指定地址拥有的角色权限
+ *     tags: [角色管理]
  *     parameters:
  *       - in: path
  *         name: address
@@ -44,10 +45,10 @@ const router = Router();
  *                       properties:
  *                         isAdmin:
  *                           type: boolean
- *                           example: true
+ *                           example: false
  *                         isManager:
  *                           type: boolean
- *                           example: false
+ *                           example: true
  *                         isTrader:
  *                           type: boolean
  *                           example: false
@@ -62,10 +63,11 @@ router.get('/roles/:address', getRoles);
 
 /**
  * @swagger
- * /api/role-manager/grant-role:
+ * /api/role-manager/grant:
  *   post:
  *     summary: 授予角色
  *     description: 给指定地址授予特定角色
+ *     tags: [角色管理]
  *     parameters:
  *       - in: query
  *         name: api_key
@@ -82,7 +84,6 @@ router.get('/roles/:address', getRoles);
  *             required:
  *               - address
  *               - role
- *               - adminPrivateKey
  *             properties:
  *               address:
  *                 type: string
@@ -93,10 +94,10 @@ router.get('/roles/:address', getRoles);
  *                 enum: [admin, manager, trader]
  *                 description: 角色类型
  *                 example: "manager"
- *               adminPrivateKey:
+ *               adminRole:
  *                 type: string
- *                 description: 管理员私钥
- *                 example: "0xabcd..."
+ *                 description: 管理员角色名称，默认为admin
+ *                 example: "admin"
  *     responses:
  *       200:
  *         description: 成功授予角色
@@ -124,14 +125,15 @@ router.get('/roles/:address', getRoles);
  *       500:
  *         description: 服务器错误
  */
-router.post('/grant-role', grantRole);
+router.post('/grant', grantRole);
 
 /**
  * @swagger
- * /api/role-manager/revoke-role:
+ * /api/role-manager/revoke:
  *   post:
  *     summary: 撤销角色
  *     description: 撤销指定地址的特定角色
+ *     tags: [角色管理]
  *     parameters:
  *       - in: query
  *         name: api_key
@@ -148,7 +150,6 @@ router.post('/grant-role', grantRole);
  *             required:
  *               - address
  *               - role
- *               - adminPrivateKey
  *             properties:
  *               address:
  *                 type: string
@@ -159,10 +160,10 @@ router.post('/grant-role', grantRole);
  *                 enum: [admin, manager, trader]
  *                 description: 角色类型
  *                 example: "manager"
- *               adminPrivateKey:
+ *               adminRole:
  *                 type: string
- *                 description: 管理员私钥
- *                 example: "0xabcd..."
+ *                 description: 管理员角色名称，默认为admin
+ *                 example: "admin"
  *     responses:
  *       200:
  *         description: 成功撤销角色
@@ -190,6 +191,56 @@ router.post('/grant-role', grantRole);
  *       500:
  *         description: 服务器错误
  */
-router.post('/revoke-role', revokeRole);
+router.post('/revoke', revokeRole);
 
-export default router;
+/**
+ * @swagger
+ * /api/role-manager/addresses:
+ *   get:
+ *     summary: 获取角色地址列表
+ *     description: 获取所有角色的地址列表
+ *     tags: [角色管理]
+ *     parameters:
+ *       - in: query
+ *         name: api_key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: API密钥
+ *     responses:
+ *       200:
+ *         description: 成功返回角色地址列表
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     admins:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["0x1234...", "0x5678..."]
+ *                     managers:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["0x9abc...", "0xdef0..."]
+ *                     traders:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["0x1122...", "0x3344..."]
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/addresses', getRoleAddresses);
+
+export default router; 
