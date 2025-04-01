@@ -9,13 +9,23 @@
 - 支持Swagger API文档
 - 提供API密钥鉴权
 - 完全基于JavaScript ES模块，采用现代模块化结构
+- 使用shared模块中的公共功能，确保代码一致性和复用性
 
 ## 模块结构
 
 - `src/controllers/`: 控制器，处理业务逻辑
 - `src/routes/`: 路由定义，包含API端点和Swagger文档
 - `src/middlewares/`: 中间件，如鉴权处理
-- `shared/`: 共享工具和配置
+- `src/utils/`: 工具模块，导入shared中的公共功能
+- `../shared/`: 共享工具和配置，包含环境配置、合约交互等核心功能
+
+## 架构设计
+
+http-server模块设计为使用shared模块提供的公共功能，确保整个系统的一致性：
+
+1. **配置管理** - 使用shared/src/config/env.js提供的环境配置
+2. **区块链交互** - 使用shared/src/utils中的合约和钱包工具
+3. **日志管理** - 使用shared中的日志功能
 
 ## 主要功能
 
