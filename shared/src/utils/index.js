@@ -21,6 +21,8 @@ module.exports = {
   getDefaultProvider: networkUtils.getDefaultProvider,
   getNetworkProvider: networkUtils.getNetworkProvider,
   getProviderByChainId: networkUtils.getProviderByChainId,
+  NetworkUtils: networkUtils.NetworkUtils,
+  networkUtils: networkUtils.networkUtils,
   
   // 钱包工具
   getWallet: walletUtils.getWallet,

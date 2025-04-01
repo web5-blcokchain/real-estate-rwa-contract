@@ -257,14 +257,14 @@ async function main() {
       timestamp: new Date().toISOString(),
       deployer: deployer.address,
       contracts: {
-        System: contracts.system.address,
-        Facade: contracts.facade.address,
-        RoleManager: contracts.roleManager.address,
-        PropertyManager: contracts.propertyManager.address,
-        TokenFactory: contracts.tokenFactory.address,
-        TradingManager: contracts.tradingManager.address,
-        RewardManager: contracts.rewardManager.address,
-        TestToken: testToken.address
+        SimpleERC20: await testToken.getAddress(),
+        RoleManager: await contracts.roleManager.getAddress(),
+        PropertyManager: await contracts.propertyManager.getAddress(),
+        TradingManager: await contracts.tradingManager.getAddress(),
+        RewardManager: await contracts.rewardManager.getAddress(),
+        TokenFactory: await contracts.tokenFactory.getAddress(),
+        System: await contracts.system.getAddress(),
+        Facade: await contracts.facade.getAddress()
       },
       systemStatus: "1",
       deployMethod: "step-by-step",
@@ -278,14 +278,13 @@ async function main() {
     
     // 导出合约 ABI
     const contractNames = [
-      "System",
-      "Facade",
+      "RealEstateSystem",  // System
+      "RealEstateFacade",  // Facade
       "RoleManager",
       "PropertyManager",
-      "TokenFactory",
+      "PropertyToken",     // TokenFactory
       "TradingManager",
       "RewardManager",
-      "PropertyToken", 
       "SimpleERC20"
     ];
     await exportContractABIs(contractNames);
@@ -312,12 +311,20 @@ async function getImplementationAddresses(deploymentInfo) {
   // 获取每个代理合约的实现地址
   for (const [name, address] of Object.entries(deploymentInfo.contracts)) {
     // 跳过非代理合约或无效地址
-    if (name === "systemDeployer" || name === "testToken" || !address || address === "0x") {
+    if (name === "SimpleERC20" || !address || address === "0x") {
+      logger.info(`跳过 ${name}，因为它不是代理合约或地址无效`);
       continue;
     }
     
     try {
       logger.info(`获取 ${name} 的实现地址...`);
+      // 验证地址是否有效
+      if (!ethers.isAddress(address)) {
+        logger.error(`${name} 地址无效: ${address}`);
+        continue;
+      }
+      
+      // 获取实现地址
       const implAddress = await upgrades.erc1967.getImplementationAddress(address);
       implementations[name] = implAddress;
       logger.info(`${name} 实现地址: ${implAddress}`);
@@ -368,7 +375,7 @@ function generateDeploymentReport(deploymentInfo) {
 
   // 添加合约地址信息
   for (const [name, address] of Object.entries(deploymentInfo.contracts)) {
-    if (name === "systemDeployer" || name === "testToken") {
+    if (name === "SimpleERC20") {
       reportContent += `| ${name} | ${address} | 非代理合约 |\n`;
     } else if (deploymentInfo.implementations && deploymentInfo.implementations[name]) {
       reportContent += `| ${name} | ${address} | ${deploymentInfo.implementations[name]} |\n`;
