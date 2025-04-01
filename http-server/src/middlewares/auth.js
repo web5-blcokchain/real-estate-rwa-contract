@@ -1,4 +1,4 @@
-import utils from '../utils/mock.js';
+import utils from '../utils/index.js';
 
 const EnvConfig = utils.EnvConfig;
 // 创建环境配置实例

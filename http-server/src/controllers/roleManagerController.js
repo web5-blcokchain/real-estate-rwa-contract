@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import utils from '../utils/mock.js';
+import utils from '../utils/index.js';
 
 const { getContract, getWallet } = utils;
 const EnvConfig = utils.EnvConfig;

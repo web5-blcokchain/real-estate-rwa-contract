@@ -3,10 +3,10 @@
  * 统一管理Provider的获取逻辑
  */
 const { ethers } = require('ethers');
-const EnvConfig = require('../config/env');
+const envModule = require('../config/env');
 
-// 创建环境配置实例
-const env = new EnvConfig();
+// 使用导出的环境配置实例
+const env = envModule;
 
 // 缓存Provider实例，避免重复创建
 let defaultProvider = null;

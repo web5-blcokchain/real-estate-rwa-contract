@@ -227,4 +227,6 @@ class EnvConfig {
 
 // 创建单例实例
 const envConfig = new EnvConfig();
-module.exports = envConfig; 
+module.exports = envConfig;
+// 同时导出类，以便可以创建新实例
+module.exports.EnvConfig = EnvConfig; 

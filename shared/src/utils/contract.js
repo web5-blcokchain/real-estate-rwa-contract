@@ -1,15 +1,15 @@
 /**
  * 合约工具
- * 统一管理合约实例的获取逻辑
+ * 统一管理合约的创建和使用
  */
 const { ethers } = require('ethers');
-const EnvConfig = require('../config/env');
 const { getContractABI } = require('./abi');
-const { getDefaultProvider, getNetworkProvider } = require('./network');
-const { getWallet, createWalletFromPrivateKey } = require('./wallet');
+const walletUtils = require('./wallet');
+const networkUtils = require('./network');
+const EnvConfig = require('../config/env');
 
-// 创建环境配置实例
-const env = new EnvConfig();
+// 使用导出的环境配置实例
+const env = EnvConfig;
 
 // 合约实例缓存，避免重复创建
 const contractCache = {};
@@ -49,7 +49,7 @@ const getContract = (contractName, network = null) => {
   // 获取合约地址、ABI和Provider
   const contractAddress = getContractAddress(contractName);
   const contractABI = getContractABI(contractName);
-  const provider = network ? getNetworkProvider(network) : getDefaultProvider();
+  const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
   
   // 创建合约实例
   const contract = new ethers.Contract(contractAddress, contractABI, provider);
@@ -72,7 +72,7 @@ const getContractWithSigner = (contractName, role, network = null) => {
   const contract = getContract(contractName, network);
   
   // 获取角色对应的钱包
-  const wallet = getWallet(role, network);
+  const wallet = walletUtils.getWallet(role, network);
   
   // 连接合约与签名者
   return contract.connect(wallet);
@@ -90,7 +90,7 @@ const getContractWithPrivateKey = (contractName, privateKey, network = null) => 
   const contract = getContract(contractName, network);
   
   // 使用私钥创建钱包
-  const wallet = createWalletFromPrivateKey(privateKey, network);
+  const wallet = walletUtils.createWalletFromPrivateKey(privateKey, network);
   
   // 连接合约与签名者
   return contract.connect(wallet);
@@ -110,7 +110,7 @@ const createContractFromAddress = (address, abi, network = null) => {
   }
   
   // 获取Provider
-  const provider = network ? getNetworkProvider(network) : getDefaultProvider();
+  const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
   
   // 创建合约实例
   return new ethers.Contract(address, abi, provider);
@@ -125,7 +125,7 @@ const createContractFromAddress = (address, abi, network = null) => {
  */
 const connectContractWithRole = (contract, role, network = null) => {
   // 获取角色对应的钱包
-  const wallet = getWallet(role, network);
+  const wallet = walletUtils.getWallet(role, network);
   
   // 连接合约与签名者
   return contract.connect(wallet);

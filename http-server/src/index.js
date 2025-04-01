@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
-import utils from './utils/mock.js';
+import utils from './utils/index.js';
 
 // 导入路由
 import roleManagerRoutes from './routes/roleManager.js';

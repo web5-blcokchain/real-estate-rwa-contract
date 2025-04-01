@@ -3,11 +3,11 @@
  * 统一管理钱包的获取逻辑
  */
 const { ethers } = require('ethers');
+const networkUtils = require('./network');
 const EnvConfig = require('../config/env');
-const { getDefaultProvider, getNetworkProvider } = require('./network');
 
-// 创建环境配置实例
-const env = new EnvConfig();
+// 使用导出的环境配置实例
+const env = EnvConfig;
 
 // 钱包缓存，避免重复创建
 const walletCache = {};
@@ -54,7 +54,7 @@ const getWallet = (role, network = null, index = 0) => {
     const privateKey = env.get(privateKeyVar);
     
     // 获取对应网络的Provider
-    const provider = network ? getNetworkProvider(network) : getDefaultProvider();
+    const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
     
     // 创建钱包
     const wallet = new ethers.Wallet(privateKey, provider);
@@ -70,7 +70,7 @@ const getWallet = (role, network = null, index = 0) => {
       const indexedPrivateKey = env.get(addressIndex);
       
       // 获取对应网络的Provider
-      const provider = network ? getNetworkProvider(network) : getDefaultProvider();
+      const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
       
       // 创建钱包
       const wallet = new ethers.Wallet(indexedPrivateKey, provider);
@@ -101,7 +101,7 @@ const createWalletFromPrivateKey = (privateKey, network = null) => {
   const normalizedKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
   
   // 获取对应网络的Provider
-  const provider = network ? getNetworkProvider(network) : getDefaultProvider();
+  const provider = network ? networkUtils.getNetworkProvider(network) : networkUtils.getDefaultProvider();
   
   // 创建钱包
   return new ethers.Wallet(normalizedKey, provider);
