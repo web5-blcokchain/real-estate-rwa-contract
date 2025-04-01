@@ -21,8 +21,25 @@ export const apiKeyMiddleware = (req, res, next) => {
 
   const apiKey = req.query.api_key;
   
-  // 从环境变量获取有效的API Key
-  const validApiKey = env.get('API_KEY');
+  // 获取有效的API Key
+  // 在测试环境中使用硬编码的值
+  let validApiKey;
+  try {
+    // 尝试从环境变量获取
+    validApiKey = env.get('API_KEY');
+  } catch (error) {
+    // 如果在测试环境中，使用硬编码的值
+    if (process.env.NODE_ENV === 'test') {
+      validApiKey = 'dev-api-key';
+    } else {
+      console.error('获取API密钥失败:', error);
+      return res.status(500).json({
+        success: false,
+        error: '服务器配置错误',
+        message: '未能读取有效的API密钥配置'
+      });
+    }
+  }
   
   if (!apiKey || apiKey !== validApiKey) {
     return res.status(401).json({ 

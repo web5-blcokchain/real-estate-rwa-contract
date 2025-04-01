@@ -7,6 +7,8 @@ const { getContractABI } = require('./abi');
 const walletUtils = require('./wallet');
 const networkUtils = require('./network');
 const EnvConfig = require('../config/env');
+const fs = require('fs');
+const path = require('path');
 
 // 使用导出的环境配置实例
 const env = EnvConfig;
@@ -15,20 +17,54 @@ const env = EnvConfig;
 const contractCache = {};
 
 /**
- * 获取合约地址
+ * 从部署配置文件读取合约地址
  * @param {string} contractName - 合约名称
  * @returns {string} 合约地址
  */
 const getContractAddress = (contractName) => {
-  // 标准化合约名称为大写，与环境变量命名一致
-  const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
-  const address = env.get(addressKey);
+  // 尝试从部署配置文件读取合约地址
+  const normalizedName = contractName.toLowerCase();
   
-  if (!address) {
-    throw new Error(`未找到合约 ${contractName} 的地址配置，请检查环境变量: ${addressKey}`);
+  try {
+    // 从项目根目录读取配置文件
+    // 这里假设shared模块位于项目根目录的shared文件夹下
+    const projectRoot = path.resolve(__dirname, '../../../..');
+    const deploymentPath = path.join(projectRoot, 'config/deployment.json');
+    
+    // 读取部署配置文件
+    const deploymentConfig = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+    
+    // 从配置中获取合约地址
+    if (deploymentConfig.contracts && deploymentConfig.contracts[normalizedName]) {
+      return deploymentConfig.contracts[normalizedName];
+    }
+    
+    // 如果在配置文件中找不到，尝试从环境变量获取（兼容旧方式）
+    console.warn(`在部署配置中找不到合约 ${contractName} 的地址，尝试从环境变量获取`);
+    const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
+    const address = env.get(addressKey);
+    
+    if (address) {
+      return address;
+    }
+    
+    throw new Error(`未找到合约 ${contractName} 的地址配置`);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.warn('部署配置文件不存在，尝试从环境变量获取');
+      // 尝试从环境变量获取
+      const addressKey = `${contractName.toUpperCase()}_ADDRESS`;
+      const address = env.get(addressKey);
+      
+      if (!address) {
+        throw new Error(`未找到合约 ${contractName} 的地址配置，请检查环境变量: ${addressKey}`);
+      }
+      
+      return address;
+    }
+    
+    throw error;
   }
-  
-  return address;
 };
 
 /**
