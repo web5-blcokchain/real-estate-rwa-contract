@@ -6,7 +6,7 @@ const path = require('path');
 const sharedPath = path.resolve(__dirname, '../../../shared/src');
 
 // 导入shared的日志模块
-const sharedLogger = require(`${sharedPath}/logger`);
+const { logger: sharedLogger } = require(`${sharedPath}/logger`);
 
 // 扩展shared的日志模块，添加HTTP服务器特定的功能
 const logger = {

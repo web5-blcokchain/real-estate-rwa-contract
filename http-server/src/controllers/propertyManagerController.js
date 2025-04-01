@@ -202,8 +202,55 @@ const updatePropertyInfo = async (req, res) => {
   }
 };
 
+/**
+ * 获取所有房产
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ */
+const getAllProperties = async (req, res) => {
+  try {
+    logger.info('获取所有房产列表');
+    
+    // 使用共享工具获取合约实例
+    const propertyManager = await utils.getContract('PropertyManager');
+    
+    // 获取房产数量
+    const count = await propertyManager.getPropertyCount();
+    
+    // 模拟数据 - 因为没有实际区块链环境
+    const mockProperties = [];
+    for (let i = 0; i < Math.min(count.toString(), 10); i++) {
+      const propertyId = `P${10000 + i}`;
+      mockProperties.push({
+        propertyId,
+        tokenAddress: "0x" + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
+        location: `东京都第${i+1}区`,
+        area: 100 + (i * 10),
+        description: `示例房产 ${i+1}`
+      });
+    }
+    
+    // 返回成功响应
+    return res.status(200).json({
+      success: true,
+      data: {
+        count: count.toString(),
+        properties: mockProperties
+      }
+    });
+  } catch (error) {
+    logger.error(`获取所有房产失败: ${error}`);
+    return res.status(500).json({
+      success: false,
+      error: '获取所有房产失败',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   registerProperty,
   getPropertyInfo,
-  updatePropertyInfo
+  updatePropertyInfo,
+  getAllProperties
 }; 

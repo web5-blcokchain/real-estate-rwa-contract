@@ -3,7 +3,7 @@
  * 统一管理Provider的获取逻辑
  */
 const { ethers } = require('ethers');
-const envConfig = require('./env');
+const envConfig = require('../config/env');
 
 /**
  * 区块链网络配置工具
@@ -25,7 +25,7 @@ class NetworkUtils {
     switch (this.network) {
       case 'localhost':
         return {
-          chainId: envConfig.getInt('HARDHAT_CHAIN_ID'),
+          chainId: envConfig.getInt('LOCALHOST_CHAIN_ID'),
           rpcUrl: envConfig.get('LOCALHOST_RPC_URL'),
           name: 'Local Development',
           isTestnet: true,
@@ -192,7 +192,7 @@ function getNetworkProvider(network) {
 function getProviderByChainId(chainId) {
   // 根据链ID获取提供者
   return new ethers.JsonRpcProvider(
-    chainId === envConfig.getInt('HARDHAT_CHAIN_ID') ? envConfig.get('LOCALHOST_RPC_URL') :
+    chainId === envConfig.getInt('LOCALHOST_CHAIN_ID') ? envConfig.get('LOCALHOST_RPC_URL') :
     chainId === envConfig.getInt('TESTNET_CHAIN_ID') ? envConfig.get('TESTNET_RPC_URL') :
     chainId === envConfig.getInt('MAINNET_CHAIN_ID') ? envConfig.get('MAINNET_RPC_URL') :
     envConfig.get('LOCALHOST_RPC_URL')
