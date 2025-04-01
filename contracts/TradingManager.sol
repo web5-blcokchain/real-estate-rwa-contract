@@ -136,18 +136,16 @@ contract TradingManager is
     }
     
     /**
-     * @dev 创建卖单
+     * @dev 创建卖单 (内部细节函数)
      */
-    function createOrder(
+    function _createOrderInternal(
         address token, 
         uint256 amount, 
         uint256 price, 
-        bytes32 propertyIdHash
+        bytes32 propertyIdHash,
+        bool skipTransfer
     ) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        notBlacklisted(msg.sender)
+        internal
         returns (uint256) 
     {
         require(token != address(0), "Invalid token address");
@@ -165,7 +163,9 @@ contract TradingManager is
         }
         
         // 将代币转移到合约
-        PropertyToken(token).transferFrom(msg.sender, address(this), amount);
+        if (!skipTransfer) {
+            PropertyToken(token).transferFrom(msg.sender, address(this), amount);
+        }
         
         // 创建订单
         uint256 orderId = _nextOrderId++;
@@ -187,6 +187,42 @@ contract TradingManager is
         emit OrderCreated(orderId, msg.sender, token, amount, price, propertyIdHash);
         
         return orderId;
+    }
+    
+    /**
+     * @dev 创建卖单
+     */
+    function createOrder(
+        address token, 
+        uint256 amount, 
+        uint256 price, 
+        bytes32 propertyIdHash
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        notBlacklisted(msg.sender)
+        returns (uint256) 
+    {
+        return _createOrderInternal(token, amount, price, propertyIdHash, false);
+    }
+    
+    /**
+     * @dev 创建卖单 (跳过转账)
+     */
+    function createOrderWithoutTransfer(
+        address token, 
+        uint256 amount, 
+        uint256 price, 
+        bytes32 propertyIdHash
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        notBlacklisted(msg.sender)
+        returns (uint256) 
+    {
+        return _createOrderInternal(token, amount, price, propertyIdHash, true);
     }
     
     /**

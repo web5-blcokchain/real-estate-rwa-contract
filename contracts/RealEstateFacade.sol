@@ -263,8 +263,11 @@ contract RealEstateFacade is
         PropertyToken propertyToken = PropertyToken(token);
         bytes32 propertyIdHash = propertyToken.propertyIdHash();
         
-        // 2. 创建订单
-        orderId = tradingManager.createOrder(token, amount, price, propertyIdHash);
+        // 先将代币转移到交易管理器合约
+        propertyToken.transferFrom(msg.sender, address(tradingManager), amount);
+        
+        // 2. 创建订单，跳过转账(已经转过了)
+        orderId = tradingManager.createOrderWithoutTransfer(token, amount, price, propertyIdHash);
         
         emit OrderCreated(orderId, msg.sender, token, amount, price);
         
@@ -378,6 +381,36 @@ contract RealEstateFacade is
         rewardManager.withdrawDistribution(distributionId);
         
         emit RewardsClaimed(msg.sender, distributionId, amount);
+    }
+    
+    /**
+     * @dev 执行交易
+     */
+    function executeTrade(uint256 orderId) 
+        external 
+        payable
+        whenNotPaused
+        whenSystemActive
+        nonReentrant 
+    {
+        // 1. 获取订单信息
+        (
+            ,
+            address seller,
+            address token,
+            uint256 amount,
+            uint256 price,
+            ,
+            bool active,
+            
+        ) = tradingManager.getOrder(orderId);
+        
+        require(active, "Order not active");
+        
+        // 2. 执行交易
+        tradingManager.executeOrder{value: msg.value}(orderId);
+        
+        emit TradeExecuted(orderId, msg.sender, seller);
     }
     
     /**
