@@ -334,8 +334,20 @@ async function main() {
       "SimpleERC20"
     ];
 
+    // 将字符串转换为驼峰命名（首字母小写）
+    const toCamelCase = (str) => {
+      return str.charAt(0).toLowerCase() + str.slice(1);
+    };
+
     for (const contractName of contracts2) {
       const artifact = await hre.artifacts.readArtifact(contractName);
+      // 使用驼峰命名（首字母小写）保存ABI文件
+      const camelCaseName = toCamelCase(contractName);
+      fs.writeFileSync(
+        path.join(abiDir, `${camelCaseName}.json`),
+        JSON.stringify(artifact.abi, null, 2)
+      );
+      // 同时保存原始名称的文件，确保兼容性
       fs.writeFileSync(
         path.join(abiDir, `${contractName}.json`),
         JSON.stringify(artifact.abi, null, 2)

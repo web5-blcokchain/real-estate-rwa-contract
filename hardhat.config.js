@@ -33,8 +33,7 @@ const getNetworkConfig = (network) => {
   switch (network) {
     case 'hardhat':
       return {
-        ...baseConfig,
-        chainId: envConfig.getInt('HARDHAT_CHAIN_ID'),
+        chainId: envConfig.getInt('HARDHAT_CHAIN_ID', 31337),
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -46,6 +45,15 @@ const getNetworkConfig = (network) => {
           count: 20,
           accountsBalance: "10000000000000000000000"
         }
+      };
+    case 'localhost':
+      return {
+        ...baseConfig,
+        url: "http://127.0.0.1:8545",
+        chainId: envConfig.getInt('HARDHAT_CHAIN_ID', 31337),
+        blockGasLimit: 30000000,
+        allowUnlimitedContractSize: true,
+        loggingEnabled: false,
       };
     case 'testnet':
       return {
@@ -86,6 +94,7 @@ module.exports = {
   // 网络配置
   networks: {
     hardhat: getNetworkConfig('hardhat'),
+    localhost: getNetworkConfig('localhost'),
     testnet: getNetworkConfig('testnet'),
     mainnet: getNetworkConfig('mainnet')
   },
