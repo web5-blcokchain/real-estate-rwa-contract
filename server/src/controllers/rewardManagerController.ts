@@ -13,15 +13,25 @@ const getContract = async (contractName: string) => {
   return new ethers.Contract(contractAddress, contractABI, provider);
 };
 
+// 获取钱包实例
+const getWallet = (role: string) => {
+  const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
+  if (!privateKey) {
+    throw new Error(`未找到角色 ${role} 的私钥配置`);
+  }
+  const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
+  return new ethers.Wallet(privateKey, provider);
+};
+
 /**
  * 分发奖励
  */
 export const distributeRewards = async (req: Request, res: Response) => {
   try {
-    const { token, recipients, amounts, managerPrivateKey } = req.body;
+    const { token, recipients, amounts, managerRole = 'manager' } = req.body;
     
     // 参数验证
-    if (!token || !ethers.isAddress(token) || !recipients || !amounts || !managerPrivateKey) {
+    if (!token || !ethers.isAddress(token) || !recipients || !amounts) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -37,9 +47,8 @@ export const distributeRewards = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(managerPrivateKey, provider);
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(managerRole);
     const rewardManager = await getContract('RewardManager');
     const connectedRewardManager = rewardManager.connect(wallet);
     
@@ -48,9 +57,9 @@ export const distributeRewards = async (req: Request, res: Response) => {
     const connectedToken = tokenContract.attach(token).connect(wallet);
     const decimals = await connectedToken.decimals();
     
-    // 转换金额为BigInt
-    const amountsBigInt = amounts.map((amount: string) => 
-      ethers.parseUnits(amount, decimals)
+    // 将金额转换为BigInt
+    const amountsBigInt = amounts.map((amount: string | number) => 
+      ethers.parseUnits(amount.toString(), decimals)
     );
     
     // 检查代币授权
@@ -68,21 +77,18 @@ export const distributeRewards = async (req: Request, res: Response) => {
     const tx = await connectedRewardManager.distributeRewards(token, recipients, amountsBigInt);
     await tx.wait();
     
-    // 准备响应数据
-    const distributionDetails = recipients.map((recipient: string, index: number) => ({
-      recipient,
-      amount: amounts[index]
-    }));
+    // 获取代币信息
+    const symbol = await connectedToken.symbol();
     
     res.status(200).json({
       success: true,
       data: {
         token,
-        totalAmount: ethers.formatUnits(totalAmount, decimals),
-        recipientCount: recipients.length,
-        distribution: distributionDetails,
+        symbol,
+        recipients,
+        amounts: amounts.map(String),
         transaction: tx.hash,
-        message: `已成功分发奖励给 ${recipients.length} 个接收者`
+        message: `已成功分发 ${symbol} 代币奖励给 ${recipients.length} 个接收者`
       }
     });
   } catch (error: any) {
@@ -100,10 +106,10 @@ export const distributeRewards = async (req: Request, res: Response) => {
  */
 export const claimRewards = async (req: Request, res: Response) => {
   try {
-    const { token, userPrivateKey } = req.body;
+    const { token, userRole = 'user' } = req.body;
     
     // 参数验证
-    if (!token || !ethers.isAddress(token) || !userPrivateKey) {
+    if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -111,9 +117,8 @@ export const claimRewards = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(userPrivateKey, provider);
+    // 从环境变量获取用户钱包
+    const wallet = getWallet(userRole);
     const rewardManager = await getContract('RewardManager');
     const connectedRewardManager = rewardManager.connect(wallet);
     
@@ -139,14 +144,18 @@ export const claimRewards = async (req: Request, res: Response) => {
     const tx = await connectedRewardManager.claimRewards(token);
     await tx.wait();
     
+    // 获取代币信息
+    const symbol = await connectedToken.symbol();
+    
     res.status(200).json({
       success: true,
       data: {
         user: userAddress,
         token,
+        symbol,
         amount: ethers.formatUnits(claimableAmount, decimals),
         transaction: tx.hash,
-        message: `已成功领取 ${ethers.formatUnits(claimableAmount, decimals)} 代币奖励`
+        message: `已成功领取 ${ethers.formatUnits(claimableAmount, decimals)} ${symbol} 代币奖励`
       }
     });
   } catch (error: any) {
@@ -212,10 +221,10 @@ export const getClaimableRewards = async (req: Request, res: Response) => {
  */
 export const addRewardToken = async (req: Request, res: Response) => {
   try {
-    const { token, managerPrivateKey } = req.body;
+    const { token, managerRole = 'manager' } = req.body;
     
     // 参数验证
-    if (!token || !ethers.isAddress(token) || !managerPrivateKey) {
+    if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -223,9 +232,8 @@ export const addRewardToken = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(managerPrivateKey, provider);
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(managerRole);
     const rewardManager = await getContract('RewardManager');
     const connectedRewardManager = rewardManager.connect(wallet);
     
@@ -272,10 +280,10 @@ export const addRewardToken = async (req: Request, res: Response) => {
  */
 export const removeRewardToken = async (req: Request, res: Response) => {
   try {
-    const { token, managerPrivateKey } = req.body;
+    const { token, managerRole = 'manager' } = req.body;
     
     // 参数验证
-    if (!token || !ethers.isAddress(token) || !managerPrivateKey) {
+    if (!token || !ethers.isAddress(token)) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -283,9 +291,8 @@ export const removeRewardToken = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(managerPrivateKey, provider);
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(managerRole);
     const rewardManager = await getContract('RewardManager');
     const connectedRewardManager = rewardManager.connect(wallet);
     

@@ -13,15 +13,25 @@ const getContract = async (contractName: string) => {
   return new ethers.Contract(contractAddress, contractABI, provider);
 };
 
+// 获取钱包实例
+const getWallet = (role: string) => {
+  const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
+  if (!privateKey) {
+    throw new Error(`未找到角色 ${role} 的私钥配置`);
+  }
+  const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
+  return new ethers.Wallet(privateKey, provider);
+};
+
 /**
  * 创建订单
  */
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const { token, amount, price, sellerPrivateKey } = req.body;
+    const { token, amount, price, sellerRole = 'seller' } = req.body;
     
     // 参数验证
-    if (!token || !ethers.isAddress(token) || !amount || !price || !sellerPrivateKey) {
+    if (!token || !ethers.isAddress(token) || !amount || !price) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -29,9 +39,8 @@ export const createOrder = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(sellerPrivateKey, provider);
+    // 从环境变量获取卖家钱包
+    const wallet = getWallet(sellerRole);
     const tradingManager = await getContract('TradingManager');
     const connectedTradingManager = tradingManager.connect(wallet);
     
@@ -99,10 +108,10 @@ export const createOrder = async (req: Request, res: Response) => {
  */
 export const executeOrder = async (req: Request, res: Response) => {
   try {
-    const { orderId, buyerPrivateKey } = req.body;
+    const { orderId, buyerRole = 'buyer' } = req.body;
     
     // 参数验证
-    if (!orderId || !buyerPrivateKey) {
+    if (!orderId) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -110,9 +119,8 @@ export const executeOrder = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(buyerPrivateKey, provider);
+    // 从环境变量获取买家钱包
+    const wallet = getWallet(buyerRole);
     const tradingManager = await getContract('TradingManager');
     const connectedTradingManager = tradingManager.connect(wallet);
     
@@ -154,10 +162,10 @@ export const executeOrder = async (req: Request, res: Response) => {
  */
 export const cancelOrder = async (req: Request, res: Response) => {
   try {
-    const { orderId, sellerPrivateKey } = req.body;
+    const { orderId, sellerRole = 'seller' } = req.body;
     
     // 参数验证
-    if (!orderId || !sellerPrivateKey) {
+    if (!orderId) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
@@ -165,9 +173,8 @@ export const cancelOrder = async (req: Request, res: Response) => {
       });
     }
     
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(sellerPrivateKey, provider);
+    // 从环境变量获取卖家钱包
+    const wallet = getWallet(sellerRole);
     const tradingManager = await getContract('TradingManager');
     const connectedTradingManager = tradingManager.connect(wallet);
     

@@ -16,6 +16,16 @@ const getContract = async (contractName: string) => {
   return new ethers.Contract(contractAddress, contractABI, provider);
 };
 
+// 获取钱包实例
+const getWallet = (role: string) => {
+  const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
+  if (!privateKey) {
+    throw new Error(`未找到角色 ${role} 的私钥配置`);
+  }
+  const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
+  return new ethers.Wallet(privateKey, provider);
+};
+
 /**
  * 获取地址的角色信息
  */
@@ -67,7 +77,7 @@ export const getRoles = async (req: Request, res: Response) => {
  */
 export const grantRole = async (req: Request, res: Response) => {
   try {
-    const { address, role, adminPrivateKey } = req.body;
+    const { address, role, adminRole = 'admin' } = req.body;
     
     if (!address || !ethers.isAddress(address)) {
       return res.status(400).json({
@@ -85,16 +95,8 @@ export const grantRole = async (req: Request, res: Response) => {
       });
     }
     
-    if (!adminPrivateKey) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少管理员私钥',
-        message: '请提供管理员私钥以执行授权操作'
-      });
-    }
-    
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(adminPrivateKey, provider);
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(adminRole);
     const roleManager = await getContract('RoleManager');
     const connectedRoleManager = roleManager.connect(wallet);
     
@@ -111,14 +113,27 @@ export const grantRole = async (req: Request, res: Response) => {
         break;
     }
     
+    // 检查是否已经有该角色
+    const hasRole = await roleManager.hasRole(roleHash, address);
+    if (hasRole) {
+      return res.status(400).json({
+        success: false,
+        error: '角色已存在',
+        message: `地址 ${address} 已经拥有 ${role} 角色`
+      });
+    }
+    
+    // 授予角色
     const tx = await connectedRoleManager.grantRole(roleHash, address);
     await tx.wait();
     
     res.status(200).json({
       success: true,
       data: {
+        address,
+        role,
         transaction: tx.hash,
-        message: `已成功授予 ${address} ${role} 角色`
+        message: `已成功授予地址 ${address} ${role} 角色`
       }
     });
   } catch (error: any) {
@@ -136,7 +151,7 @@ export const grantRole = async (req: Request, res: Response) => {
  */
 export const revokeRole = async (req: Request, res: Response) => {
   try {
-    const { address, role, adminPrivateKey } = req.body;
+    const { address, role, adminRole = 'admin' } = req.body;
     
     if (!address || !ethers.isAddress(address)) {
       return res.status(400).json({
@@ -154,16 +169,8 @@ export const revokeRole = async (req: Request, res: Response) => {
       });
     }
     
-    if (!adminPrivateKey) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少管理员私钥',
-        message: '请提供管理员私钥以执行撤销操作'
-      });
-    }
-    
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(adminPrivateKey, provider);
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(adminRole);
     const roleManager = await getContract('RoleManager');
     const connectedRoleManager = roleManager.connect(wallet);
     
@@ -180,14 +187,27 @@ export const revokeRole = async (req: Request, res: Response) => {
         break;
     }
     
+    // 检查是否有该角色
+    const hasRole = await roleManager.hasRole(roleHash, address);
+    if (!hasRole) {
+      return res.status(400).json({
+        success: false,
+        error: '角色不存在',
+        message: `地址 ${address} 没有 ${role} 角色`
+      });
+    }
+    
+    // 撤销角色
     const tx = await connectedRoleManager.revokeRole(roleHash, address);
     await tx.wait();
     
     res.status(200).json({
       success: true,
       data: {
+        address,
+        role,
         transaction: tx.hash,
-        message: `已成功撤销 ${address} 的 ${role} 角色`
+        message: `已成功撤销地址 ${address} 的 ${role} 角色`
       }
     });
   } catch (error: any) {

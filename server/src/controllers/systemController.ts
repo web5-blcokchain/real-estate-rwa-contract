@@ -13,6 +13,16 @@ const getContract = async (contractName: string) => {
   return new ethers.Contract(contractAddress, contractABI, provider);
 };
 
+// 获取钱包实例
+const getWallet = (role: string) => {
+  const privateKey = env.get(`${role.toUpperCase()}_PRIVATE_KEY`);
+  if (!privateKey) {
+    throw new Error(`未找到角色 ${role} 的私钥配置`);
+  }
+  const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
+  return new ethers.Wallet(privateKey, provider);
+};
+
 /**
  * 获取系统状态
  */
@@ -23,17 +33,17 @@ export const getSystemStatus = async (req: Request, res: Response) => {
     const propertyManager = await getContract('PropertyManager');
     const tradingManager = await getContract('TradingManager');
     const rewardManager = await getContract('RewardManager');
-    
+
     // 获取系统状态信息
     const emergencyMode = await roleManager.emergencyMode();
     const propertyCount = await propertyManager.getPropertyCount();
     const tradingPaused = await tradingManager.paused();
-    
+
     // 获取区块链信息
     const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
     const blockNumber = await provider.getBlockNumber();
     const network = await provider.getNetwork();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -72,26 +82,25 @@ export const getSystemStatus = async (req: Request, res: Response) => {
  */
 export const toggleEmergencyMode = async (req: Request, res: Response) => {
   try {
-    const { enable, adminPrivateKey } = req.body;
-    
+    const { enable, adminRole = 'admin' } = req.body;
+
     // 参数验证
-    if (enable === undefined || !adminPrivateKey) {
+    if (enable === undefined) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
         message: '请提供所有必要的参数'
       });
     }
-    
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(adminPrivateKey, provider);
+
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(adminRole);
     const roleManager = await getContract('RoleManager');
     const connectedRoleManager = roleManager.connect(wallet);
-    
+
     // 获取当前状态
     const currentMode = await roleManager.emergencyMode();
-    
+
     // 如果当前状态与请求状态相同，则无需操作
     if (currentMode === enable) {
       return res.status(400).json({
@@ -100,11 +109,11 @@ export const toggleEmergencyMode = async (req: Request, res: Response) => {
         message: `紧急模式已经${enable ? '启用' : '禁用'}`
       });
     }
-    
+
     // 切换紧急模式
     const tx = await connectedRoleManager.setEmergencyMode(enable);
     await tx.wait();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -128,26 +137,25 @@ export const toggleEmergencyMode = async (req: Request, res: Response) => {
  */
 export const toggleTradingPause = async (req: Request, res: Response) => {
   try {
-    const { pause, adminPrivateKey } = req.body;
-    
+    const { pause, adminRole = 'admin' } = req.body;
+
     // 参数验证
-    if (pause === undefined || !adminPrivateKey) {
+    if (pause === undefined) {
       return res.status(400).json({
         success: false,
         error: '参数不完整',
         message: '请提供所有必要的参数'
       });
     }
-    
-    // 获取合约实例
-    const provider = new ethers.JsonRpcProvider(env.get('RPC_URL'));
-    const wallet = new ethers.Wallet(adminPrivateKey, provider);
+
+    // 从环境变量获取管理员钱包
+    const wallet = getWallet(adminRole);
     const tradingManager = await getContract('TradingManager');
     const connectedTradingManager = tradingManager.connect(wallet);
-    
+
     // 获取当前状态
     const currentPaused = await tradingManager.paused();
-    
+
     // 如果当前状态与请求状态相同，则无需操作
     if (currentPaused === pause) {
       return res.status(400).json({
@@ -156,7 +164,7 @@ export const toggleTradingPause = async (req: Request, res: Response) => {
         message: `交易已经${pause ? '暂停' : '恢复'}`
       });
     }
-    
+
     // 暂停/恢复交易
     let tx;
     if (pause) {
@@ -165,7 +173,7 @@ export const toggleTradingPause = async (req: Request, res: Response) => {
       tx = await connectedTradingManager.unpause();
     }
     await tx.wait();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -194,7 +202,7 @@ export const getContractAddresses = async (req: Request, res: Response) => {
     const propertyManagerAddress = env.get('PROPERTY_MANAGER_ADDRESS');
     const tradingManagerAddress = env.get('TRADING_MANAGER_ADDRESS');
     const rewardManagerAddress = env.get('REWARD_MANAGER_ADDRESS');
-    
+
     res.status(200).json({
       success: true,
       data: {
