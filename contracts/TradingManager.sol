@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "./SimpleRoleManager.sol";
 import "./PropertyToken.sol";
+import "./utils/SafeMath.sol";
 
 /**
  * @title TradingManager
@@ -19,13 +20,50 @@ contract TradingManager is
     PausableUpgradeable,
     ReentrancyGuardUpgradeable {
     
-    using SafeMathUpgradeable for uint256;
+    using SafeMath for uint256;
     
-    // 版本控制 - 使用uint8节省gas
-    uint8 public version;
+    // Version control - using uint8 to save gas
+    uint8 private constant VERSION = 1;
     
     // 角色管理器
     SimpleRoleManager public roleManager;
+    
+    // 订单和交易状态
+    mapping(uint256 => Order) private _orders;
+    mapping(uint256 => Trade) private _trades;
+    mapping(address => uint256[]) private _userOrders;
+    mapping(address => uint256[]) private _userTrades;
+    mapping(address => uint256[]) private _tokenTrades;
+    
+    uint256 private _nextOrderId;
+    uint256 private _nextTradeId;
+    
+    // 交易费率，基数为10000（0.01%）
+    uint256 public feeRate;
+    address public feeReceiver;
+    
+    // 最小交易金额
+    uint256 public minTradeAmount;
+    uint256 public maxTradeAmount;
+    uint256 public cooldownPeriod;
+    
+    // 代币价格映射
+    mapping(address => uint256) private _tokenPrices;
+    
+    // 地址黑名单
+    mapping(address => bool) public blacklist;
+    
+    // 事件
+    event OrderCreated(uint256 indexed orderId, address indexed seller, address indexed token, uint256 amount, uint256 price, bytes32 propertyIdHash);
+    event OrderCancelled(uint256 indexed orderId, address indexed seller);
+    event OrderExecuted(uint256 indexed orderId, address indexed buyer, address indexed seller, address token, uint256 amount, uint256 price, uint256 tradeId, bytes32 propertyIdHash);
+    event FeeRateUpdated(uint256 oldRate, uint256 newRate);
+    event FeeReceiverUpdated(address oldReceiver, address newReceiver);
+    event TradingStatusUpdated(bool paused);
+    event MinTradeAmountUpdated(uint256 oldAmount, uint256 newAmount);
+    event MaxTradeAmountUpdated(uint256 oldAmount, uint256 newAmount);
+    event CooldownPeriodUpdated(uint256 oldPeriod, uint256 newPeriod);
+    event AddressBlacklisted(address indexed account, bool status);
     
     // 订单结构体
     struct Order {
@@ -52,230 +90,100 @@ contract TradingManager is
         bytes32 propertyIdHash;
     }
     
-    // 订单ID计数器
-    uint256 private _nextOrderId;
-    
-    // 交易ID计数器
-    uint256 private _nextTradeId;
-    
-    // 交易手续费比例（以1/10000表示，例如100表示1%）
-    uint256 public feeRate;
-    
-    // 手续费接收地址
-    address public feeReceiver;
-    
-    // 订单映射 (订单ID => 订单)
-    mapping(uint256 => Order) private _orders;
-    
-    // 用户订单映射 (用户地址 => 订单ID数组)
-    mapping(address => uint256[]) private _userOrders;
-    
-    // 代币订单映射 (代币地址 => 订单ID数组)
-    mapping(address => uint256[]) private _tokenOrders;
-    
-    // 所有活跃订单ID
-    uint256[] private _activeOrderIds;
-    
-    // 交易映射 (交易ID => 交易)
-    mapping(uint256 => Trade) private _trades;
-    
-    // 用户交易映射 (用户地址 => 交易ID数组)
-    mapping(address => uint256[]) private _userTrades;
-    
-    // 代币交易映射 (代币地址 => 交易ID数组)
-    mapping(address => uint256[]) private _tokenTrades;
-    
-    // 属性交易映射 (属性ID哈希 => 交易ID数组)
-    mapping(bytes32 => uint256[]) private _propertyTrades;
-    
-    // 交易暂停状态 - 单独控制交易功能
-    bool public tradingPaused;
-    
-    // 黑名单地址
-    mapping(address => bool) public blacklisted;
-    
-    // 最小交易金额
-    uint256 public minTradeAmount;
-    
-    // 事件
-    event OrderCreated(uint256 indexed orderId, address indexed seller, address indexed token, uint256 amount, uint256 price, bytes32 propertyIdHash);
-    event OrderCancelled(uint256 indexed orderId, address indexed seller);
-    event OrderExecuted(uint256 indexed orderId, address indexed buyer, address indexed seller, address token, uint256 amount, uint256 price, uint256 tradeId, bytes32 propertyIdHash);
-    event FeeRateUpdated(uint256 oldRate, uint256 newRate);
-    event FeeReceiverUpdated(address oldReceiver, address newReceiver);
-    event TradingStatusUpdated(bool paused);
-    event MinTradeAmountUpdated(uint256 oldAmount, uint256 newAmount);
-    event AddressBlacklisted(address indexed account, bool status);
-    
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-    
-    /**
-     * @dev 修饰器：只有ADMIN角色可以调用
-     */
-    modifier onlyAdmin() {
-        require(roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有MANAGER角色可以调用
-     */
-    modifier onlyManager() {
-        require(roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender), "Not manager");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：交易未暂停
-     */
-    modifier whenTradingNotPaused() {
-        require(!tradingPaused, "Trading paused");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：确保地址没有被列入黑名单
-     */
-    modifier notBlacklisted(address account) {
-        require(!blacklisted[account], "Address blacklisted");
-        _;
-    }
-    
-    /**
-     * @dev 初始化函数
-     */
+    // 初始化
     function initialize(address _roleManager) public initializer {
         __UUPSUpgradeable_init();
         __Pausable_init();
         __ReentrancyGuard_init();
         
         roleManager = SimpleRoleManager(_roleManager);
-        feeRate = 100; // 默认1%
-        feeReceiver = msg.sender;
+        
+        // 初始化状态变量
         _nextOrderId = 1;
         _nextTradeId = 1;
-        tradingPaused = false;
-        minTradeAmount = 0; // 默认无最小交易额度
-        version = 1;
+        emergencyTimelock = 24 hours;
+        requiredApprovals = 2;
     }
     
-    /**
-     * @dev 将地址加入黑名单或移除
-     */
-    function setBlacklistStatus(address account, bool status) external onlyAdmin {
-        blacklisted[account] = status;
-        emit AddressBlacklisted(account, status);
+    // 修饰符
+    modifier onlyAdmin() {
+        require(roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Caller is not an admin");
+        _;
     }
     
-    /**
-     * @dev 设置最小交易金额
-     */
-    function setMinTradeAmount(uint256 _minAmount) external onlyAdmin {
-        uint256 oldAmount = minTradeAmount;
-        minTradeAmount = _minAmount;
-        emit MinTradeAmountUpdated(oldAmount, _minAmount);
+    modifier onlyManager() {
+        require(
+            roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender) || 
+            roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender), 
+            "Caller is not a manager"
+        );
+        _;
     }
     
-    /**
-     * @dev 设置手续费比例
-     */
-    function setFeeRate(uint256 _feeRate) external onlyAdmin {
-        require(_feeRate <= 500, "Fee rate too high"); // 最高5%
-        uint256 oldRate = feeRate;
-        feeRate = _feeRate;
-        emit FeeRateUpdated(oldRate, _feeRate);
+    modifier onlyOperator() {
+        require(
+            roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender) || 
+            roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender) || 
+            roleManager.hasRole(roleManager.OPERATOR_ROLE(), msg.sender), 
+            "Caller is not an operator"
+        );
+        _;
     }
     
-    /**
-     * @dev 设置手续费接收地址
-     */
-    function setFeeReceiver(address _feeReceiver) external onlyAdmin {
-        require(_feeReceiver != address(0), "Zero address");
-        address oldReceiver = feeReceiver;
-        feeReceiver = _feeReceiver;
-        emit FeeReceiverUpdated(oldReceiver, _feeReceiver);
-    }
-    
-    /**
-     * @dev 暂停交易
-     */
-    function pauseTrading() external onlyAdmin {
-        tradingPaused = true;
-        emit TradingStatusUpdated(true);
-    }
-    
-    /**
-     * @dev 恢复交易
-     */
-    function unpauseTrading() external onlyAdmin {
-        tradingPaused = false;
-        emit TradingStatusUpdated(false);
-    }
-    
-    /**
-     * @dev 暂停合约
-     */
-    function pause() external onlyAdmin {
-        _pause();
-    }
-    
-    /**
-     * @dev 恢复合约
-     */
-    function unpause() external onlyAdmin {
-        _unpause();
+    modifier notBlacklisted(address account) {
+        require(!blacklist[account], "Account is blacklisted");
+        _;
     }
     
     /**
      * @dev 创建卖单
      */
     function createOrder(
-        address token,
-        uint256 amount,
-        uint256 price
+        address token, 
+        uint256 amount, 
+        uint256 price, 
+        bytes32 propertyIdHash
     ) 
         external 
         whenNotPaused 
-        whenTradingNotPaused 
+        nonReentrant 
         notBlacklisted(msg.sender)
-        nonReentrant
-        returns (uint256)
+        returns (uint256) 
     {
-        require(amount > 0, "Amount must be > 0");
-        require(price > 0, "Price must be > 0");
-        require(price.mul(amount) >= minTradeAmount, "Below min trade amount");
+        require(token != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        require(price > 0, "Price must be greater than 0");
         
-        // 验证代币
-        PropertyToken tokenContract = PropertyToken(token);
-        require(tokenContract.balanceOf(msg.sender) >= amount, "Insufficient balance");
+        // 检查最小交易金额
+        if (minTradeAmount > 0) {
+            require(amount >= minTradeAmount, "Amount below minimum");
+        }
         
-        // 获取属性ID
-        bytes32 propertyIdHash = tokenContract.propertyIdHash();
+        // 检查最大交易金额
+        if (maxTradeAmount > 0) {
+            require(amount <= maxTradeAmount, "Amount above maximum");
+        }
         
-        // 转移代币到该合约
-        require(tokenContract.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        // 将代币转移到合约
+        PropertyToken(token).transferFrom(msg.sender, address(this), amount);
         
         // 创建订单
         uint256 orderId = _nextOrderId++;
+        _orders[orderId] = Order({
+            id: orderId,
+            seller: msg.sender,
+            token: token,
+            amount: amount,
+            price: price,
+            timestamp: block.timestamp,
+            active: true,
+            propertyIdHash: propertyIdHash
+        });
         
-        Order storage order = _orders[orderId];
-        order.id = orderId;
-        order.seller = msg.sender;
-        order.token = token;
-        order.amount = amount;
-        order.price = price;
-        order.timestamp = block.timestamp;
-        order.active = true;
-        order.propertyIdHash = propertyIdHash;
-        
-        // 更新索引
+        // 更新用户订单列表
         _userOrders[msg.sender].push(orderId);
-        _tokenOrders[token].push(orderId);
-        _activeOrderIds.push(orderId);
         
+        // 触发事件
         emit OrderCreated(orderId, msg.sender, token, amount, price, propertyIdHash);
         
         return orderId;
@@ -287,102 +195,90 @@ contract TradingManager is
     function cancelOrder(uint256 orderId) 
         external 
         whenNotPaused 
-        nonReentrant
+        nonReentrant 
+        notBlacklisted(msg.sender)
     {
         Order storage order = _orders[orderId];
+        require(order.id == orderId, "Order does not exist");
+        require(order.seller == msg.sender, "Not the seller");
         require(order.active, "Order not active");
-        require(order.seller == msg.sender || roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Not seller or admin");
         
         // 标记订单为非活跃
         order.active = false;
         
-        // 退还代币
+        // 将代币返回给卖家
         PropertyToken(order.token).transfer(order.seller, order.amount);
         
-        // 从活跃订单列表中移除
-        _removeActiveOrder(orderId);
-        
-        emit OrderCancelled(orderId, order.seller);
+        // 触发事件
+        emit OrderCancelled(orderId, msg.sender);
     }
     
     /**
-     * @dev 从活跃订单列表中移除
-     */
-    function _removeActiveOrder(uint256 orderId) private {
-        for (uint256 i = 0; i < _activeOrderIds.length; i++) {
-            if (_activeOrderIds[i] == orderId) {
-                if (i < _activeOrderIds.length - 1) {
-                    _activeOrderIds[i] = _activeOrderIds[_activeOrderIds.length - 1];
-                }
-                _activeOrderIds.pop();
-                break;
-            }
-        }
-    }
-    
-    /**
-     * @dev 执行卖单
+     * @dev 执行买单
      */
     function executeOrder(uint256 orderId) 
         external 
         payable 
         whenNotPaused 
-        whenTradingNotPaused 
+        nonReentrant 
         notBlacklisted(msg.sender)
-        nonReentrant
+        notBlacklisted(_orders[orderId].seller)
     {
         Order storage order = _orders[orderId];
+        require(order.id == orderId, "Order does not exist");
         require(order.active, "Order not active");
         require(order.seller != msg.sender, "Cannot buy own order");
-        require(msg.value >= order.price.mul(order.amount), "Insufficient payment");
+        
+        // 检查冷却期
+        if (cooldownPeriod > 0) {
+            require(block.timestamp >= order.timestamp.add(cooldownPeriod), "Order in cooldown period");
+        }
+        
+        // 确认支付金额正确
+        uint256 totalPrice = order.price.mul(order.amount).div(1e18);
+        require(msg.value >= totalPrice, "Insufficient payment");
         
         // 标记订单为非活跃
         order.active = false;
         
-        // 计算手续费
-        uint256 fee = order.price.mul(order.amount).mul(feeRate).div(10000);
-        uint256 sellerAmount = order.price.mul(order.amount).sub(fee);
+        // 计算费用
+        (uint256 platformFee, , uint256 netAmount) = calculateFees(totalPrice, true);
         
-        // 转账卖家金额
-        payable(order.seller).transfer(sellerAmount);
-        
-        // 转账手续费
-        if (fee > 0) {
-            payable(feeReceiver).transfer(fee);
-        }
-        
-        // 如果买家支付了额外金额，退还
-        uint256 refund = msg.value.sub(order.price.mul(order.amount));
-        if (refund > 0) {
-            payable(msg.sender).transfer(refund);
-        }
-        
-        // 转移代币给买家
+        // 将代币转移给买家
         PropertyToken(order.token).transfer(msg.sender, order.amount);
         
-        // 从活跃订单列表中移除
-        _removeActiveOrder(orderId);
+        // 将ETH转移给卖家和手续费接收者
+        if (platformFee > 0 && feeReceiver != address(0)) {
+            payable(feeReceiver).transfer(platformFee);
+        }
+        payable(order.seller).transfer(netAmount);
+        
+        // 如果买家支付了超额，退还多余的ETH
+        uint256 excess = msg.value.sub(totalPrice);
+        if (excess > 0) {
+            payable(msg.sender).transfer(excess);
+        }
         
         // 创建交易记录
         uint256 tradeId = _nextTradeId++;
+        _trades[tradeId] = Trade({
+            id: tradeId,
+            orderId: orderId,
+            buyer: msg.sender,
+            seller: order.seller,
+            token: order.token,
+            amount: order.amount,
+            price: order.price,
+            timestamp: block.timestamp,
+            propertyIdHash: order.propertyIdHash
+        });
         
-        Trade storage trade = _trades[tradeId];
-        trade.id = tradeId;
-        trade.orderId = orderId;
-        trade.buyer = msg.sender;
-        trade.seller = order.seller;
-        trade.token = order.token;
-        trade.amount = order.amount;
-        trade.price = order.price;
-        trade.timestamp = block.timestamp;
-        trade.propertyIdHash = order.propertyIdHash;
-        
-        // 更新索引
+        // 更新用户和代币交易列表
         _userTrades[msg.sender].push(tradeId);
         _userTrades[order.seller].push(tradeId);
         _tokenTrades[order.token].push(tradeId);
-        _propertyTrades[order.propertyIdHash].push(tradeId);
         
+        // 触发事件
         emit OrderExecuted(
             orderId, 
             msg.sender, 
@@ -393,62 +289,6 @@ contract TradingManager is
             tradeId,
             order.propertyIdHash
         );
-    }
-    
-    /**
-     * @dev 批量取消卖单
-     */
-    function batchCancelOrders(uint256[] calldata orderIds) 
-        external 
-        whenNotPaused 
-        nonReentrant
-    {
-        for (uint256 i = 0; i < orderIds.length; i++) {
-            uint256 orderId = orderIds[i];
-            Order storage order = _orders[orderId];
-            
-            if (order.active && (order.seller == msg.sender || roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender))) {
-                // 标记订单为非活跃
-                order.active = false;
-                
-                // 退还代币
-                PropertyToken(order.token).transfer(order.seller, order.amount);
-                
-                // 从活跃订单列表中移除
-                _removeActiveOrder(orderId);
-                
-                emit OrderCancelled(orderId, order.seller);
-            }
-        }
-    }
-    
-    /**
-     * @dev 批量执行卖单 - 管理员紧急功能
-     */
-    function adminCancelAllOrders() 
-        external 
-        onlyAdmin 
-        nonReentrant
-    {
-        uint256[] memory orderIdsToCancel = _activeOrderIds;
-        
-        for (uint256 i = 0; i < orderIdsToCancel.length; i++) {
-            uint256 orderId = orderIdsToCancel[i];
-            Order storage order = _orders[orderId];
-            
-            if (order.active) {
-                // 标记订单为非活跃
-                order.active = false;
-                
-                // 退还代币
-                PropertyToken(order.token).transfer(order.seller, order.amount);
-                
-                emit OrderCancelled(orderId, order.seller);
-            }
-        }
-        
-        // 清空活跃订单列表
-        delete _activeOrderIds;
     }
     
     /**
@@ -469,6 +309,8 @@ contract TradingManager is
         ) 
     {
         Order storage order = _orders[orderId];
+        require(order.id == orderId, "Order does not exist");
+        
         return (
             order.id,
             order.seller,
@@ -500,6 +342,8 @@ contract TradingManager is
         ) 
     {
         Trade storage trade = _trades[tradeId];
+        require(trade.id == tradeId, "Trade does not exist");
+        
         return (
             trade.id,
             trade.orderId,
@@ -516,95 +360,325 @@ contract TradingManager is
     /**
      * @dev 获取用户订单
      */
-    function getUserOrders(address user) external view returns (uint256[] memory) {
+    function getUserOrders(address user) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
         return _userOrders[user];
     }
     
     /**
      * @dev 获取用户交易
      */
-    function getUserTrades(address user) external view returns (uint256[] memory) {
+    function getUserTrades(address user) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
         return _userTrades[user];
-    }
-    
-    /**
-     * @dev 获取代币订单
-     */
-    function getTokenOrders(address token) external view returns (uint256[] memory) {
-        return _tokenOrders[token];
     }
     
     /**
      * @dev 获取代币交易
      */
-    function getTokenTrades(address token) external view returns (uint256[] memory) {
+    function getTokenTrades(address token) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
         return _tokenTrades[token];
-    }
-    
-    /**
-     * @dev 获取属性交易
-     */
-    function getPropertyTrades(bytes32 propertyIdHash) external view returns (uint256[] memory) {
-        return _propertyTrades[propertyIdHash];
-    }
-    
-    /**
-     * @dev 获取活跃订单
-     */
-    function getActiveOrders() external view returns (uint256[] memory) {
-        return _activeOrderIds;
-    }
-    
-    /**
-     * @dev 获取活跃订单数量
-     */
-    function getActiveOrdersCount() external view returns (uint256) {
-        return _activeOrderIds.length;
     }
     
     /**
      * @dev 获取订单数量
      */
-    function getOrdersCount() external view returns (uint256) {
+    function getOrderCount() 
+        external 
+        view 
+        returns (uint256) 
+    {
         return _nextOrderId - 1;
     }
     
     /**
      * @dev 获取交易数量
      */
-    function getTradesCount() external view returns (uint256) {
+    function getTradeCount() 
+        external 
+        view 
+        returns (uint256) 
+    {
         return _nextTradeId - 1;
     }
     
     /**
-     * @dev 授权升级合约的实现
+     * @dev 设置费率
+     */
+    function setFeeRate(uint256 _feeRate) 
+        external 
+        onlyAdmin 
+    {
+        require(_feeRate <= 500, "Fee rate too high"); // 最高 5%
+        uint256 oldRate = feeRate;
+        feeRate = _feeRate;
+        emit FeeRateUpdated(oldRate, _feeRate);
+    }
+    
+    /**
+     * @dev 设置费用接收者
+     */
+    function setFeeReceiver(address _feeReceiver) 
+        external 
+        onlyAdmin 
+    {
+        require(_feeReceiver != address(0), "Invalid fee receiver");
+        address oldReceiver = feeReceiver;
+        feeReceiver = _feeReceiver;
+        emit FeeReceiverUpdated(oldReceiver, _feeReceiver);
+    }
+    
+    /**
+     * @dev 设置最小交易金额
+     */
+    function setMinTradeAmount(uint256 _minAmount) 
+        external 
+        onlyAdmin 
+    {
+        uint256 oldAmount = minTradeAmount;
+        minTradeAmount = _minAmount;
+        emit MinTradeAmountUpdated(oldAmount, _minAmount);
+    }
+    
+    /**
+     * @dev 设置最大交易金额
+     */
+    function setMaxTradeAmount(uint256 _maxAmount) 
+        external 
+        onlyAdmin 
+    {
+        uint256 oldAmount = maxTradeAmount;
+        maxTradeAmount = _maxAmount;
+        emit MaxTradeAmountUpdated(oldAmount, _maxAmount);
+    }
+    
+    /**
+     * @dev 设置冷却期
+     */
+    function setCooldownPeriod(uint256 _period) 
+        external 
+        onlyAdmin 
+    {
+        uint256 oldPeriod = cooldownPeriod;
+        cooldownPeriod = _period;
+        emit CooldownPeriodUpdated(oldPeriod, _period);
+    }
+    
+    /**
+     * @dev 设置地址黑名单状态
+     */
+    function setBlacklist(address account, bool status) 
+        external 
+        onlyAdmin 
+    {
+        blacklist[account] = status;
+        emit AddressBlacklisted(account, status);
+    }
+    
+    /**
+     * @dev 暂停交易
+     */
+    function pause() 
+        external 
+        onlyAdmin 
+    {
+        _pause();
+        emit TradingStatusUpdated(true);
+    }
+    
+    /**
+     * @dev 恢复交易
+     */
+    function unpause() 
+        external 
+        onlyAdmin 
+    {
+        _unpause();
+        emit TradingStatusUpdated(false);
+    }
+    
+    /**
+     * @dev 升级授权
      */
     function _authorizeUpgrade(address newImplementation) 
         internal 
         override 
         onlyAdmin 
     {
-        require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
-        uint8 oldVersion = version;
-        version += 1;
-    }
-    
-    /**
-     * @dev 紧急提款 - 允许管理员提取合约中的以太坊
-     */
-    function emergencyWithdraw() external onlyAdmin {
-        payable(msg.sender).transfer(address(this).balance);
-    }
-    
-    /**
-     * @dev 紧急代币提款 - 允许管理员提取合约中的任何代币
-     */
-    function emergencyTokenWithdraw(address token, uint256 amount) external onlyAdmin {
-        PropertyToken(token).transfer(msg.sender, amount);
+        // 升级授权逻辑
     }
     
     /**
      * @dev 接收以太币
      */
     receive() external payable {}
-} 
+    
+    /**
+     * @dev 计算费用，使用高精度计算避免精度损失
+     */
+    function calculateFees(uint256 _amount, bool _applyFees) internal view returns (
+        uint256 platformFee,
+        uint256 maintenanceFee,
+        uint256 netAmount
+    ) {
+        if (_applyFees) {
+            // 使用更高精度的计算方式
+            platformFee = _amount.mul(feeRate).div(10000);
+            
+            // 确保费用至少为1 wei，避免舍入为0
+            if (feeRate > 0 && platformFee == 0) {
+                platformFee = 1;
+            }
+            
+            maintenanceFee = 0; // 假设maintenanceFeeRate为0
+            
+            // 确保netAmount不会因精度问题变为负数
+            if (platformFee > _amount) {
+                platformFee = _amount;
+                netAmount = 0;
+            } else {
+                netAmount = _amount.sub(platformFee);
+            }
+        } else {
+            platformFee = 0;
+            maintenanceFee = 0;
+            netAmount = _amount;
+        }
+    }
+    
+    /**
+     * @dev 获取代币交易数量
+     */
+    function getTokenTradingVolume(address token) external view returns (uint256) {
+        uint256[] memory trades = _tokenTrades[token];
+        uint256 totalVolume = 0;
+        
+        for (uint256 i = 0; i < trades.length; i++) {
+            Trade storage trade = _trades[trades[i]];
+            totalVolume = totalVolume.add(trade.amount);
+        }
+        
+        return totalVolume;
+    }
+    
+    /**
+     * @dev 获取系统版本
+     */
+    function getVersion() external pure returns (uint8) {
+        return VERSION;
+    }
+    
+    /**
+     * @dev 设置代币的初始价格
+     */
+    function setInitialPrice(address token, uint256 price) external onlyManager whenNotPaused {
+        require(token != address(0), "Invalid token address");
+        require(price > 0, "Price must be greater than 0");
+        require(_tokenPrices[token] == 0, "Price already set");
+
+        _tokenPrices[token] = price;
+    }
+
+    /**
+     * @dev 设置代币的当前价格
+     */
+    function setCurrentPrice(address token, uint256 price) external onlyManager whenNotPaused {
+        require(token != address(0), "Invalid token address");
+        require(price > 0, "Price must be greater than 0");
+
+        _tokenPrices[token] = price;
+    }
+
+    /**
+     * @dev 获取代币的当前价格
+     */
+    function getCurrentPrice(address token) external view returns (uint256) {
+        require(token != address(0), "Invalid token address");
+        return _tokenPrices[token];
+    }
+
+    /**
+     * @dev 获取用户的所有代币地址
+     */
+    function getUserTokens(address user) external view returns (address[] memory) {
+        uint256[] memory userOrderIds = _userOrders[user];
+        address[] memory tokens = new address[](userOrderIds.length);
+        uint256 tokenCount = 0;
+        
+        // 遍历用户的所有订单
+        for (uint256 i = 0; i < userOrderIds.length; i++) {
+            Order storage order = _orders[userOrderIds[i]];
+            bool isDuplicate = false;
+            
+            // 检查是否已添加此代币
+            for (uint256 j = 0; j < tokenCount; j++) {
+                if (tokens[j] == order.token) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+            
+            // 如果不是重复的，则添加到数组
+            if (!isDuplicate) {
+                tokens[tokenCount] = order.token;
+                tokenCount++;
+            }
+        }
+        
+        // 创建最终数组
+        address[] memory result = new address[](tokenCount);
+        for (uint256 i = 0; i < tokenCount; i++) {
+            result[i] = tokens[i];
+        }
+        
+        return result;
+    }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     */
+    uint256[45] private __gap;
+    
+    // 紧急提款请求结构
+    struct EmergencyWithdrawalRequest {
+        uint256 requestTime;
+        uint256 amount;
+        address token;
+        bool executed;
+        uint256 approvals;
+    }
+    
+    // 紧急提款请求映射
+    mapping(uint256 => EmergencyWithdrawalRequest) public emergencyRequests;
+    uint256 public nextRequestId;
+    
+    // 紧急提款时间锁定期（默认24小时）
+    uint256 public emergencyTimelock;
+    
+    // 紧急提款所需确认数
+    uint256 public requiredApprovals;
+    
+    // 紧急提款请求确认映射
+    mapping(uint256 => mapping(address => bool)) public emergencyApprovals;
+    
+    // 事件
+    event EmergencyWithdrawalRequested(uint256 indexed requestId, address indexed requester, uint256 amount);
+    event EmergencyWithdrawalApproved(uint256 indexed requestId, address indexed approver);
+    event EmergencyWithdrawalExecuted(uint256 indexed requestId, address indexed executor, uint256 amount);
+    event EmergencyTokenWithdrawalRequested(uint256 indexed requestId, address indexed requester, address token, uint256 amount);
+    event EmergencyTokenWithdrawalExecuted(uint256 indexed requestId, address indexed executor, address token, uint256 amount);
+    event EmergencyTimelockUpdated(uint256 oldTimelock, uint256 newTimelock);
+    event RequiredApprovalsUpdated(uint256 oldRequired, uint256 newRequired);
+}
+

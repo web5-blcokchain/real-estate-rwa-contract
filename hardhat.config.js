@@ -4,6 +4,7 @@ require("@nomicfoundation/hardhat-verify");
 require("@nomicfoundation/hardhat-ethers");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+require("@openzeppelin/hardhat-upgrades");
 
 // 加载环境配置
 const envConfig = require("./shared/src/config/env");
@@ -35,7 +36,7 @@ const getNetworkConfig = (network) => {
         ...baseConfig,
         chainId: envConfig.getInt('HARDHAT_CHAIN_ID'),
         blockGasLimit: 30000000,
-        allowUnlimitedContractSize: false,
+        allowUnlimitedContractSize: true,
         loggingEnabled: false,
         // 为 hardhat 网络使用默认账户
         accounts: {
@@ -74,6 +75,11 @@ module.exports = {
         enabled: true,
         runs: envConfig.getInt('CONTRACT_OPTIMIZER_RUNS'),
       },
+      viaIR: true,
+      evmVersion: "paris",
+      metadata: {
+        bytecodeHash: "none"
+      },
     },
   },
 
@@ -82,21 +88,6 @@ module.exports = {
     hardhat: getNetworkConfig('hardhat'),
     testnet: getNetworkConfig('testnet'),
     mainnet: getNetworkConfig('mainnet')
-  },
-
-  // Etherscan 配置
-  etherscan: {
-    apiKey: envConfig.get('ETHERSCAN_API_KEY'),
-    customChains: [
-      {
-        network: "testnet",
-        chainId: envConfig.getInt('TESTNET_CHAIN_ID'),
-        urls: {
-          apiURL: envConfig.get('ETHERSCAN_API_URL'),
-          browserURL: envConfig.get('ETHERSCAN_BROWSER_URL'),
-        },
-      },
-    ],
   },
 
   // Gas 报告配置

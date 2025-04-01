@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./SimpleRoleManager.sol";
-import "./PropertyManager.sol";
-import "./PropertyToken.sol";
+import "./PropertyManager.sol"; 
 import "./TradingManager.sol";
 import "./RewardManager.sol";
-import "./RealEstateFacade.sol";
 
 /**
  * @title SimpleRealEstateSystem
@@ -19,54 +17,91 @@ import "./RealEstateFacade.sol";
 contract SimpleRealEstateSystem is 
     Initializable, 
     UUPSUpgradeable, 
-    PausableUpgradeable,
-    ReentrancyGuardUpgradeable {
+    ReentrancyGuardUpgradeable,
+    PausableUpgradeable {
+    
+    // 系统状态枚举
+    enum SystemStatus {
+        NotInitialized,  // 0
+        Active,          // 1
+        Paused,          // 2
+        Terminated       // 3
+    }
+    
+    // 版本历史记录结构体
+    struct VersionHistory {
+        uint8 version;
+        uint256 timestamp;
+        string description;
+    }
+    
+    // 系统组件
+    SimpleRoleManager public roleManager;
+    PropertyManager public propertyManager;
+    TradingManager public tradingManager;
+    RewardManager public rewardManager;
+    
+    // 系统状态
+    SystemStatus public status;
     
     // 版本控制
     uint8 public version;
     
-    // 角色管理器
-    SimpleRoleManager public roleManager;
+    // 版本历史记录数组
+    VersionHistory[] public versionHistory;
     
-    // 房产管理器
-    PropertyManager public propertyManager;
-    
-    // 代币工厂
-    PropertyToken public tokenFactory;
-    
-    // 交易管理器
-    TradingManager public tradingManager;
-    
-    // 奖励管理器
-    RewardManager public rewardManager;
-    
-    // 门面合约
-    RealEstateFacade public facade;
-    
-    // 系统状态
-    enum SystemStatus {
-        Active,         // 系统正常运行
-        Maintenance,    // 系统维护中，部分功能暂停
-        Emergency,      // 紧急状态，只有管理员可操作
-        Upgraded        // 系统已升级，指向新合约
-    }
-    
-    // 当前系统状态
-    SystemStatus public systemStatus;
-    
-    // 如果系统已升级，指向新合约的地址
-    address public newSystemAddress;
-    
-    // 事件
-    event SystemStatusChanged(SystemStatus previous, SystemStatus current);
-    event NewSystemAddressSet(address indexed newSystem);
-    event SystemInitialized(address indexed deployer, uint8 version);
-    event ComponentUpdated(string indexed componentName, address indexed newAddress);
-    event FacadeUpdated(address indexed oldFacade, address indexed newFacade);
+    // 事件定义
+    event SystemInitialized(
+        address indexed deployer,
+        address indexed roleManager,
+        address indexed propertyManager,
+        address tradingManager,
+        address rewardManager
+    );
+    event SystemStatusChanged(SystemStatus oldStatus, SystemStatus newStatus);
+    event ComponentUpdated(string indexed componentName, address indexed oldAddress, address indexed newAddress);
+    event VersionUpdated(uint8 oldVersion, uint8 newVersion, string description);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+    
+    /**
+     * @dev 初始化系统
+     */
+    function initialize(
+        address _roleManager,
+        address _propertyManager,
+        address payable _tradingManager,
+        address payable _rewardManager
+    ) public initializer {
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        
+        roleManager = SimpleRoleManager(_roleManager);
+        propertyManager = PropertyManager(_propertyManager);
+        tradingManager = TradingManager(_tradingManager);
+        rewardManager = RewardManager(_rewardManager);
+        
+        status = SystemStatus.Active;
+        version = 1; // 初始版本
+        
+        // 记录初始版本
+        versionHistory.push(VersionHistory({
+            version: 1,
+            timestamp: block.timestamp,
+            description: "Initial version"
+        }));
+        
+        emit SystemInitialized(
+            msg.sender,
+            _roleManager,
+            _propertyManager,
+            _tradingManager,
+            _rewardManager
+        );
     }
     
     /**
@@ -78,126 +113,88 @@ contract SimpleRealEstateSystem is
     }
     
     /**
-     * @dev 修饰器：检查系统状态是否可用
+     * @dev 修饰器：系统必须处于活动状态
      */
     modifier whenSystemActive() {
-        require(
-            systemStatus == SystemStatus.Active || 
-            (systemStatus == SystemStatus.Maintenance && roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender)) ||
-            (roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender)), 
-            "System not accessible"
-        );
+        require(status == SystemStatus.Active, "System not active");
         _;
-    }
-    
-    /**
-     * @dev 初始化函数
-     */
-    function initialize(
-        address _roleManager,
-        address _propertyManager,
-        address _tokenFactory,
-        address _tradingManager,
-        address _rewardManager,
-        address _facade
-    ) public initializer {
-        __UUPSUpgradeable_init();
-        __Pausable_init();
-        __ReentrancyGuard_init();
-        
-        roleManager = SimpleRoleManager(_roleManager);
-        propertyManager = PropertyManager(_propertyManager);
-        tokenFactory = PropertyToken(_tokenFactory);
-        tradingManager = TradingManager(_tradingManager);
-        rewardManager = RewardManager(_rewardManager);
-        facade = RealEstateFacade(_facade);
-        
-        systemStatus = SystemStatus.Active;
-        version = 1;
-        
-        emit SystemInitialized(msg.sender, version);
     }
     
     /**
      * @dev 更新系统状态
      */
-    function setSystemStatus(SystemStatus _status) external onlyAdmin {
-        SystemStatus previousStatus = systemStatus;
-        systemStatus = _status;
+    function updateSystemStatus(SystemStatus _newStatus) public onlyAdmin {
+        require(_newStatus != SystemStatus.NotInitialized, "Cannot set to NotInitialized");
         
-        if (_status == SystemStatus.Emergency) {
-            roleManager.activateEmergencyMode();
-        } else if (previousStatus == SystemStatus.Emergency && _status != SystemStatus.Emergency) {
-            roleManager.deactivateEmergencyMode();
+        SystemStatus oldStatus = status;
+        status = _newStatus;
+        
+        // 同步暂停状态
+        if (_newStatus == SystemStatus.Paused && !paused()) {
+            _pause();
+        } else if (_newStatus == SystemStatus.Active && paused()) {
+            _unpause();
         }
         
-        emit SystemStatusChanged(previousStatus, _status);
+        emit SystemStatusChanged(oldStatus, _newStatus);
     }
     
     /**
-     * @dev 设置新系统地址（当升级到新合约时）
+     * @dev 更新版本
      */
-    function setNewSystemAddress(address _newSystemAddress) external onlyAdmin {
-        require(_newSystemAddress != address(0), "Zero address");
-        require(_newSystemAddress != address(this), "Same as current");
+    function updateVersion(uint8 _newVersion, string memory _description) external onlyAdmin {
+        require(_newVersion > version, "New version must be greater than current");
         
-        newSystemAddress = _newSystemAddress;
-        emit NewSystemAddressSet(_newSystemAddress);
-    }
-    
-    /**
-     * @dev 更新门面合约
-     */
-    function updateFacade(address _newFacade) external onlyAdmin whenSystemActive {
-        require(_newFacade != address(0), "Zero address");
-        address oldFacade = address(facade);
-        facade = RealEstateFacade(_newFacade);
-        emit FacadeUpdated(oldFacade, _newFacade);
+        uint8 oldVersion = version;
+        version = _newVersion;
+        
+        versionHistory.push(VersionHistory({
+            version: _newVersion,
+            timestamp: block.timestamp,
+            description: _description
+        }));
+        
+        emit VersionUpdated(oldVersion, _newVersion, _description);
     }
     
     /**
      * @dev 更新角色管理器
      */
-    function updateRoleManager(address _newRoleManager) external onlyAdmin {
-        require(_newRoleManager != address(0), "Zero address");
+    function updateRoleManager(address _newRoleManager) external onlyAdmin whenSystemActive {
+        require(_newRoleManager != address(0), "Zero address not allowed");  // 添加零地址检查
+        address oldAddress = address(roleManager);
         roleManager = SimpleRoleManager(_newRoleManager);
-        emit ComponentUpdated("roleManager", _newRoleManager);
+        emit ComponentUpdated("RoleManager", oldAddress, _newRoleManager);
     }
     
     /**
      * @dev 更新房产管理器
      */
     function updatePropertyManager(address _newPropertyManager) external onlyAdmin whenSystemActive {
-        require(_newPropertyManager != address(0), "Zero address");
+        require(_newPropertyManager != address(0), "Zero address not allowed");
+        address oldAddress = address(propertyManager);
         propertyManager = PropertyManager(_newPropertyManager);
-        emit ComponentUpdated("propertyManager", _newPropertyManager);
-    }
-    
-    /**
-     * @dev 更新代币工厂
-     */
-    function updateTokenFactory(address _newTokenFactory) external onlyAdmin whenSystemActive {
-        require(_newTokenFactory != address(0), "Zero address");
-        tokenFactory = PropertyToken(_newTokenFactory);
-        emit ComponentUpdated("tokenFactory", _newTokenFactory);
+        emit ComponentUpdated("PropertyManager", oldAddress, _newPropertyManager);
     }
     
     /**
      * @dev 更新交易管理器
      */
-    function updateTradingManager(address _newTradingManager) external onlyAdmin whenSystemActive {
-        require(_newTradingManager != address(0), "Zero address");
-        tradingManager = TradingManager(_newTradingManager);
-        emit ComponentUpdated("tradingManager", _newTradingManager);
+    function updateTradingManager(address payable _newTradingManager) external onlyAdmin whenSystemActive {
+        require(_newTradingManager != address(0), "Zero address not allowed");
+        address oldAddress = address(tradingManager);
+        tradingManager = TradingManager(payable(_newTradingManager));
+        emit ComponentUpdated("TradingManager", oldAddress, _newTradingManager);
     }
     
     /**
      * @dev 更新奖励管理器
      */
-    function updateRewardManager(address _newRewardManager) external onlyAdmin whenSystemActive {
-        require(_newRewardManager != address(0), "Zero address");
-        rewardManager = RewardManager(_newRewardManager);
-        emit ComponentUpdated("rewardManager", _newRewardManager);
+    function updateRewardManager(address payable _newRewardManager) external onlyAdmin whenSystemActive {
+        require(_newRewardManager != address(0), "Zero address not allowed");
+        address oldAddress = address(rewardManager);
+        rewardManager = RewardManager(payable(_newRewardManager));
+        emit ComponentUpdated("RewardManager", oldAddress, _newRewardManager);
     }
     
     /**
@@ -205,6 +202,7 @@ contract SimpleRealEstateSystem is
      */
     function pause() external onlyAdmin {
         _pause();
+        updateSystemStatus(SystemStatus.Paused);
     }
     
     /**
@@ -212,137 +210,46 @@ contract SimpleRealEstateSystem is
      */
     function unpause() external onlyAdmin {
         _unpause();
+        updateSystemStatus(SystemStatus.Active);
     }
     
     /**
-     * @dev 系统诊断 - 检查各组件状态并返回健康报告
+     * @dev 获取系统状态
      */
-    function systemHealthCheck() 
-        external 
-        view 
-        returns (
-            SystemStatus status,
-            bool paused,
-            bool emergencyMode,
-            uint8 currentVersion,
-            address[] memory componentAddresses,
-            string memory statusMessage
-        ) 
-    {
-        componentAddresses = new address[](6);
-        componentAddresses[0] = address(roleManager);
-        componentAddresses[1] = address(propertyManager);
-        componentAddresses[2] = address(tokenFactory);
-        componentAddresses[3] = address(tradingManager);
-        componentAddresses[4] = address(rewardManager);
-        componentAddresses[5] = address(facade);
-        
-        bool allComponentsAvailable = 
-            address(roleManager) != address(0) &&
-            address(propertyManager) != address(0) &&
-            address(tokenFactory) != address(0) &&
-            address(tradingManager) != address(0) &&
-            address(rewardManager) != address(0) &&
-            address(facade) != address(0);
-        
-        string memory message;
-        
-        if (!allComponentsAvailable) {
-            message = "One or more components unavailable";
-        } else if (systemStatus == SystemStatus.Emergency) {
-            message = "System in emergency state";
-        } else if (systemStatus == SystemStatus.Maintenance) {
-            message = "System undergoing maintenance";
-        } else if (systemStatus == SystemStatus.Upgraded) {
-            message = "System upgraded to new implementation";
+    function getSystemStatus() external view returns (SystemStatus) {
+        if (status == SystemStatus.Terminated) {
+            return SystemStatus.Terminated;
         } else if (paused()) {
-            message = "System paused but otherwise healthy";
+            return SystemStatus.Paused;
         } else {
-            message = "System operating normally";
+            return status;
         }
-        
-        return (
-            systemStatus,
-            paused(),
-            roleManager.emergencyMode(),
-            version,
-            componentAddresses,
-            message
-        );
     }
     
     /**
-     * @dev 授权升级合约的实现
+     * @dev 获取版本历史记录数量
      */
-    function _authorizeUpgrade(address newImplementation) 
-        internal 
-        override 
-        onlyAdmin 
-    {
-        require(systemStatus != SystemStatus.Emergency, "Cannot upgrade during emergency");
-        uint8 oldVersion = version;
-        version += 1;
+    function getVersionHistoryCount() external view returns (uint256) {
+        return versionHistory.length;
     }
     
     /**
-     * @dev 紧急情况下的暂停所有组件
+     * @dev 获取系统版本
      */
-    function emergencyPauseAll() external onlyAdmin {
-        _pause();
-        
-        if (address(propertyManager) != address(0)) {
-            propertyManager.pause();
-        }
-        
-        if (address(tradingManager) != address(0)) {
-            tradingManager.pauseTrading();
-            tradingManager.pause();
-        }
-        
-        if (address(rewardManager) != address(0)) {
-            rewardManager.pause();
-        }
-        
-        if (address(facade) != address(0)) {
-            facade.pause();
-        }
-        
-        roleManager.activateEmergencyMode();
-        
-        SystemStatus previousStatus = systemStatus;
-        systemStatus = SystemStatus.Emergency;
-        
-        emit SystemStatusChanged(previousStatus, SystemStatus.Emergency);
+    function getVersion() external view returns (uint8) {
+        return version;
     }
     
     /**
-     * @dev 从紧急状态恢复所有组件
+     * @dev 授权升级函数
      */
-    function emergencyRecoverAll() external onlyAdmin {
-        _unpause();
-        
-        if (address(propertyManager) != address(0)) {
-            propertyManager.unpause();
-        }
-        
-        if (address(tradingManager) != address(0)) {
-            tradingManager.unpauseTrading();
-            tradingManager.unpause();
-        }
-        
-        if (address(rewardManager) != address(0)) {
-            rewardManager.unpause();
-        }
-        
-        if (address(facade) != address(0)) {
-            facade.unpause();
-        }
-        
-        roleManager.deactivateEmergencyMode();
-        
-        SystemStatus previousStatus = systemStatus;
-        systemStatus = SystemStatus.Active;
-        
-        emit SystemStatusChanged(previousStatus, SystemStatus.Active);
+    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
+        require(!roleManager.emergencyMode(), "Emergency mode active");
     }
-} 
+    
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     */
+    uint256[45] private __gap;
+}

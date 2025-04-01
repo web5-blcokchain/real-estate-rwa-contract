@@ -18,19 +18,24 @@ async function verifyContract(address, name) {
 }
 
 async function deployTestToken(signer) {
-  logger.info("Deploying TestToken...");
-  const TestToken = await ethers.getContractFactory("TestToken");
-  const testToken = await TestToken.deploy(
-    "Test Token",
+  logger.info("Deploying SimpleERC20 test token...");
+  const SimpleERC20 = await ethers.getContractFactory("SimpleERC20");
+  const testToken = await SimpleERC20.deploy(
+    "Test Token", 
     "TEST",
-    ethers.utils.parseEther("1000000") // 部署 1,000,000 个测试代币
+    ethers.parseEther("1000000") // 初始供应量：1,000,000 TEST
   );
-  await testToken.deployed();
-  logger.info("TestToken deployed at:", testToken.address);
   
-  // 验证测试代币合约
+  await testToken.waitForDeployment();
+  
+  const testTokenAddress = await testToken.getAddress();
+  logger.info("TestToken deployed at:", testTokenAddress);
+  logger.info("Minted 1,000,000 TEST tokens");
+  
+  // 注意：SimpleERC20 不需要调用 mint 函数，因为在构造函数中已经铸造了代币
+  
   if (envConfig.getBoolean('CONTRACT_VERIFY') && hre.network.name !== "hardhat") {
-    await verifyContract(testToken.address, "TestToken");
+    await verifyContract(testTokenAddress, "SimpleERC20");
   }
   
   return testToken;
@@ -50,44 +55,116 @@ async function main() {
     // 部署 SimpleSystemDeployer
     logger.info("Deploying SimpleSystemDeployer...");
     const SimpleSystemDeployer = await ethers.getContractFactory("SimpleSystemDeployer");
-    const systemDeployer = await upgrades.deployProxy(SimpleSystemDeployer, [], {
-      kind: "uups",
-    });
-    await systemDeployer.deployed();
-    logger.info("SimpleSystemDeployer deployed at:", systemDeployer.address);
+    const systemDeployer = await SimpleSystemDeployer.deploy();
+    await systemDeployer.waitForDeployment();
+    logger.info("SimpleSystemDeployer deployed at:", await systemDeployer.getAddress());
     
     // 获取合约初始化参数
     const initParams = envConfig.getContractInitParams();
     
     // 将测试代币添加到支持的支付代币列表中
-    const supportedTokens = [...initParams.reward.supportedPaymentTokens, testToken.address];
-    initParams.reward.supportedPaymentTokens = supportedTokens;
+    const testTokenAddress = await testToken.getAddress();
+    const supportedTokens = [...initParams.reward.supportedPaymentTokens, testTokenAddress];
+    
+    // 构建 SimpleSystemDeployer 所期望的参数格式 - 先不添加支付代币，后面手动添加
+    const roleParams = {
+      admin: signer.address // 使用部署者地址作为管理员
+    };
+    
+    const tradingParams = {
+      tradingFeeRate: initParams.trading.tradingFeeRate,
+      feeReceiver: initParams.trading.tradingFeeReceiver,
+      minTradeAmount: ethers.parseEther(initParams.trading.minTradeAmount.toString())
+    };
+    
+    const rewardParams = {
+      platformFeeRate: initParams.reward.platformFeeRate,
+      maintenanceFeeRate: initParams.reward.maintenanceFeeRate,
+      feeReceiver: initParams.reward.rewardFeeReceiver,
+      minDistributionThreshold: ethers.parseEther(initParams.reward.minDistributionThreshold.toString()),
+      supportedPaymentTokens: [] // 先不添加支付代币，后面手动添加
+    };
+    
+    const tokenParams = {
+      name: initParams.tokenFactory.name,
+      symbol: initParams.tokenFactory.symbol,
+      initialSupply: ethers.parseEther(initParams.tokenFactory.initialSupply.toString())
+    };
+    
+    const systemParams = {
+      startPaused: initParams.system.startPaused
+    };
     
     // 使用 SimpleSystemDeployer 部署系统
     logger.info("Deploying system using SimpleSystemDeployer...");
     const tx = await systemDeployer.deploySystem(
-      initParams.role,
-      initParams.trading,
-      initParams.reward,
-      initParams.token,
-      initParams.system
+      roleParams,
+      tradingParams,
+      rewardParams,
+      tokenParams,
+      systemParams
     );
     await tx.wait();
     logger.info("System deployment transaction confirmed");
     
     // 获取已部署的合约地址
-    const system = await ethers.getContractAt("SimpleRealEstateSystem", await systemDeployer.getSystemAddress());
-    const facade = await ethers.getContractAt("RealEstateFacade", await systemDeployer.getFacadeAddress());
-    const roleManager = await ethers.getContractAt("SimpleRoleManager", await systemDeployer.getRoleManagerAddress());
-    const propertyManager = await ethers.getContractAt("PropertyManager", await systemDeployer.getPropertyManagerAddress());
-    const tokenFactory = await ethers.getContractAt("PropertyToken", await systemDeployer.getTokenFactoryAddress());
-    const tradingManager = await ethers.getContractAt("TradingManager", await systemDeployer.getTradingManagerAddress());
-    const rewardManager = await ethers.getContractAt("RewardManager", await systemDeployer.getRewardManagerAddress());
+    const systemAddress = await systemDeployer.system();
+    const facadeAddress = await systemDeployer.facade();
+    const roleManagerAddress = await systemDeployer.roleManager();
+    const propertyManagerAddress = await systemDeployer.propertyManager();
+    const tokenFactoryAddress = await systemDeployer.tokenFactory();
+    const tradingManagerAddress = await systemDeployer.tradingManager();
+    const rewardManagerAddress = await systemDeployer.rewardManager();
+    
+    const system = await ethers.getContractAt("SimpleRealEstateSystem", systemAddress);
+    const facade = await ethers.getContractAt("RealEstateFacade", facadeAddress);
+    const roleManager = await ethers.getContractAt("SimpleRoleManager", roleManagerAddress);
+    const propertyManager = await ethers.getContractAt("PropertyManager", propertyManagerAddress);
+    const tokenFactory = await ethers.getContractAt("PropertyToken", tokenFactoryAddress);
+    const tradingManager = await ethers.getContractAt("TradingManager", tradingManagerAddress);
+    const rewardManager = await ethers.getContractAt("RewardManager", rewardManagerAddress);
+    
+    // 手动添加支持的支付代币 - 由部署者账户调用，而不是由 SimpleSystemDeployer 调用
+    logger.info("Adding supported payment tokens...");
+    
+    // 添加支持的支付代币
+    for (const token of supportedTokens) {
+      try {
+        // 验证代币是否有效的 ERC20
+        const erc20 = new ethers.Contract(
+          token,
+          [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function totalSupply() view returns (uint256)"
+          ],
+          signer
+        );
+        
+        const name = await erc20.name();
+        const symbol = await erc20.symbol();
+        const totalSupply = await erc20.totalSupply();
+        
+        logger.info(`Payment token info - Address: ${token}, Name: ${name}, Symbol: ${symbol}, Total Supply: ${totalSupply}`);
+        
+        if (totalSupply === 0n) {
+          logger.error(`Token ${token} has zero supply. Skipping...`);
+          continue;
+        }
+        
+        const tx = await rewardManager.addSupportedPaymentToken(token);
+        await tx.wait();
+        logger.info(`Added payment token: ${token}`);
+      } catch (error) {
+        logger.error(`Failed to add payment token ${token}: ${error.message}`);
+      }
+    }
     
     // 验证部署
     logger.info("Verifying deployment...");
     const systemStatus = await system.getSystemStatus();
-    logger.info("System status:", systemStatus);
+    logger.info("System status:", systemStatus.toString());
     
     // 验证合约
     if (envConfig.getBoolean('CONTRACT_VERIFY') && hre.network.name !== "hardhat") {
@@ -108,17 +185,17 @@ async function main() {
       timestamp: new Date().toISOString(),
       deployer: signer.address,
       contracts: {
-        systemDeployer: systemDeployer.address,
-        system: system.address,
-        facade: facade.address,
-        roleManager: roleManager.address,
-        propertyManager: propertyManager.address,
-        tokenFactory: tokenFactory.address,
-        tradingManager: tradingManager.address,
-        rewardManager: rewardManager.address,
-        testToken: testToken.address
+        systemDeployer: await systemDeployer.getAddress(),
+        system: await system.getAddress(),
+        facade: await facade.getAddress(),
+        roleManager: await roleManager.getAddress(),
+        propertyManager: await propertyManager.getAddress(),
+        tokenFactory: await tokenFactory.getAddress(),
+        tradingManager: await tradingManager.getAddress(),
+        rewardManager: await rewardManager.getAddress(),
+        testToken: testTokenAddress
       },
-      systemStatus: systemStatus,
+      systemStatus: systemStatus.toString(),
       initializationParams: initParams
     };
     
@@ -147,7 +224,7 @@ async function main() {
       "RewardManager",
       "SimpleRealEstateSystem",
       "RealEstateFacade",
-      "TestToken"
+      "SimpleERC20"
     ];
 
     for (const contractName of contracts) {

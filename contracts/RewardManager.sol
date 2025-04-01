@@ -1,29 +1,37 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "./SimpleRoleManager.sol";
 import "./PropertyToken.sol";
+import "./utils/SafeMath.sol";
 
 /**
  * @title RewardManager
  * @dev 统一的奖励和租金分配管理合约
  */
 contract RewardManager is 
-    Initializable, 
-    UUPSUpgradeable, 
+    Initializable,
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable,
     PausableUpgradeable,
-    ReentrancyGuardUpgradeable {
+    AccessControlUpgradeable {
     
-    using SafeMathUpgradeable for uint256;
+    using SafeMath for uint256;
     
-    // 版本控制 - 使用uint8节省gas
-    uint8 public version;
+    // Version control - using uint8 to save gas
+    uint8 private constant VERSION = 1;
+    
+    // Role definitions
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
     // 角色管理器
     SimpleRoleManager public roleManager;
@@ -127,6 +135,9 @@ contract RewardManager is
     event MinDistributionThresholdChanged(uint256 oldValue, uint256 newValue);
     event PaymentTokenAdded(address indexed tokenAddress);
     event PaymentTokenRemoved(address indexed tokenAddress);
+    event PlatformFeeRateUpdated(uint256 oldRate, uint256 newRate);
+    event MaintenanceFeeRateUpdated(uint256 oldRate, uint256 newRate);
+    event FeesDistributed(address indexed token, uint256 amount, uint256 platformFee, uint256 maintenanceFee);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -160,25 +171,38 @@ contract RewardManager is
     /**
      * @dev 初始化函数
      */
-    function initialize(address _roleManager) public initializer {
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+    function initialize(
+        address _roleManager,
+        uint256 _platformFeeRate,
+        uint256 _maintenanceFeeRate,
+        address _feeReceiver,
+        uint256 _minDistributionThreshold
+    ) public initializer {
         __ReentrancyGuard_init();
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+        __AccessControl_init();
         
         roleManager = SimpleRoleManager(_roleManager);
         _nextDistributionId = 1;
         
+        platformFeeRate = _platformFeeRate;
+        maintenanceFeeRate = _maintenanceFeeRate;
+        feeReceiver = _feeReceiver;
+        minDistributionThreshold = _minDistributionThreshold;
+        
         // 默认设置
-        platformFeeRate = 500;     // 5%
-        maintenanceFeeRate = 200;  // 2%
-        feeReceiver = msg.sender;
         emergencyWithdrawalEnabled = false;
-        minDistributionThreshold = 0.01 ether; // 最低分配触发阈值
         
         // 默认支持ETH作为支付方式
         supportedPaymentTokens[address(0)] = true;
         
-        version = 1;
+        // Grant roles to msg.sender
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(OPERATOR_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+        _grantRole(UPGRADER_ROLE, msg.sender);
     }
     
     /**
@@ -186,7 +210,7 @@ contract RewardManager is
      */
     function addSupportedPaymentToken(address _tokenAddress) external onlyAdmin {
         require(_tokenAddress != address(0), "Invalid token address");
-        require(IERC20(_tokenAddress).totalSupply() > 0, "Not a valid ERC20 token");
+        require(IERC20Upgradeable(_tokenAddress).totalSupply() > 0, "Not a valid ERC20 token");
         
         if (!supportedPaymentTokens[_tokenAddress]) {
             supportedPaymentTokens[_tokenAddress] = true;
@@ -326,7 +350,7 @@ contract RewardManager is
             
             // 如果有费用，则转给费用接收者
             if (_applyFees && (platformFee > 0 || maintenanceFee > 0)) {
-                payable(feeReceiver).transfer(platformFee.add(maintenanceFee));
+                payable(feeReceiver).transfer(platformFee + maintenanceFee);
             }
             
             // 如果发送额外的ETH，退还
@@ -337,14 +361,14 @@ contract RewardManager is
         } else {
             // ERC20代币支付
             require(msg.value == 0, "ETH not needed for token payment");
-            IERC20 paymentToken = IERC20(_paymentToken);
+            IERC20Upgradeable paymentToken = IERC20Upgradeable(_paymentToken);
             
             // 转移代币到合约
             require(paymentToken.transferFrom(msg.sender, address(this), _amount), "Token transfer failed");
             
             // 如果有费用，则转给费用接收者
             if (_applyFees && (platformFee > 0 || maintenanceFee > 0)) {
-                require(paymentToken.transfer(feeReceiver, platformFee.add(maintenanceFee)), "Fee transfer failed");
+                require(paymentToken.transfer(feeReceiver, platformFee + maintenanceFee), "Fee transfer failed");
             }
         }
         
@@ -427,7 +451,7 @@ contract RewardManager is
                 payable(msg.sender).transfer(remainingAmount);
             } else {
                 // 代币退还
-                IERC20(distribution.paymentToken).transfer(msg.sender, remainingAmount);
+                IERC20Upgradeable(distribution.paymentToken).transfer(msg.sender, remainingAmount);
             }
         }
         
@@ -454,12 +478,12 @@ contract RewardManager is
         require(balance > 0, "No tokens at snapshot");
         
         uint256 totalSupply = token.totalSupplyAt(distribution.snapshotId);
-        uint256 share = distribution.netAmount.mul(balance).div(totalSupply);
+        uint256 share = distribution.netAmount * balance / totalSupply;
         require(share > 0, "Share too small");
         
         // 记录提取状态
         _withdrawals[_distributionId][msg.sender] = true;
-        _totalWithdrawn[_distributionId] = _totalWithdrawn[_distributionId].add(share);
+        _totalWithdrawn[_distributionId] += share;
         
         // 根据支付代币类型执行转账
         if (distribution.paymentToken == address(0)) {
@@ -467,7 +491,7 @@ contract RewardManager is
             payable(msg.sender).transfer(share);
         } else {
             // 代币支付
-            IERC20(distribution.paymentToken).transfer(msg.sender, share);
+            IERC20Upgradeable(distribution.paymentToken).transfer(msg.sender, share);
         }
         
         emit DistributionWithdrawn(_distributionId, msg.sender, share, distribution.paymentToken);
@@ -547,7 +571,7 @@ contract RewardManager is
         if (balance == 0) return (0, false, distribution.paymentToken);
         
         uint256 totalSupply = token.totalSupplyAt(distribution.snapshotId);
-        uint256 share = distribution.netAmount.mul(balance).div(totalSupply);
+        uint256 share = distribution.netAmount * balance / totalSupply;
         
         return (share, share > 0, distribution.paymentToken);
     }
@@ -581,6 +605,58 @@ contract RewardManager is
     }
     
     /**
+     * @dev 获取用户的所有分配ID
+     */
+    function getUserDistributions(address user) external view returns (uint256[] memory) {
+        uint256 totalDistributions = _nextDistributionId - 1;
+        uint256[] memory userDistributions = new uint256[](totalDistributions);
+        uint256 count = 0;
+        
+        // 遍历所有分配
+        for (uint256 i = 1; i < _nextDistributionId; i++) {
+            Distribution storage dist = _distributions[i];
+            if (dist.id != 0) {  // 确保分配存在
+                // 检查用户在快照时的余额
+                PropertyToken token = PropertyToken(dist.tokenAddress);
+                if (token.balanceOfAt(user, dist.snapshotId) > 0) {
+                    userDistributions[count] = i;
+                    count++;
+                }
+            }
+        }
+        
+        // 创建最终数组
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = userDistributions[i];
+        }
+        
+        return result;
+    }
+    
+    /**
+     * @dev 获取分配信息
+     */
+    function getDistributionInfo(uint256 _distributionId) 
+        external 
+        view 
+        returns (
+            uint256 amount,
+            bool claimed,
+            string memory description
+        ) 
+    {
+        Distribution storage dist = _distributions[_distributionId];
+        require(dist.id == _distributionId, "Distribution does not exist");
+        
+        return (
+            dist.netAmount,
+            _withdrawals[_distributionId][msg.sender],
+            dist.description
+        );
+    }
+    
+    /**
      * @dev 授权升级合约的实现
      */
     function _authorizeUpgrade(address newImplementation) 
@@ -589,8 +665,6 @@ contract RewardManager is
         onlyAdmin 
     {
         require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
-        uint8 oldVersion = version;
-        version += 1;
     }
     
     /**
@@ -605,7 +679,7 @@ contract RewardManager is
      */
     function emergencyTokenWithdraw(address _token, uint256 _amount) external onlyAdmin {
         require(_token != address(0), "Cannot withdraw ETH with this function");
-        IERC20(_token).transfer(msg.sender, _amount);
+        IERC20Upgradeable(_token).transfer(msg.sender, _amount);
     }
     
     /**

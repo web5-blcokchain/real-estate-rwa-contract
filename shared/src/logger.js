@@ -45,4 +45,4 @@ const logger = winston.createLogger({
 });
 
 // 导出日志记录器
-module.exports = logger; 
+module.exports = { logger }; 
