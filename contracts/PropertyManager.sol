@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "./SimpleRoleManager.sol";
+import "./RoleManager.sol";
 
 /**
  * @title PropertyManager
@@ -21,7 +21,7 @@ contract PropertyManager is
     uint8 public version;
     
     // 角色管理器
-    SimpleRoleManager public roleManager;
+    RoleManager public roleManager;
     
     // 房产状态 - 用uint8表示，节省gas
     enum PropertyStatus {
@@ -80,7 +80,7 @@ contract PropertyManager is
         __ReentrancyGuard_init();
         __Pausable_init();
         
-        roleManager = SimpleRoleManager(_roleManager);
+        roleManager = RoleManager(_roleManager);
         version = 1;
         
         emit PropertyManagerInitialized(msg.sender, _roleManager, version);
@@ -333,6 +333,6 @@ contract PropertyManager is
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
         // 确保角色管理器不在紧急模式
-        require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
+        require(!RoleManager(roleManager).emergencyMode(), "Emergency mode active");
     }
 } 

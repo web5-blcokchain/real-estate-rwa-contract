@@ -5,16 +5,16 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "./SimpleRoleManager.sol";
+import "./RoleManager.sol";
 import "./PropertyManager.sol"; 
 import "./TradingManager.sol";
 import "./RewardManager.sol";
 
 /**
- * @title SimpleRealEstateSystem
+ * @title RealEstateSystem
  * @dev 不动产系统管理合约，负责系统状态和组件管理
  */
-contract SimpleRealEstateSystem is 
+contract RealEstateSystem is 
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
@@ -36,7 +36,7 @@ contract SimpleRealEstateSystem is
     }
     
     // 系统组件
-    SimpleRoleManager public roleManager;
+    RoleManager public roleManager;
     PropertyManager public propertyManager;
     TradingManager public tradingManager;
     RewardManager public rewardManager;
@@ -80,7 +80,7 @@ contract SimpleRealEstateSystem is
         __ReentrancyGuard_init();
         __Pausable_init();
         
-        roleManager = SimpleRoleManager(_roleManager);
+        roleManager = RoleManager(_roleManager);
         propertyManager = PropertyManager(_propertyManager);
         tradingManager = TradingManager(_tradingManager);
         rewardManager = RewardManager(_rewardManager);
@@ -163,7 +163,7 @@ contract SimpleRealEstateSystem is
     function updateRoleManager(address _newRoleManager) external onlyAdmin whenSystemActive {
         require(_newRoleManager != address(0), "Zero address not allowed");  // 添加零地址检查
         address oldAddress = address(roleManager);
-        roleManager = SimpleRoleManager(_newRoleManager);
+        roleManager = RoleManager(_newRoleManager);
         emit ComponentUpdated("RoleManager", oldAddress, _newRoleManager);
     }
     
@@ -252,4 +252,4 @@ contract SimpleRealEstateSystem is
      * variables without shifting down storage in the inheritance chain.
      */
     uint256[45] private __gap;
-}
+} 

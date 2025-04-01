@@ -6,7 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import "./SimpleRoleManager.sol";
+import "./RoleManager.sol";
 import "./PropertyToken.sol";
 import "./utils/SafeMath.sol";
 
@@ -26,7 +26,7 @@ contract TradingManager is
     uint8 private constant VERSION = 1;
     
     // 角色管理器
-    SimpleRoleManager public roleManager;
+    RoleManager public roleManager;
     
     // 订单和交易状态
     mapping(uint256 => Order) private _orders;
@@ -96,7 +96,7 @@ contract TradingManager is
         __Pausable_init();
         __ReentrancyGuard_init();
         
-        roleManager = SimpleRoleManager(_roleManager);
+        roleManager = RoleManager(_roleManager);
         
         // 初始化状态变量
         _nextOrderId = 1;

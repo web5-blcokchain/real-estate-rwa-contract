@@ -8,10 +8,10 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
 /**
- * @title SimpleRoleManager
- * @dev 简化的角色管理合约
+ * @title RoleManager
+ * @dev 角色管理合约
  */
-contract SimpleRoleManager is 
+contract RoleManager is 
     Initializable, 
     AccessControlUpgradeable, 
     ReentrancyGuardUpgradeable,

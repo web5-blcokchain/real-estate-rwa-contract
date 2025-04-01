@@ -8,7 +8,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20Burnable
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "./SimpleRoleManager.sol";
+import "./RoleManager.sol";
 import "./utils/SafeMath.sol";
 
 contract PropertyToken is 
@@ -38,7 +38,7 @@ contract PropertyToken is
     uint256 public maxSupply;
 
     // Role manager contract
-    SimpleRoleManager public roleManager;
+    RoleManager public roleManager;
 
     // Blacklist mapping
     mapping(address => bool) public blacklisted;
@@ -76,7 +76,7 @@ contract PropertyToken is
         propertyIdHash = _propertyIdHash;
         uint256 defaultMaxSupply = 1000000000;
         maxSupply = defaultMaxSupply.mul(10**decimals()); // Default 1 billion tokens
-        roleManager = SimpleRoleManager(_roleManager);
+        roleManager = RoleManager(_roleManager);
 
         if (_initialSupply > 0) {
             _mint(_admin, _initialSupply);
@@ -150,7 +150,7 @@ contract PropertyToken is
      * @dev Function that should revert when msg.sender is not authorized to upgrade the contract
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {
-        require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
+        require(!RoleManager(roleManager).emergencyMode(), "Emergency mode active");
     }
 
     /**

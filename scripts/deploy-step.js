@@ -67,7 +67,7 @@ async function deploySystemStep(signer) {
   
   // 部署 RoleManager
   logger.info("Deploying RoleManager...");
-  const RoleManager = await ethers.getContractFactory("SimpleRoleManager");
+  const RoleManager = await ethers.getContractFactory("RoleManager");
   const roleManager = await upgrades.deployProxy(RoleManager, [signer.address], {
     kind: "uups",
   });
@@ -157,7 +157,7 @@ async function deploySystemStep(signer) {
   
   // 部署 System
   logger.info("Deploying System...");
-  const System = await ethers.getContractFactory("SimpleRealEstateSystem");
+  const System = await ethers.getContractFactory("RealEstateSystem");
   const system = await upgrades.deployProxy(System, [
     roleManagerAddress,
     propertyManagerAddress,
@@ -197,91 +197,6 @@ async function deploySystemStep(signer) {
   };
 }
 
-/**
- * 使用 SimpleSystemDeployer 部署系统
- */
-async function deploySystemWithDeployer(signer, testToken) {
-  // 获取合约初始化参数
-  const initParams = envConfig.getContractInitParams();
-  
-  // 部署 SimpleSystemDeployer
-  logger.info("Deploying SimpleSystemDeployer...");
-  const SimpleSystemDeployer = await ethers.getContractFactory("SimpleSystemDeployer");
-  const systemDeployer = await SimpleSystemDeployer.deploy();
-  await systemDeployer.waitForDeployment();
-  const systemDeployerAddress = await systemDeployer.getAddress();
-  logger.info("SimpleSystemDeployer deployed at:", systemDeployerAddress);
-  
-  // 构建 SimpleSystemDeployer 所期望的参数格式 - 先不添加支付代币，后面手动添加
-  const roleParams = {
-    admin: signer.address // 使用部署者地址作为管理员
-  };
-  
-  const tradingParams = {
-    tradingFeeRate: initParams.trading.tradingFeeRate,
-    feeReceiver: initParams.trading.tradingFeeReceiver,
-    minTradeAmount: ethers.parseEther(initParams.trading.minTradeAmount.toString())
-  };
-  
-  const rewardParams = {
-    platformFeeRate: initParams.reward.platformFeeRate,
-    maintenanceFeeRate: initParams.reward.maintenanceFeeRate,
-    feeReceiver: initParams.reward.rewardFeeReceiver,
-    minDistributionThreshold: ethers.parseEther(initParams.reward.minDistributionThreshold.toString()),
-    supportedPaymentTokens: [] // 先不添加支付代币，后面手动添加
-  };
-  
-  const tokenParams = {
-    name: initParams.tokenFactory.name,
-    symbol: initParams.tokenFactory.symbol,
-    initialSupply: ethers.parseEther(initParams.tokenFactory.initialSupply.toString())
-  };
-  
-  const systemParams = {
-    startPaused: initParams.system.startPaused
-  };
-  
-  // 使用 SimpleSystemDeployer 部署系统
-  logger.info("Deploying system using SimpleSystemDeployer...");
-  const tx = await systemDeployer.deploySystem(
-    roleParams,
-    tradingParams,
-    rewardParams,
-    tokenParams,
-    systemParams
-  );
-  await tx.wait();
-  logger.info("System deployment transaction confirmed");
-  
-  // 获取已部署的合约地址
-  const systemAddress = await systemDeployer.system();
-  const facadeAddress = await systemDeployer.facade();
-  const roleManagerAddress = await systemDeployer.roleManager();
-  const propertyManagerAddress = await systemDeployer.propertyManager();
-  const tokenFactoryAddress = await systemDeployer.tokenFactory();
-  const tradingManagerAddress = await systemDeployer.tradingManager();
-  const rewardManagerAddress = await systemDeployer.rewardManager();
-  
-  const system = await ethers.getContractAt("SimpleRealEstateSystem", systemAddress);
-  const facade = await ethers.getContractAt("RealEstateFacade", facadeAddress);
-  const roleManager = await ethers.getContractAt("SimpleRoleManager", roleManagerAddress);
-  const propertyManager = await ethers.getContractAt("PropertyManager", propertyManagerAddress);
-  const tokenFactory = await ethers.getContractAt("PropertyToken", tokenFactoryAddress);
-  const tradingManager = await ethers.getContractAt("TradingManager", tradingManagerAddress);
-  const rewardManager = await ethers.getContractAt("RewardManager", rewardManagerAddress);
-  
-  return {
-    systemDeployer,
-    system,
-    facade,
-    roleManager,
-    propertyManager,
-    tokenFactory,
-    tradingManager,
-    rewardManager
-  };
-}
-
 async function main() {
   try {
     logger.info("Starting system deployment...");
@@ -294,17 +209,9 @@ async function main() {
     const testToken = await deployTestToken(signer);
     const testTokenAddress = await testToken.getAddress();
     
-    // 选择部署方式: 'deployer' 或 'step'
-    const deployMethod = process.env.DEPLOY_METHOD || 'step';
-    let contracts;
-    
-    if (deployMethod === 'deployer') {
-      logger.info("Using SimpleSystemDeployer for deployment...");
-      contracts = await deploySystemWithDeployer(signer, testToken);
-    } else {
-      logger.info("Using step-by-step deployment...");
-      contracts = await deploySystemStep(signer);
-    }
+    // 使用单步部署方式
+    logger.info("Using step-by-step deployment...");
+    const contracts = await deploySystemStep(signer);
     
     const { system, facade, roleManager, propertyManager, tokenFactory, tradingManager, rewardManager } = contracts;
     
@@ -378,7 +285,7 @@ async function main() {
     // 验证部署
     logger.info("Verifying deployment...");
     const systemStatus = await system.getSystemStatus();
-    logger.info("System status:", systemStatus);
+    logger.info("System status:", systemStatus.toString());
     
     // 保存部署信息
     const deploymentInfo = {
@@ -394,12 +301,10 @@ async function main() {
         tradingManager: await tradingManager.getAddress(),
         rewardManager: await rewardManager.getAddress(),
         testToken: testTokenAddress
-      }
+      },
+      systemStatus: systemStatus.toString(),
+      deployMethod: 'step-by-step'
     };
-    
-    if (deployMethod === 'deployer') {
-      deploymentInfo.contracts.systemDeployer = await contracts.systemDeployer.getAddress();
-    }
     
     // 保存部署信息到 config/deployment.json
     const configDir = path.join(__dirname, "../config");
@@ -419,12 +324,12 @@ async function main() {
     }
 
     const contracts2 = [
-      "SimpleRoleManager",
+      "RoleManager",
       "PropertyManager",
       "PropertyToken",
       "TradingManager",
       "RewardManager",
-      "SimpleRealEstateSystem",
+      "RealEstateSystem",
       "RealEstateFacade",
       "SimpleERC20"
     ];
@@ -452,10 +357,10 @@ async function main() {
 - 网络: ${deploymentInfo.network}
 - 部署者: ${deploymentInfo.deployer}
 - 部署时间: ${deploymentInfo.timestamp}
-- 部署方式: ${deployMethod === 'deployer' ? 'SimpleSystemDeployer' : '单步部署'}
+- 部署方式: 单步部署
 
 ## 系统状态
-${systemStatus}
+${systemStatus.toString()}
 
 ## 合约地址
 ${Object.entries(deploymentInfo.contracts)

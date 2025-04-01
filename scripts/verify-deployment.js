@@ -106,7 +106,7 @@ async function main() {
 
     // 获取合约实例
     const system = await hre.ethers.getContractAt(
-      "SimpleRealEstateSystem",
+      "RealEstateSystem",
       deploymentInfo.contracts.system
     );
     const facade = await hre.ethers.getContractAt(
@@ -114,7 +114,7 @@ async function main() {
       deploymentInfo.contracts.facade
     );
     const roleManager = await hre.ethers.getContractAt(
-      "SimpleRoleManager",
+      "RoleManager",
       deploymentInfo.contracts.roleManager
     );
     const propertyManager = await hre.ethers.getContractAt(
@@ -138,9 +138,9 @@ async function main() {
     if (hre.network.name !== "hardhat") {
       logger.info("Verifying contracts on Etherscan...");
       await verifyContract(deploymentInfo.contracts.systemDeployer, "SimpleSystemDeployer");
-      await verifyContract(deploymentInfo.contracts.system, "SimpleRealEstateSystem");
+      await verifyContract(deploymentInfo.contracts.system, "RealEstateSystem");
       await verifyContract(deploymentInfo.contracts.facade, "RealEstateFacade");
-      await verifyContract(deploymentInfo.contracts.roleManager, "SimpleRoleManager");
+      await verifyContract(deploymentInfo.contracts.roleManager, "RoleManager");
       await verifyContract(deploymentInfo.contracts.propertyManager, "PropertyManager");
       await verifyContract(deploymentInfo.contracts.tokenFactory, "PropertyToken");
       await verifyContract(deploymentInfo.contracts.tradingManager, "TradingManager");

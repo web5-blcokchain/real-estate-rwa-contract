@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import "./SimpleRoleManager.sol";
+import "./RoleManager.sol";
 import "./PropertyToken.sol";
 import "./utils/SafeMath.sol";
 
@@ -34,7 +34,7 @@ contract RewardManager is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
     // 角色管理器
-    SimpleRoleManager public roleManager;
+    RoleManager public roleManager;
     
     // 分配类型枚举
     enum DistributionType {
@@ -183,7 +183,7 @@ contract RewardManager is
         __UUPSUpgradeable_init();
         __AccessControl_init();
         
-        roleManager = SimpleRoleManager(_roleManager);
+        roleManager = RoleManager(_roleManager);
         _nextDistributionId = 1;
         
         platformFeeRate = _platformFeeRate;
@@ -664,7 +664,7 @@ contract RewardManager is
         override 
         onlyAdmin 
     {
-        require(!SimpleRoleManager(roleManager).emergencyMode(), "Emergency mode active");
+        require(!RoleManager(roleManager).emergencyMode(), "Emergency mode active");
     }
     
     /**

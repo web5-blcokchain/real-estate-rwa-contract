@@ -73,7 +73,7 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: envConfig.getInt('CONTRACT_OPTIMIZER_RUNS'),
+        runs: 50,
       },
       viaIR: true,
       evmVersion: "paris",

@@ -17,9 +17,9 @@ describe("RealEstateFacade", function () {
   beforeEach(async function () {
     [owner, manager, user1, user2] = await ethers.getSigners();
     
-    // 部署 SimpleRoleManager
-    const SimpleRoleManager = await ethers.getContractFactory("SimpleRoleManager");
-    roleManager = await upgrades.deployProxy(SimpleRoleManager, [], {
+    // 部署 RoleManager
+    const RoleManager = await ethers.getContractFactory("RoleManager");
+    roleManager = await upgrades.deployProxy(RoleManager, [], {
       kind: "uups",
     });
     
@@ -47,10 +47,10 @@ describe("RealEstateFacade", function () {
       kind: "uups",
     });
     
-    // 部署 SimpleRealEstateSystem
-    const SimpleRealEstateSystem = await ethers.getContractFactory("SimpleRealEstateSystem");
+    // 部署 RealEstateSystem
+    const RealEstateSystem = await ethers.getContractFactory("RealEstateSystem");
     system = await upgrades.deployProxy(
-      SimpleRealEstateSystem,
+      RealEstateSystem,
       [
         roleManager.address,
         propertyManager.address,
