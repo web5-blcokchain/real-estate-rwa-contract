@@ -1,30 +1,24 @@
-import { Router } from 'express';
-import { 
-  getSystemStatus, 
-  toggleEmergencyMode, 
-  toggleTradingPause, 
-  togglePause 
-} from '../controllers/systemController.js';
-
-const router = Router();
+/**
+ * 系统路由
+ * 定义系统相关的API路由
+ */
+const express = require('express');
+const router = express.Router();
+const systemController = require('../controllers/systemController');
+const { apiKey } = require('../middlewares');
 
 /**
  * @swagger
- * /api/system/status:
+ * /system/status:
  *   get:
  *     summary: 获取系统状态
- *     description: 获取系统的当前运行状态和统计信息
- *     tags: [系统管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     description: 获取服务器和区块链的状态信息
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
  *     responses:
  *       200:
- *         description: 成功返回系统状态
+ *         description: 返回系统状态信息
  *         content:
  *           application/json:
  *             schema:
@@ -36,42 +30,91 @@ const router = Router();
  *                 data:
  *                   type: object
  *                   properties:
- *                     systemHealth:
+ *                     server:
  *                       type: object
  *                       properties:
- *                         isEmergency:
- *                           type: boolean
- *                           example: false
- *                         isTradingPaused:
- *                           type: boolean
- *                           example: false
- *                     statistics:
+ *                         status:
+ *                           type: string
+ *                         environment:
+ *                           type: string
+ *                         timestamp:
+ *                           type: string
+ *                         uptime:
+ *                           type: integer
+ *                     blockchain:
  *                       type: object
  *                       properties:
- *                         propertyCount:
- *                           type: number
- *                           example: 5
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
+ *                         activeNetwork:
+ *                           type: object
+ *                           properties:
+ *                             name:
+ *                               type: string
+ *                             chainId:
+ *                               type: integer
+ *                         availableNetworks:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               name:
+ *                                 type: string
+ *                               chainId:
+ *                                 type: integer
  */
-router.get('/status', getSystemStatus);
+router.get('/status', apiKey, systemController.getStatus);
 
 /**
  * @swagger
- * /api/system/emergency:
+ * /system/networks:
+ *   get:
+ *     summary: 获取区块链网络信息
+ *     description: 获取可用的区块链网络列表和当前活动网络
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 返回网络信息
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     networks:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                           chainId:
+ *                             type: integer
+ *                           rpcUrl:
+ *                             type: string
+ *                           explorer:
+ *                             type: string
+ *                           isActive:
+ *                             type: boolean
+ *                     activeNetwork:
+ *                       type: string
+ */
+router.get('/networks', apiKey, systemController.getNetworks);
+
+/**
+ * @swagger
+ * /system/networks/switch:
  *   post:
- *     summary: 切换紧急模式
- *     description: 开启或关闭系统紧急模式
- *     tags: [系统管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     summary: 切换区块链网络
+ *     description: 切换当前活动的区块链网络
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -79,20 +122,68 @@ router.get('/status', getSystemStatus);
  *           schema:
  *             type: object
  *             required:
- *               - enable
+ *               - networkName
  *             properties:
- *               enable:
- *                 type: boolean
- *                 description: 是否启用紧急模式
- *                 example: true
- *               adminRole:
+ *               networkName:
  *                 type: string
- *                 description: 管理员角色名称
- *                 default: "admin"
- *                 example: "admin"
+ *                 description: 要切换到的网络名称
  *     responses:
  *       200:
- *         description: 成功切换紧急模式
+ *         description: 网络切换成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     name:
+ *                       type: string
+ *                     chainId:
+ *                       type: integer
+ *                     rpcUrl:
+ *                       type: string
+ */
+router.post('/networks/switch', apiKey, systemController.switchNetwork);
+
+/**
+ * @swagger
+ * /system/verify-signature:
+ *   post:
+ *     summary: 验证消息签名
+ *     description: 验证消息的签名是否有效
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - message
+ *               - signature
+ *               - address
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 description: 原始消息
+ *               signature:
+ *                 type: string
+ *                 description: 消息签名
+ *               address:
+ *                 type: string
+ *                 description: 签名者地址
+ *     responses:
+ *       200:
+ *         description: 签名验证结果
  *         content:
  *           application/json:
  *             schema:
@@ -104,38 +195,24 @@ router.get('/status', getSystemStatus);
  *                 data:
  *                   type: object
  *                   properties:
- *                     isEmergency:
+ *                     isValid:
  *                       type: boolean
- *                       example: true
- *                     transaction:
+ *                     address:
  *                       type: string
- *                       example: "0x1234..."
  *                     message:
  *                       type: string
- *                       example: "已启用紧急模式"
- *       400:
- *         description: 参数错误
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
  */
-router.post('/emergency', toggleEmergencyMode);
+router.post('/verify-signature', apiKey, systemController.verifySignature);
 
 /**
  * @swagger
- * /api/system/trading-pause:
+ * /system/sign-message:
  *   post:
- *     summary: 暂停或恢复交易
- *     description: 暂停或恢复系统交易功能
- *     tags: [系统管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     summary: 签名消息
+ *     description: 使用提供的私钥对消息进行签名
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -143,76 +220,36 @@ router.post('/emergency', toggleEmergencyMode);
  *           schema:
  *             type: object
  *             required:
- *               - enable
+ *               - message
+ *               - privateKey
  *             properties:
- *               enable:
- *                 type: boolean
- *                 description: 是否暂停交易
- *                 example: true
- *               adminRole:
+ *               message:
  *                 type: string
- *                 description: 管理员角色名称
- *                 default: "admin"
- *                 example: "admin"
+ *                 description: 要签名的消息
+ *               privateKey:
+ *                 type: string
+ *                 description: 用于签名的私钥
  *     responses:
  *       200:
- *         description: 成功暂停或恢复交易
- *       400:
- *         description: 参数错误
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
+ *         description: 签名成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                     signature:
+ *                       type: string
+ *                     address:
+ *                       type: string
  */
-router.post('/trading-pause', toggleTradingPause);
+router.post('/sign-message', apiKey, systemController.signMessage);
 
-/**
- * @swagger
- * /api/system/pause:
- *   post:
- *     summary: 暂停或恢复合约功能
- *     description: 暂停或恢复指定合约的功能
- *     tags: [系统管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - contractName
- *               - enable
- *             properties:
- *               contractName:
- *                 type: string
- *                 description: 合约名称
- *                 example: "PropertyManager"
- *               enable:
- *                 type: boolean
- *                 description: 是否暂停合约
- *                 example: true
- *               adminRole:
- *                 type: string
- *                 description: 管理员角色名称
- *                 default: "admin"
- *                 example: "admin"
- *     responses:
- *       200:
- *         description: 成功暂停或恢复合约功能
- *       400:
- *         description: 参数错误或不支持的操作
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
- */
-router.post('/pause', togglePause);
-
-export default router; 
+module.exports = router; 

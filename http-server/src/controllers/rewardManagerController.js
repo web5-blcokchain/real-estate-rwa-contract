@@ -1,175 +1,288 @@
-import { ethers } from 'ethers';
-import utils from '../utils/index.js';
-
-const { 
-  getContract, 
-  getContractWithSigner, 
-  getContractWithPrivateKey
-} = utils;
-const EnvConfig = utils.EnvConfig;
-
-// 创建环境配置实例
-const env = new EnvConfig();
+/**
+ * RewardManager控制器
+ * 提供奖励管理相关API
+ */
+const { ethers } = require('ethers');
+const { Logger } = require('../../../shared/src');
+const validateParams = require('../utils/validateParams');
+const { isEthAddress, isNonEmptyString, isPositiveInteger, isPrivateKey } = require('../utils/validators');
+const { callContractMethod, sendContractTransaction } = require('../utils/contract');
 
 /**
- * 分发奖励
+ * 创建奖励规则
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-export const distributeRewards = async (req, res) => {
+async function createRewardRule(req, res, next) {
   try {
-    const { propertyId, amount, toAddresses, managerRole = 'manager' } = req.body;
+    const { 
+      ruleName, 
+      rewardType, 
+      rewardAmount, 
+      rewardCondition, 
+      privateKey 
+    } = req.body;
     
-    // 参数验证
-    if (!propertyId || !amount || !toAddresses || !Array.isArray(toAddresses) || toAddresses.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的奖励信息'
-      });
+    // 验证参数
+    const validation = validateParams(
+      { ruleName, rewardType, rewardAmount, rewardCondition, privateKey },
+      [
+        ['ruleName', isNonEmptyString],
+        ['rewardType', isNonEmptyString],
+        ['rewardAmount', isPositiveInteger],
+        ['rewardCondition', isNonEmptyString],
+        ['privateKey', isPrivateKey]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
     }
     
-    // 获取合约实例
-    const rewardManager = await getContractWithSigner('RewardManager', managerRole);
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
     
-    // 分发奖励
-    const tx = await rewardManager.distributeRewards(propertyId, ethers.parseUnits(amount.toString(), 18), toAddresses);
-    const receipt = await tx.wait();
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('创建奖励规则', {
+      ruleName,
+      rewardType,
+      rewardAmount,
+      from: wallet.address
+    });
     
-    res.status(200).json({
+    // 调用合约创建奖励规则
+    const receipt = await sendContractTransaction(
+      'RewardManager',
+      'createRewardRule',
+      [ruleName, rewardType, rewardAmount, rewardCondition],
+      { wallet }
+    );
+    
+    // 从收据事件中获取规则ID
+    let ruleId = 'unknown';
+    if (receipt.events && receipt.events.length > 0) {
+      // 假设第一个事件是RewardRuleCreated事件，包含ruleId
+      // 实际情况可能需要更精确的事件解析
+      ruleId = receipt.events[0].args.ruleId;
+    }
+    
+    // 返回结果
+    return res.status(201).json({
       success: true,
       data: {
-        propertyId,
-        amount,
-        recipients: toAddresses,
-        transaction: tx.hash,
-        message: `已成功分发奖励给 ${toAddresses.length} 个地址`
+        ruleId,
+        ruleName,
+        rewardType,
+        rewardAmount,
+        rewardCondition,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
       }
     });
+    
   } catch (error) {
-    console.error('分发奖励失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '分发奖励失败',
-      message: error.message
-    });
+    next(error);
   }
-};
+}
 
 /**
- * 领取奖励
+ * 获取奖励规则信息
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-export const claimRewards = async (req, res) => {
+async function getRewardRuleInfo(req, res, next) {
   try {
-    const { propertyId, traderRole = 'trader' } = req.body;
+    const { ruleId } = req.params;
     
-    if (!propertyId) {
-      return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供房产ID'
-      });
+    // 验证参数
+    const validation = validateParams(
+      { ruleId },
+      [
+        ['ruleId', isNonEmptyString]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
     }
     
-    // 获取合约实例
-    const rewardManager = await getContractWithSigner('RewardManager', traderRole);
+    // 记录日志
+    Logger.info('获取奖励规则信息', { ruleId });
     
-    // 领取奖励
-    const tx = await rewardManager.claimRewards(propertyId);
-    const receipt = await tx.wait();
+    // 调用合约获取奖励规则信息
+    const ruleInfo = await callContractMethod(
+      'RewardManager',
+      'getRewardRule',
+      [ruleId]
+    );
     
-    res.status(200).json({
+    // 返回结果
+    return res.status(200).json({
       success: true,
       data: {
-        propertyId,
-        claimer: await rewardManager.signer.getAddress(),
-        transaction: tx.hash,
-        message: `已成功领取房产 ${propertyId} 的奖励`
+        ruleId,
+        ruleInfo
       }
     });
+    
   } catch (error) {
-    console.error('领取奖励失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '领取奖励失败',
-      message: error.message
-    });
+    next(error);
   }
-};
+}
 
 /**
- * 获取可领取的奖励
+ * 发放奖励
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-export const getClaimableRewards = async (req, res) => {
+async function distributeReward(req, res, next) {
   try {
-    const { propertyId, address } = req.params;
+    const { recipient, ruleId, privateKey } = req.body;
     
-    if (!propertyId || !address || !ethers.isAddress(address)) {
-      return res.status(400).json({
-        success: false,
-        error: '参数无效',
-        message: '请提供有效的房产ID和以太坊地址'
-      });
+    // 验证参数
+    const validation = validateParams(
+      { recipient, ruleId, privateKey },
+      [
+        ['recipient', isEthAddress],
+        ['ruleId', isNonEmptyString],
+        ['privateKey', isPrivateKey]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
     }
     
-    // 获取合约实例
-    const rewardManager = await getContract('RewardManager');
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
     
-    // 获取可领取奖励
-    const claimableAmount = await rewardManager.getClaimableRewards(propertyId, address);
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('发放奖励', {
+      recipient,
+      ruleId,
+      from: wallet.address
+    });
     
-    res.status(200).json({
+    // 调用合约发放奖励
+    const receipt = await sendContractTransaction(
+      'RewardManager',
+      'distributeReward',
+      [recipient, ruleId],
+      { wallet }
+    );
+    
+    // 返回结果
+    return res.status(200).json({
       success: true,
       data: {
-        propertyId,
+        recipient,
+        ruleId,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 获取用户奖励历史
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function getUserRewardHistory(req, res, next) {
+  try {
+    const { address } = req.params;
+    
+    // 验证参数
+    const validation = validateParams(
+      { address },
+      [
+        ['address', isEthAddress]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 记录日志
+    Logger.info('获取用户奖励历史', { address });
+    
+    // 调用合约获取用户奖励历史
+    const history = await callContractMethod(
+      'RewardManager',
+      'getUserRewardHistory',
+      [address]
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
         address,
-        claimableAmount: ethers.formatUnits(claimableAmount, 18)
+        history
       }
     });
+    
   } catch (error) {
-    console.error('获取可领取奖励失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取可领取奖励失败',
-      message: error.message
-    });
+    next(error);
   }
-};
+}
 
 /**
- * 获取奖励历史
+ * 获取所有奖励规则
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-export const getRewardHistory = async (req, res) => {
+async function getAllRewardRules(req, res, next) {
   try {
-    const { propertyId, address } = req.params;
+    // 记录日志
+    Logger.info('获取所有奖励规则');
     
-    if (!propertyId) {
-      return res.status(400).json({
-        success: false,
-        error: '参数无效',
-        message: '请提供有效的房产ID'
-      });
-    }
+    // 调用合约获取所有奖励规则
+    const rules = await callContractMethod(
+      'RewardManager',
+      'getAllRewardRules',
+      []
+    );
     
-    // 获取合约实例
-    const rewardManager = await getContract('RewardManager');
-    
-    // 此处应该查询事件日志来获取奖励历史
-    // 简化示例，实际实现需要根据合约设计调整
-    const rewardEvents = []; // 应该通过查询事件获取
-    
-    res.status(200).json({
+    // 返回结果
+    return res.status(200).json({
       success: true,
       data: {
-        propertyId,
-        address: address || 'all',
-        rewardEvents
+        rules
       }
     });
+    
   } catch (error) {
-    console.error('获取奖励历史失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取奖励历史失败',
-      message: error.message
-    });
+    next(error);
   }
+}
+
+module.exports = {
+  createRewardRule,
+  getRewardRuleInfo,
+  distributeReward,
+  getUserRewardHistory,
+  getAllRewardRules
 }; 

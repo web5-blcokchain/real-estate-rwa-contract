@@ -3,9 +3,9 @@ const { TransactionError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const { Validation } = require('../utils/validation');
 const EnvConfig = require('../config/env');
-const Provider = require('./Provider');
-const Wallet = require('./Wallet');
-const GasManager = require('./GasManager');
+const Provider = require('./provider');
+const Wallet = require('./wallet');
+const GasManager = require('./gas-manager');
 
 /**
  * TransactionManager 管理器类

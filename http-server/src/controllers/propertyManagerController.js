@@ -1,375 +1,276 @@
+/**
+ * PropertyManager控制器
+ * 提供资产管理相关API
+ */
 const { ethers } = require('ethers');
-const utils = require('../utils/index');
-const contractHelpers = require('../utils/contractHelpers');
-const logger = require('../utils/logger');
-
-// 使用工具模块中的函数和实例
-const { 
-  getContract, 
-  getContractWithSigner, 
-  getContractWithPrivateKey,
-  createContractFromAddress,
-  createPropertyToken,
-  registerTokenForProperty,
-  networkUtils // 直接使用shared导出的单例实例
-} = utils;
+const { Logger } = require('../../../shared/src');
+const validateParams = require('../utils/validateParams');
+const { isEthAddress, isNonEmptyString, isPrivateKey } = require('../utils/validators');
+const { callContractMethod, sendContractTransaction } = require('../utils/contract');
 
 /**
- * 注册新房产
+ * 注册新资产
  * @param {Object} req - Express请求对象
  * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-const registerProperty = async (req, res) => {
+async function registerProperty(req, res, next) {
   try {
-    const { propertyId, location, area, description, initialSupply, decimals = 18, managerRole = 'admin' } = req.body;
+    const { 
+      propertyId, 
+      ownerAddress, 
+      propertyData, 
+      initialSupply, 
+      privateKey 
+    } = req.body;
     
-    // 基本参数验证
-    if (!propertyId || !location || !area || !description || !initialSupply) {
-      return res.status(400).json({
-        success: false,
-        error: '参数错误',
-        message: '所有房产信息字段都是必填的'
-      });
-    }
-
-    logger.info(`注册新房产: ${propertyId}, ${location}, ${area}, ${description}, 初始供应量: ${initialSupply}, 角色: ${managerRole}`);
-    
-    // 获取当前网络信息
-    const networkInfo = {
-      name: networkUtils.getNetworkName(),
-      chainId: networkUtils.getChainId(),
-      isTestnet: networkUtils.isTestnet(),
-      isMainnet: networkUtils.isMainnet()
-    };
-
-    // 获取PropertyManager合约实例
-    const propertyManager = await getContractWithSigner('PropertyManager', managerRole);
-    
-    // 获取调用者地址
-    const signer = await propertyManager.signer.getAddress();
-    logger.info(`调用者地址: ${signer}`);
-    
-    // 调用合约方法注册房产
-    logger.info(`调用合约方法注册房产: ${propertyId}`);
-    const tx = await propertyManager.registerProperty(
-      propertyId,
-      "JP", // country
-      `ipfs://${propertyId}` // metadataURI
+    // 验证参数
+    const validation = validateParams(
+      { propertyId, ownerAddress, propertyData, initialSupply, privateKey },
+      [
+        ['propertyId', isNonEmptyString],
+        ['ownerAddress', isEthAddress],
+        ['propertyData', isNonEmptyString],
+        ['initialSupply', (val) => !isNaN(val) && parseInt(val) > 0],
+        ['privateKey', isPrivateKey]
+      ]
     );
     
-    // 等待交易确认
-    logger.info(`等待交易确认: ${tx.hash}`);
-    const receipt = await tx.wait();
-    
-    // 从交易收据中获取代币地址
-    const propertyRegisteredEvent = receipt.logs.find(log => log.eventName === 'PropertyRegistered');
-    if (!propertyRegisteredEvent) {
-      throw new Error('Property registration event not found');
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
     }
     
-    const { propertyIdHash } = propertyRegisteredEvent.args;
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
     
-    // 返回成功响应
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('注册新资产', {
+      propertyId,
+      ownerAddress,
+      initialSupply,
+      from: wallet.address
+    });
+    
+    // 调用合约注册资产
+    const receipt = await sendContractTransaction(
+      'PropertyManager',
+      'registerProperty',
+      [propertyId, ownerAddress, propertyData, initialSupply],
+      { wallet }
+    );
+    
+    // 返回结果
     return res.status(201).json({
       success: true,
-      message: '房产注册成功',
       data: {
         propertyId,
-        propertyIdHash,
-        location,
-        area,
-        description,
+        ownerAddress,
         initialSupply,
-        decimals,
-        transactionHash: tx.hash,
-        network: networkInfo,
-        receipt: receipt,
-        caller: signer
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
       }
     });
+    
   } catch (error) {
-    logger.error(`注册房产失败: ${error}`);
-    return res.status(500).json({
-      success: false,
-      error: '房产注册失败',
-      message: error.message,
-      details: error.stack
-    });
+    next(error);
   }
-};
+}
 
 /**
- * 获取房产信息
- */
-const getPropertyInfo = async (req, res) => {
-  try {
-    const { propertyId, field } = req.params;
-    
-    if (!propertyId) {
-      return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供房产ID'
-      });
-    }
-    
-    // 获取当前网络信息
-    const networkInfo = {
-      name: networkUtils.getNetworkName(),
-      chainId: networkUtils.getChainId(),
-      isTestnet: networkUtils.isTestnet(),
-      isMainnet: networkUtils.isMainnet()
-    };
-    
-    logger.info(`获取房产信息: ${propertyId}, 字段: ${field || '全部'}`);
-    
-    // 使用模拟数据，避免合约调用错误
-    const mockTokenAddress = "0x" + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-    
-    // 如果指定了字段，获取特定字段信息
-    if (field) {
-      // 模拟各字段数据
-      const mockFieldValues = {
-        'location': '东京都新宿区西新宿1-1-1',
-        'area': 120.5,
-        'description': '高层公寓，临近车站，设施齐全',
-        'price': '1000000'
-      };
-      
-      return res.status(200).json({
-        success: true,
-        data: {
-          propertyId,
-          tokenAddress: mockTokenAddress,
-          [field]: mockFieldValues[field] || '未知字段'
-        }
-      });
-    }
-    
-    // 获取所有基本信息（模拟数据）
-    res.status(200).json({
-      success: true,
-      data: {
-        propertyId,
-        tokenAddress: mockTokenAddress,
-        location: '东京都新宿区西新宿1-1-1',
-        area: 120.5,
-        description: '高层公寓，临近车站，设施齐全',
-        token: {
-          name: `Property Token ${propertyId}`,
-          symbol: `PROP${propertyId.replace(/\D/g, '')}`,
-          totalSupply: '1000',
-          decimals: 18
-        },
-        network: networkInfo
-      }
-    });
-  } catch (error) {
-    logger.error('获取房产信息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取房产信息失败',
-      message: error.message
-    });
-  }
-};
-
-/**
- * 更新房产信息
- */
-const updatePropertyInfo = async (req, res) => {
-  try {
-    const { propertyId, field, value, managerRole = 'manager' } = req.body;
-    
-    // 参数验证
-    if (!propertyId || !field || value === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: '参数不完整',
-        message: '请提供所有必要的参数'
-      });
-    }
-    
-    // 获取当前网络信息
-    const networkInfo = {
-      name: networkUtils.getNetworkName(),
-      chainId: networkUtils.getChainId(),
-      isTestnet: networkUtils.isTestnet(),
-      isMainnet: networkUtils.isMainnet()
-    };
-    
-    logger.info(`更新房产信息: ${propertyId}, 字段: ${field}, 值: ${value}`);
-    
-    // 生成模拟交易哈希
-    const mockTransactionHash = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-    
-    // 返回成功响应
-    res.status(200).json({
-      success: true,
-      data: {
-        propertyId,
-        field,
-        value,
-        transaction: mockTransactionHash,
-        message: `已成功更新房产 ${propertyId} 的 ${field} 为 ${value}`,
-        network: networkInfo
-      }
-    });
-  } catch (error) {
-    logger.error('更新房产信息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '更新房产信息失败',
-      message: error.message
-    });
-  }
-};
-
-/**
- * 获取所有房产
+ * 获取资产信息
  * @param {Object} req - Express请求对象
  * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-const getAllProperties = async (req, res) => {
+async function getPropertyInfo(req, res, next) {
   try {
-    logger.info('获取所有房产列表');
+    const { propertyId } = req.params;
     
-    // 使用共享工具获取合约实例
-    const propertyManager = await utils.getContract('PropertyManager');
+    // 验证参数
+    const validation = validateParams(
+      { propertyId },
+      [
+        ['propertyId', isNonEmptyString]
+      ]
+    );
     
-    // 获取房产数量
-    const count = await propertyManager.getPropertyCount();
-    
-    // 模拟数据 - 因为没有实际区块链环境
-    const mockProperties = [];
-    for (let i = 0; i < Math.min(count.toString(), 10); i++) {
-      const propertyId = `P${10000 + i}`;
-      mockProperties.push({
-        propertyId,
-        tokenAddress: "0x" + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-        location: `东京都第${i+1}区`,
-        area: 100 + (i * 10),
-        description: `示例房产 ${i+1}`
-      });
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
     }
     
-    // 返回成功响应
+    // 记录日志
+    Logger.info('获取资产信息', { propertyId });
+    
+    // 调用合约获取资产信息
+    const propertyInfo = await callContractMethod(
+      'PropertyManager',
+      'getPropertyInfo',
+      [propertyId]
+    );
+    
+    // 返回结果
     return res.status(200).json({
       success: true,
       data: {
-        count: count.toString(),
-        properties: mockProperties
+        propertyId,
+        propertyInfo
       }
     });
+    
   } catch (error) {
-    logger.error(`获取所有房产失败: ${error}`);
-    return res.status(500).json({
-      success: false,
-      error: '获取所有房产失败',
-      message: error.message
-    });
+    next(error);
   }
-};
+}
 
 /**
- * 注册新房产并创建对应的代币
+ * 更新资产信息
  * @param {Object} req - Express请求对象
  * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
  */
-const registerPropertyAndToken = async (req, res) => {
+async function updatePropertyInfo(req, res, next) {
   try {
-    const {
-      propertyId,
-      country,
-      metadataURI,
-      tokenName,
-      tokenSymbol,
-      initialSupply,
-      managerRole = 'admin' // 默认为admin角色
-    } = req.body;
-
-    // 基本参数验证
-    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply) {
-      return res.status(400).json({
-        success: false,
-        error: '参数错误',
-        message: '所有字段都是必填的'
-      });
-    }
-
-    logger.info(`注册新房产和代币: ${propertyId}, ${country}, ${tokenName}, ${tokenSymbol}, 初始供应量: ${initialSupply}`);
+    const { propertyId, propertyData, privateKey } = req.body;
     
-    // 获取当前网络信息
-    const networkInfo = {
-      name: networkUtils.getNetworkName(),
-      chainId: networkUtils.getChainId(),
-      isTestnet: networkUtils.isTestnet(),
-      isMainnet: networkUtils.isMainnet()
-    };
-
-    // 使用 contractHelpers 获取合约实例
-    const facade = await contractHelpers.getContractWithOptions({
-      contractName: 'Facade',
-      role: managerRole
+    // 验证参数
+    const validation = validateParams(
+      { propertyId, propertyData, privateKey },
+      [
+        ['propertyId', isNonEmptyString],
+        ['propertyData', isNonEmptyString],
+        ['privateKey', isPrivateKey]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('更新资产信息', {
+      propertyId,
+      from: wallet.address
     });
     
-    // 获取 PropertyToken 实现合约地址
-    const propertyTokenImplementation = await facade.propertyTokenContract();
-    
-    // 调用合约方法
-    const tx = await facade.registerPropertyAndCreateToken(
-      propertyId,
-      country,
-      metadataURI,
-      tokenName,
-      tokenSymbol,
-      ethers.parseEther(initialSupply.toString()),
-      propertyTokenImplementation
+    // 调用合约更新资产信息
+    const receipt = await sendContractTransaction(
+      'PropertyManager',
+      'updatePropertyInfo',
+      [propertyId, propertyData],
+      { wallet }
     );
     
-    // 等待交易确认
-    const receipt = await tx.wait();
-    
-    // 从事件中获取返回数据
-    const propertyRegisteredEvent = receipt.events.find(
-      event => event.eventName === 'PropertyRegistered'
-    );
-    
-    if (!propertyRegisteredEvent) {
-      throw new Error('Property registration event not found');
-    }
-
-    const { propertyIdHash, tokenAddress } = propertyRegisteredEvent.args;
-    
-    // 返回成功响应
-    return res.status(201).json({
+    // 返回结果
+    return res.status(200).json({
       success: true,
-      message: '房产和代币注册成功',
       data: {
         propertyId,
-        propertyIdHash,
-        tokenAddress,
-        tokenName,
-        tokenSymbol,
-        initialSupply,
-        transactionHash: receipt.hash,
-        network: networkInfo
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
       }
     });
+    
   } catch (error) {
-    logger.error(`注册房产和代币失败: ${error}`);
-    return res.status(500).json({
-      success: false,
-      error: '注册房产和代币失败',
-      message: error.message
-    });
+    next(error);
   }
-};
+}
+
+/**
+ * 获取所有资产ID
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function getAllPropertyIds(req, res, next) {
+  try {
+    // 记录日志
+    Logger.info('获取所有资产ID');
+    
+    // 调用合约获取所有资产ID
+    const propertyIds = await callContractMethod(
+      'PropertyManager',
+      'getAllPropertyIds',
+      []
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyIds
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 验证资产状态
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function verifyPropertyStatus(req, res, next) {
+  try {
+    const { propertyId } = req.params;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId },
+      [
+        ['propertyId', isNonEmptyString]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 记录日志
+    Logger.info('验证资产状态', { propertyId });
+    
+    // 调用合约验证资产状态
+    const isActive = await callContractMethod(
+      'PropertyManager',
+      'isPropertyActive',
+      [propertyId]
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        isActive
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
 
 module.exports = {
   registerProperty,
   getPropertyInfo,
   updatePropertyInfo,
-  getAllProperties,
-  registerPropertyAndToken
+  getAllPropertyIds,
+  verifyPropertyStatus
 }; 

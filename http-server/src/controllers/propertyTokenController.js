@@ -1,310 +1,28 @@
 /**
- * TradingManager控制器
- * 提供资产交易相关API
+ * PropertyToken合约控制器
+ * 提供代币余额查询、转移等功能的API实现
  */
 const { ethers } = require('ethers');
-const { Logger } = require('../../../shared/src');
-const validateParams = require('../utils/validateParams');
+const { Logger, WalletError } = require('../../../shared/src');
+const { validateParams } = require('../utils');
 const { isEthAddress, isNonEmptyString, isPositiveInteger, isPrivateKey } = require('../utils/validators');
 const { callContractMethod, sendContractTransaction } = require('../utils/contract');
 
 /**
- * 创建交易订单
+ * 获取代币余额
  * @param {Object} req - Express请求对象
  * @param {Object} res - Express响应对象
  * @param {Function} next - Express下一个中间件
  */
-async function createOrder(req, res, next) {
+async function getTokenBalance(req, res, next) {
   try {
-    const { 
-      propertyId, 
-      tokenAmount, 
-      pricePerToken, 
-      expireTime, 
-      privateKey 
-    } = req.body;
+    const { propertyId, address } = req.params;
     
     // 验证参数
     const validation = validateParams(
-      { propertyId, tokenAmount, pricePerToken, expireTime, privateKey },
+      { propertyId, address },
       [
         ['propertyId', isNonEmptyString],
-        ['tokenAmount', isPositiveInteger],
-        ['pricePerToken', isPositiveInteger],
-        ['expireTime', (val) => !isNaN(Date.parse(val))],
-        ['privateKey', isPrivateKey]
-      ]
-    );
-    
-    if (!validation.isValid) {
-      const error = new Error(Object.values(validation.errors).join(', '));
-      error.name = 'ValidationError';
-      error.statusCode = 400;
-      throw error;
-    }
-    
-    // 创建钱包
-    const wallet = new ethers.Wallet(privateKey);
-    
-    // 记录日志（敏感信息已隐藏）
-    Logger.info('创建交易订单', {
-      propertyId,
-      tokenAmount,
-      pricePerToken,
-      expireTime,
-      from: wallet.address
-    });
-    
-    // 转换过期时间为秒级时间戳
-    const expireTimestamp = Math.floor(new Date(expireTime).getTime() / 1000);
-    
-    // 调用合约创建订单
-    const receipt = await sendContractTransaction(
-      'TradingManager',
-      'createOrder',
-      [propertyId, tokenAmount, pricePerToken, expireTimestamp],
-      { wallet }
-    );
-    
-    // 从收据事件中获取订单ID
-    let orderId = 'unknown';
-    if (receipt.events && receipt.events.length > 0) {
-      // 假设第一个事件是OrderCreated事件，包含orderId
-      // 实际情况可能需要更精确的事件解析
-      orderId = receipt.events[0].args.orderId;
-    }
-    
-    // 返回结果
-    return res.status(201).json({
-      success: true,
-      data: {
-        orderId,
-        propertyId,
-        tokenAmount,
-        pricePerToken,
-        expireTime,
-        seller: wallet.address,
-        transactionHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber
-      }
-    });
-    
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * 获取订单信息
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Function} next - Express下一个中间件
- */
-async function getOrderInfo(req, res, next) {
-  try {
-    const { orderId } = req.params;
-    
-    // 验证参数
-    const validation = validateParams(
-      { orderId },
-      [
-        ['orderId', isNonEmptyString]
-      ]
-    );
-    
-    if (!validation.isValid) {
-      const error = new Error(Object.values(validation.errors).join(', '));
-      error.name = 'ValidationError';
-      error.statusCode = 400;
-      throw error;
-    }
-    
-    // 记录日志
-    Logger.info('获取订单信息', { orderId });
-    
-    // 调用合约获取订单信息
-    const orderInfo = await callContractMethod(
-      'TradingManager',
-      'getOrder',
-      [orderId]
-    );
-    
-    // 返回结果
-    return res.status(200).json({
-      success: true,
-      data: {
-        orderId,
-        orderInfo
-      }
-    });
-    
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * 执行订单交易
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Function} next - Express下一个中间件
- */
-async function executeOrder(req, res, next) {
-  try {
-    const { orderId, privateKey } = req.body;
-    
-    // 验证参数
-    const validation = validateParams(
-      { orderId, privateKey },
-      [
-        ['orderId', isNonEmptyString],
-        ['privateKey', isPrivateKey]
-      ]
-    );
-    
-    if (!validation.isValid) {
-      const error = new Error(Object.values(validation.errors).join(', '));
-      error.name = 'ValidationError';
-      error.statusCode = 400;
-      throw error;
-    }
-    
-    // 创建钱包
-    const wallet = new ethers.Wallet(privateKey);
-    
-    // 记录日志（敏感信息已隐藏）
-    Logger.info('执行订单交易', {
-      orderId,
-      buyer: wallet.address
-    });
-    
-    // 调用合约执行订单
-    const receipt = await sendContractTransaction(
-      'TradingManager',
-      'executeOrder',
-      [orderId],
-      { wallet }
-    );
-    
-    // 返回结果
-    return res.status(200).json({
-      success: true,
-      data: {
-        orderId,
-        buyer: wallet.address,
-        transactionHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber
-      }
-    });
-    
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * 取消订单
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Function} next - Express下一个中间件
- */
-async function cancelOrder(req, res, next) {
-  try {
-    const { orderId, privateKey } = req.body;
-    
-    // 验证参数
-    const validation = validateParams(
-      { orderId, privateKey },
-      [
-        ['orderId', isNonEmptyString],
-        ['privateKey', isPrivateKey]
-      ]
-    );
-    
-    if (!validation.isValid) {
-      const error = new Error(Object.values(validation.errors).join(', '));
-      error.name = 'ValidationError';
-      error.statusCode = 400;
-      throw error;
-    }
-    
-    // 创建钱包
-    const wallet = new ethers.Wallet(privateKey);
-    
-    // 记录日志（敏感信息已隐藏）
-    Logger.info('取消订单', {
-      orderId,
-      from: wallet.address
-    });
-    
-    // 调用合约取消订单
-    const receipt = await sendContractTransaction(
-      'TradingManager',
-      'cancelOrder',
-      [orderId],
-      { wallet }
-    );
-    
-    // 返回结果
-    return res.status(200).json({
-      success: true,
-      data: {
-        orderId,
-        transactionHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber
-      }
-    });
-    
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * 获取所有活跃订单
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Function} next - Express下一个中间件
- */
-async function getActiveOrders(req, res, next) {
-  try {
-    // 记录日志
-    Logger.info('获取所有活跃订单');
-    
-    // 调用合约获取活跃订单
-    const orders = await callContractMethod(
-      'TradingManager',
-      'getActiveOrders',
-      []
-    );
-    
-    // 返回结果
-    return res.status(200).json({
-      success: true,
-      data: {
-        orders
-      }
-    });
-    
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * 获取用户创建的订单
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Function} next - Express下一个中间件
- */
-async function getUserOrders(req, res, next) {
-  try {
-    const { address } = req.params;
-    
-    // 验证参数
-    const validation = validateParams(
-      { address },
-      [
         ['address', isEthAddress]
       ]
     );
@@ -317,21 +35,314 @@ async function getUserOrders(req, res, next) {
     }
     
     // 记录日志
-    Logger.info('获取用户订单', { address });
+    Logger.info('获取代币余额', {
+      propertyId,
+      address
+    });
     
-    // 调用合约获取用户订单
-    const orders = await callContractMethod(
-      'TradingManager',
-      'getUserOrders',
-      [address]
+    // 调用合约获取余额
+    const balance = await callContractMethod(
+      'PropertyToken',
+      'balanceOf',
+      [address, propertyId]
     );
     
     // 返回结果
     return res.status(200).json({
       success: true,
       data: {
+        propertyId,
         address,
-        orders
+        balance: balance.toString()
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 获取代币总供应量
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function getTotalSupply(req, res, next) {
+  try {
+    const { propertyId } = req.params;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId },
+      [
+        ['propertyId', isNonEmptyString]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 记录日志
+    Logger.info('获取代币总供应量', {
+      propertyId
+    });
+    
+    // 调用合约获取总供应量
+    const totalSupply = await callContractMethod(
+      'PropertyToken',
+      'totalSupply',
+      [propertyId]
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        totalSupply: totalSupply.toString()
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 转移代币
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function transferToken(req, res, next) {
+  try {
+    const { propertyId, to, amount, privateKey } = req.body;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId, to, amount, privateKey },
+      [
+        ['propertyId', isNonEmptyString],
+        ['to', isEthAddress],
+        ['amount', isPositiveInteger],
+        ['privateKey', isPrivateKey]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('转移代币', {
+      propertyId,
+      to,
+      amount,
+      from: wallet.address
+    });
+    
+    // 调用合约转移代币
+    const receipt = await sendContractTransaction(
+      'PropertyToken',
+      'transfer',
+      [to, propertyId, amount],
+      { wallet }
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        from: wallet.address,
+        to,
+        amount,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 授权代币
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function approveToken(req, res, next) {
+  try {
+    const { propertyId, spender, amount, privateKey } = req.body;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId, spender, amount, privateKey },
+      [
+        ['propertyId', isNonEmptyString],
+        ['spender', isEthAddress],
+        ['amount', isPositiveInteger],
+        ['privateKey', isPrivateKey]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 创建钱包
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // 记录日志（敏感信息已隐藏）
+    Logger.info('授权代币', {
+      propertyId,
+      spender,
+      amount,
+      owner: wallet.address
+    });
+    
+    // 调用合约授权代币
+    const receipt = await sendContractTransaction(
+      'PropertyToken',
+      'approve',
+      [spender, propertyId, amount],
+      { wallet }
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        owner: wallet.address,
+        spender,
+        amount,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 获取授权额度
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function getAllowance(req, res, next) {
+  try {
+    const { propertyId, owner, spender } = req.params;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId, owner, spender },
+      [
+        ['propertyId', isNonEmptyString],
+        ['owner', isEthAddress],
+        ['spender', isEthAddress]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 记录日志
+    Logger.info('获取授权额度', {
+      propertyId,
+      owner,
+      spender
+    });
+    
+    // 调用合约获取授权额度
+    const allowance = await callContractMethod(
+      'PropertyToken',
+      'allowance',
+      [owner, spender, propertyId]
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        owner,
+        spender,
+        allowance: allowance.toString()
+      }
+    });
+    
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 获取代币元数据
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ * @param {Function} next - Express下一个中间件
+ */
+async function getTokenMetadata(req, res, next) {
+  try {
+    const { propertyId } = req.params;
+    
+    // 验证参数
+    const validation = validateParams(
+      { propertyId },
+      [
+        ['propertyId', isNonEmptyString]
+      ]
+    );
+    
+    if (!validation.isValid) {
+      const error = new Error(Object.values(validation.errors).join(', '));
+      error.name = 'ValidationError';
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    // 记录日志
+    Logger.info('获取代币元数据', {
+      propertyId
+    });
+    
+    // 调用合约获取代币元数据
+    const metadata = await callContractMethod(
+      'PropertyToken',
+      'getTokenMetadata',
+      [propertyId]
+    );
+    
+    // 返回结果
+    return res.status(200).json({
+      success: true,
+      data: {
+        propertyId,
+        metadata
       }
     });
     
@@ -341,10 +352,10 @@ async function getUserOrders(req, res, next) {
 }
 
 module.exports = {
-  createOrder,
-  getOrderInfo,
-  executeOrder,
-  cancelOrder,
-  getActiveOrders,
-  getUserOrders
+  getTokenBalance,
+  getTotalSupply,
+  transferToken,
+  approveToken,
+  getAllowance,
+  getTokenMetadata
 }; 

@@ -1,28 +1,27 @@
-import { Router } from 'express';
-import { 
-  createOrder, 
-  executeOrder, 
-  cancelOrder, 
-  getAllOrders,
-  getOrderById
-} from '../controllers/tradingManagerController.js';
-
-const router = Router();
+/**
+ * 交易管理路由
+ * 处理与TradingManager合约相关的API请求
+ */
+const express = require('express');
+const router = express.Router();
+const tradingManagerController = require('../controllers/tradingManagerController');
+const { apiKey } = require('../middlewares');
 
 /**
  * @swagger
- * /api/trading-manager/create:
+ * tags:
+ *   name: Trading Manager
+ *   description: 房产交易管理相关API
+ */
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/order:
  *   post:
  *     summary: 创建交易订单
- *     description: 创建一个新的房产代币交易订单
- *     tags: [交易管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -31,314 +30,200 @@ const router = Router();
  *             type: object
  *             required:
  *               - propertyId
- *               - amount
- *               - price
+ *               - tokenAmount
+ *               - pricePerToken
+ *               - expireTime
+ *               - privateKey
  *             properties:
  *               propertyId:
  *                 type: string
- *                 description: 房产唯一标识符
- *                 example: "P12345"
- *               amount:
+ *                 description: 资产ID
+ *               tokenAmount:
  *                 type: string
- *                 description: 出售代币数量
- *                 example: "10"
- *               price:
+ *                 description: 交易代币数量
+ *               pricePerToken:
  *                 type: string
- *                 description: 总价格（以ETH为单位）
- *                 example: "5"
- *               traderRole:
+ *                 description: 单个代币价格
+ *               expireTime:
  *                 type: string
- *                 description: 交易者角色名称
- *                 default: "trader"
- *                 example: "trader"
+ *                 format: date-time
+ *                 description: 订单过期时间
+ *               privateKey:
+ *                 type: string
+ *                 description: 卖家私钥
  *     responses:
- *       200:
- *         description: 成功创建订单
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     orderId:
- *                       type: string
- *                       example: "1"
- *                     propertyId:
- *                       type: string
- *                       example: "P12345"
- *                     tokenAddress:
- *                       type: string
- *                       example: "0xabcd..."
- *                     amount:
- *                       type: string
- *                       example: "10"
- *                     price:
- *                       type: string
- *                       example: "5"
- *                     transaction:
- *                       type: string
- *                       example: "0x1234..."
- *                     message:
- *                       type: string
- *                       example: "已成功创建订单，ID: 1"
+ *       201:
+ *         description: 成功，订单已创建
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
- *       404:
- *         description: 房产不存在
  *       500:
  *         description: 服务器错误
  */
-router.post('/create', createOrder);
+router.post('/order', tradingManagerController.createOrder);
 
 /**
  * @swagger
- * /api/trading-manager/execute:
- *   post:
- *     summary: 执行交易订单
- *     description: 购买并执行一个现有的交易订单
- *     tags: [交易管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - orderId
- *             properties:
- *               orderId:
- *                 type: string
- *                 description: 订单ID
- *                 example: "1"
- *               traderRole:
- *                 type: string
- *                 description: 交易者角色名称
- *                 default: "trader"
- *                 example: "trader"
- *     responses:
- *       200:
- *         description: 成功执行订单
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     orderId:
- *                       type: string
- *                       example: "1"
- *                     seller:
- *                       type: string
- *                       example: "0x1234..."
- *                     buyer:
- *                       type: string
- *                       example: "0x5678..."
- *                     propertyId:
- *                       type: string
- *                       example: "P12345"
- *                     amount:
- *                       type: string
- *                       example: "10"
- *                     price:
- *                       type: string
- *                       example: "5"
- *                     transaction:
- *                       type: string
- *                       example: "0xabcd..."
- *                     message:
- *                       type: string
- *                       example: "已成功执行订单 1"
- *       400:
- *         description: 参数错误或订单状态无效
- *       401:
- *         description: 未授权
- *       404:
- *         description: 订单不存在
- *       500:
- *         description: 服务器错误
- */
-router.post('/execute', executeOrder);
-
-/**
- * @swagger
- * /api/trading-manager/cancel:
- *   post:
- *     summary: 取消交易订单
- *     description: 卖家取消一个现有的交易订单
- *     tags: [交易管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - orderId
- *             properties:
- *               orderId:
- *                 type: string
- *                 description: 订单ID
- *                 example: "1"
- *               traderRole:
- *                 type: string
- *                 description: 交易者角色名称
- *                 default: "trader"
- *                 example: "trader"
- *     responses:
- *       200:
- *         description: 成功取消订单
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     orderId:
- *                       type: string
- *                       example: "1"
- *                     propertyId:
- *                       type: string
- *                       example: "P12345"
- *                     transaction:
- *                       type: string
- *                       example: "0xabcd..."
- *                     message:
- *                       type: string
- *                       example: "已成功取消订单 1"
- *       400:
- *         description: 参数错误或订单状态无效
- *       401:
- *         description: 未授权
- *       403:
- *         description: 权限不足，非卖家无法取消订单
- *       404:
- *         description: 订单不存在
- *       500:
- *         description: 服务器错误
- */
-router.post('/cancel', cancelOrder);
-
-/**
- * @swagger
- * /api/trading-manager/all:
+ * /api/v1/trading-manager/order/{orderId}:
  *   get:
- *     summary: 获取所有交易订单
- *     description: 获取系统中所有交易订单的列表
- *     tags: [交易管理]
+ *     summary: 获取订单信息
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
- *     responses:
- *       200:
- *         description: 成功返回订单列表
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     totalCount:
- *                       type: number
- *                       example: 2
- *                     orders:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           orderId:
- *                             type: number
- *                             example: 1
- *                           seller:
- *                             type: string
- *                             example: "0x1234..."
- *                           propertyId:
- *                             type: string
- *                             example: "P12345"
- *                           amount:
- *                             type: string
- *                             example: "10"
- *                           price:
- *                             type: string
- *                             example: "5"
- *                           executed:
- *                             type: boolean
- *                             example: false
- *                           cancelled:
- *                             type: boolean
- *                             example: false
- *                           timestamp:
- *                             type: number
- *                             example: 1620000000
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
- */
-router.get('/all', getAllOrders);
-
-/**
- * @swagger
- * /api/trading-manager/{orderId}:
- *   get:
- *     summary: 获取特定订单信息
- *     description: 获取指定ID的交易订单详细信息
- *     tags: [交易管理]
- *     parameters:
- *       - in: path
- *         name: orderId
+ *       - name: orderId
+ *         in: path
  *         required: true
  *         schema:
  *           type: string
  *         description: 订单ID
- *       - in: query
- *         name: api_key
+ *     responses:
+ *       200:
+ *         description: 成功，返回订单信息
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/order/:orderId', tradingManagerController.getOrderInfo);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/execute:
+ *   post:
+ *     summary: 执行订单交易
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderId
+ *               - privateKey
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *                 description: 订单ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 买家私钥
+ *     responses:
+ *       200:
+ *         description: 成功，订单已执行
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/execute', tradingManagerController.executeOrder);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/cancel:
+ *   post:
+ *     summary: 取消订单
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderId
+ *               - privateKey
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *                 description: 订单ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 卖家私钥
+ *     responses:
+ *       200:
+ *         description: 成功，订单已取消
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/cancel', tradingManagerController.cancelOrder);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/active-orders:
+ *   get:
+ *     summary: 获取所有活跃订单
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回活跃订单列表
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/active-orders', tradingManagerController.getActiveOrders);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/user-orders/{address}:
+ *   get:
+ *     summary: 获取用户订单
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: address
+ *         in: path
  *         required: true
  *         schema:
  *           type: string
- *         description: API密钥
+ *         description: 用户地址
  *     responses:
  *       200:
- *         description: 成功返回订单信息
+ *         description: 成功，返回用户订单列表
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/user-orders/:address', tradingManagerController.getUserOrders);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/available-orders:
+ *   get:
+ *     summary: 获取可用交易订单列表
+ *     tags: [Trading Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: propertyId
+ *         schema:
+ *           type: string
+ *         description: 房产ID (可选，如果提供则按房产ID筛选)
+ *     responses:
+ *       200:
+ *         description: 返回可用交易订单列表
  *         content:
  *           application/json:
  *             schema:
@@ -350,39 +235,294 @@ router.get('/all', getAllOrders);
  *                 data:
  *                   type: object
  *                   properties:
- *                     orderId:
- *                       type: number
- *                       example: 1
- *                     seller:
- *                       type: string
- *                       example: "0x1234..."
  *                     propertyId:
  *                       type: string
- *                       example: "P12345"
- *                     amount:
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ */
+router.get('/available-orders', apiKey, tradingManagerController.getAvailableTradeOrders);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/user-history/{userAddress}:
+ *   get:
+ *     summary: 获取用户交易历史
+ *     tags: [Trading Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 用户地址
+ *     responses:
+ *       200:
+ *         description: 返回用户交易历史
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userAddress:
  *                       type: string
- *                       example: "10"
- *                     price:
- *                       type: string
- *                       example: "5"
- *                     executed:
- *                       type: boolean
- *                       example: false
- *                     cancelled:
- *                       type: boolean
- *                       example: false
- *                     timestamp:
- *                       type: number
- *                       example: 1620000000
- *       400:
- *         description: 参数错误
+ *                     history:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ */
+router.get('/user-history/:userAddress', apiKey, tradingManagerController.getUserTradeHistory);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/offers:
+ *   get:
+ *     summary: 获取所有交易报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回所有交易报价
  *       401:
  *         description: 未授权
- *       404:
- *         description: 订单不存在
  *       500:
  *         description: 服务器错误
  */
-router.get('/:orderId', getOrderById);
+router.get('/offers', tradingManagerController.getAllOffers);
 
-export default router; 
+/**
+ * @swagger
+ * /api/v1/trading-manager/offers/{offerId}:
+ *   get:
+ *     summary: 获取特定交易报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: offerId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 报价ID
+ *     responses:
+ *       200:
+ *         description: 成功，返回报价详情
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 报价不存在
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/offers/:offerId', tradingManagerController.getOfferById);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/offers/property/{propertyId}:
+ *   get:
+ *     summary: 获取特定房产的所有报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: propertyId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 房产ID
+ *     responses:
+ *       200:
+ *         description: 成功，返回房产的所有报价
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/offers/property/:propertyId', tradingManagerController.getOffersByProperty);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/offers/user/{userAddress}:
+ *   get:
+ *     summary: 获取用户的所有报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: userAddress
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 用户地址
+ *     responses:
+ *       200:
+ *         description: 成功，返回用户的所有报价
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/offers/user/:userAddress', tradingManagerController.getOffersByUser);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/create-offer:
+ *   post:
+ *     summary: 创建新的交易报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - tokenAmount
+ *               - pricePerToken
+ *               - expiryDate
+ *               - privateKey
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *                 description: 房产ID
+ *               tokenAmount:
+ *                 type: integer
+ *                 description: 代币数量
+ *               pricePerToken:
+ *                 type: string
+ *                 description: 每个代币的价格
+ *               expiryDate:
+ *                 type: string
+ *                 description: 报价过期日期
+ *               privateKey:
+ *                 type: string
+ *                 description: 卖家的私钥
+ *     responses:
+ *       200:
+ *         description: 成功，报价已创建
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/create-offer', tradingManagerController.createOffer);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/accept-offer:
+ *   post:
+ *     summary: 接受交易报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - offerId
+ *               - privateKey
+ *             properties:
+ *               offerId:
+ *                 type: string
+ *                 description: 报价ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 买家的私钥
+ *     responses:
+ *       200:
+ *         description: 成功，报价已接受
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 报价不存在或已过期
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/accept-offer', tradingManagerController.acceptOffer);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/cancel-offer:
+ *   post:
+ *     summary: 取消交易报价
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - offerId
+ *               - privateKey
+ *             properties:
+ *               offerId:
+ *                 type: string
+ *                 description: 报价ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 卖家的私钥
+ *     responses:
+ *       200:
+ *         description: 成功，报价已取消
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 报价不存在
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/cancel-offer', tradingManagerController.cancelOffer);
+
+/**
+ * @swagger
+ * /api/v1/trading-manager/transaction-history:
+ *   get:
+ *     summary: 获取交易历史
+ *     tags: [TradingManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回交易历史
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/transaction-history', tradingManagerController.getTransactionHistory);
+
+module.exports = router; 

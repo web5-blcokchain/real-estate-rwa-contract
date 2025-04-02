@@ -1,27 +1,93 @@
-import { Router } from 'express';
-import { 
-  distributeRewards, 
-  claimRewards, 
-  getClaimableRewards, 
-  getRewardHistory 
-} from '../controllers/rewardManagerController.js';
-
-const router = Router();
+/**
+ * RewardManager路由
+ * 定义与奖励管理相关的API端点
+ */
+const express = require('express');
+const router = express.Router();
+const controller = require('../controllers/rewardManagerController');
 
 /**
  * @swagger
- * /api/reward-manager/distribute:
- *   post:
- *     summary: 分发奖励
- *     description: 向指定地址分发房产的奖励
- *     tags: [奖励管理]
+ * /api/v1/reward-manager/rewards:
+ *   get:
+ *     summary: 获取所有奖励活动
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回所有奖励活动
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/rewards', controller.getAllRewards);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/rewards/{rewardId}:
+ *   get:
+ *     summary: 获取特定奖励活动
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     parameters:
- *       - in: query
- *         name: api_key
+ *       - name: rewardId
+ *         in: path
  *         required: true
  *         schema:
  *           type: string
- *         description: API密钥
+ *         description: 奖励活动ID
+ *     responses:
+ *       200:
+ *         description: 成功，返回奖励活动详情
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 奖励活动不存在
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/rewards/:rewardId', controller.getRewardById);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/user/{userAddress}/rewards:
+ *   get:
+ *     summary: 获取用户的奖励记录
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: userAddress
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 用户地址
+ *     responses:
+ *       200:
+ *         description: 成功，返回用户的奖励记录
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/user/:userAddress/rewards', controller.getUserRewards);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/create-reward:
+ *   post:
+ *     summary: 创建新的奖励活动
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -29,55 +95,51 @@ const router = Router();
  *           schema:
  *             type: object
  *             required:
- *               - propertyId
- *               - amount
- *               - toAddresses
+ *               - rewardName
+ *               - rewardAmount
+ *               - startDate
+ *               - endDate
+ *               - conditions
+ *               - privateKey
  *             properties:
- *               propertyId:
+ *               rewardName:
  *                 type: string
- *                 description: 房产唯一标识符
- *                 example: "P12345"
- *               amount:
+ *                 description: 奖励活动名称
+ *               rewardAmount:
  *                 type: string
- *                 description: 奖励总金额
- *                 example: "100"
- *               toAddresses:
- *                 type: array
- *                 description: 接收奖励的地址列表
- *                 items:
- *                   type: string
- *                 example: ["0x1234...", "0x5678..."]
- *               managerRole:
+ *                 description: 奖励金额
+ *               startDate:
  *                 type: string
- *                 description: 管理员角色名称
- *                 default: "manager"
- *                 example: "manager"
+ *                 description: 开始日期
+ *               endDate:
+ *                 type: string
+ *                 description: 结束日期
+ *               conditions:
+ *                 type: object
+ *                 description: 奖励条件
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员的私钥
  *     responses:
  *       200:
- *         description: 成功分发奖励
+ *         description: 成功，奖励活动已创建
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
  *       500:
  *         description: 服务器错误
  */
-router.post('/distribute', distributeRewards);
+router.post('/create-reward', controller.createReward);
 
 /**
  * @swagger
- * /api/reward-manager/claim:
+ * /api/v1/reward-manager/claim-reward:
  *   post:
  *     summary: 领取奖励
- *     description: 领取指定房产的奖励
- *     tags: [奖励管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -85,102 +147,227 @@ router.post('/distribute', distributeRewards);
  *           schema:
  *             type: object
  *             required:
- *               - propertyId
+ *               - rewardId
+ *               - privateKey
  *             properties:
- *               propertyId:
+ *               rewardId:
  *                 type: string
- *                 description: 房产唯一标识符
- *                 example: "P12345"
- *               traderRole:
+ *                 description: 奖励活动ID
+ *               privateKey:
  *                 type: string
- *                 description: 交易者角色名称
- *                 default: "trader"
- *                 example: "trader"
+ *                 description: 用户的私钥
  *     responses:
  *       200:
- *         description: 成功领取奖励
+ *         description: 成功，奖励已领取
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
+ *       403:
+ *         description: 不满足领取条件
+ *       404:
+ *         description: 奖励活动不存在
  *       500:
  *         description: 服务器错误
  */
-router.post('/claim', claimRewards);
+router.post('/claim-reward', controller.claimReward);
 
 /**
  * @swagger
- * /api/reward-manager/claimable/{propertyId}/{address}:
- *   get:
- *     summary: 获取可领取的奖励
- *     description: 获取指定地址在特定房产上可领取的奖励
- *     tags: [奖励管理]
- *     parameters:
- *       - in: path
- *         name: propertyId
- *         required: true
- *         schema:
- *           type: string
- *         description: 房产唯一标识符
- *       - in: path
- *         name: address
- *         required: true
- *         schema:
- *           type: string
- *         description: 以太坊地址
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ * /api/v1/reward-manager/cancel-reward:
+ *   post:
+ *     summary: 取消奖励活动
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rewardId
+ *               - privateKey
+ *             properties:
+ *               rewardId:
+ *                 type: string
+ *                 description: 奖励活动ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员的私钥
  *     responses:
  *       200:
- *         description: 成功返回可领取奖励
+ *         description: 成功，奖励活动已取消
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
+ *       404:
+ *         description: 奖励活动不存在
  *       500:
  *         description: 服务器错误
  */
-router.get('/claimable/:propertyId/:address', getClaimableRewards);
+router.post('/cancel-reward', controller.cancelReward);
 
 /**
  * @swagger
- * /api/reward-manager/history/{propertyId}:
- *   get:
- *     summary: 获取奖励历史
- *     description: 获取指定房产的奖励分发历史
- *     tags: [奖励管理]
- *     parameters:
- *       - in: path
- *         name: propertyId
- *         required: true
- *         schema:
- *           type: string
- *         description: 房产唯一标识符
- *       - in: query
- *         name: address
- *         schema:
- *           type: string
- *         description: 可选的以太坊地址，用于筛选特定地址的奖励历史
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ * /api/v1/reward-manager/rule:
+ *   post:
+ *     summary: 创建奖励规则
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ruleName
+ *               - rewardType
+ *               - rewardAmount
+ *               - rewardCondition
+ *               - privateKey
+ *             properties:
+ *               ruleName:
+ *                 type: string
+ *                 description: 奖励规则名称
+ *               rewardType:
+ *                 type: string
+ *                 description: 奖励类型
+ *               rewardAmount:
+ *                 type: string
+ *                 description: 奖励数量
+ *               rewardCondition:
+ *                 type: string
+ *                 description: 奖励条件
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员私钥
  *     responses:
- *       200:
- *         description: 成功返回奖励历史
+ *       201:
+ *         description: 成功，奖励规则已创建
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
  *       500:
  *         description: 服务器错误
  */
-router.get('/history/:propertyId', getRewardHistory);
+router.post('/rule', controller.createRewardRule);
 
-export default router; 
+/**
+ * @swagger
+ * /api/v1/reward-manager/rule/{ruleId}:
+ *   get:
+ *     summary: 获取奖励规则信息
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: ruleId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 奖励规则ID
+ *     responses:
+ *       200:
+ *         description: 成功，返回奖励规则信息
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/rule/:ruleId', controller.getRewardRuleInfo);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/distribute:
+ *   post:
+ *     summary: 发放奖励
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - recipient
+ *               - ruleId
+ *               - privateKey
+ *             properties:
+ *               recipient:
+ *                 type: string
+ *                 description: 接收者地址
+ *               ruleId:
+ *                 type: string
+ *                 description: 奖励规则ID
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员私钥
+ *     responses:
+ *       200:
+ *         description: 成功，奖励已发放
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/distribute', controller.distributeReward);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/history/{address}:
+ *   get:
+ *     summary: 获取用户奖励历史
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: address
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 用户地址
+ *     responses:
+ *       200:
+ *         description: 成功，返回用户奖励历史
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/history/:address', controller.getUserRewardHistory);
+
+/**
+ * @swagger
+ * /api/v1/reward-manager/rules:
+ *   get:
+ *     summary: 获取所有奖励规则
+ *     tags: [RewardManager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回所有奖励规则
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/rules', controller.getAllRewardRules);
+
+module.exports = router; 

@@ -1,80 +1,27 @@
-import { Router } from 'express';
-import { getRoles, grantRole, revokeRole, getRoleAddresses } from '../controllers/roleManagerController.js';
-
-const router = Router();
-
 /**
- * @swagger
- * /api/role-manager/roles/{address}:
- *   get:
- *     summary: 获取地址的角色信息
- *     description: 查询指定地址拥有的角色权限
- *     tags: [角色管理]
- *     parameters:
- *       - in: path
- *         name: address
- *         required: true
- *         schema:
- *           type: string
- *         description: 以太坊地址
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
- *     responses:
- *       200:
- *         description: 成功返回角色信息
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     address:
- *                       type: string
- *                       example: "0x1234..."
- *                     roles:
- *                       type: object
- *                       properties:
- *                         isAdmin:
- *                           type: boolean
- *                           example: false
- *                         isManager:
- *                           type: boolean
- *                           example: true
- *                         isTrader:
- *                           type: boolean
- *                           example: false
- *       400:
- *         description: 无效的请求参数
- *       401:
- *         description: 未授权
- *       500:
- *         description: 服务器错误
+ * 角色管理路由
+ * 处理与RoleManager合约相关的API请求
  */
-router.get('/roles/:address', getRoles);
+const express = require('express');
+const router = express.Router();
+const roleManagerController = require('../controllers/roleManagerController');
+const { apiKey } = require('../middlewares');
 
 /**
  * @swagger
- * /api/role-manager/grant:
+ * tags:
+ *   name: Role Manager
+ *   description: 角色管理相关API
+ */
+
+/**
+ * @swagger
+ * /api/v1/role-manager/grant:
  *   post:
  *     summary: 授予角色
- *     description: 给指定地址授予特定角色
- *     tags: [角色管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -82,65 +29,39 @@ router.get('/roles/:address', getRoles);
  *           schema:
  *             type: object
  *             required:
- *               - address
  *               - role
+ *               - account
+ *               - privateKey
  *             properties:
- *               address:
- *                 type: string
- *                 description: 接收角色的地址
- *                 example: "0x1234..."
  *               role:
  *                 type: string
- *                 enum: [admin, manager, trader]
- *                 description: 角色类型
- *                 example: "manager"
- *               adminRole:
+ *                 description: 角色ID（字节字符串）
+ *               account:
  *                 type: string
- *                 description: 管理员角色名称，默认为admin
- *                 example: "admin"
+ *                 description: 接收角色的账户地址
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员私钥
  *     responses:
  *       200:
- *         description: 成功授予角色
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     transaction:
- *                       type: string
- *                       example: "0xabcd..."
- *                     message:
- *                       type: string
- *                       example: "已成功授予 0x1234... manager 角色"
+ *         description: 成功，角色已授予
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
  *       500:
  *         description: 服务器错误
  */
-router.post('/grant', grantRole);
+router.post('/grant', apiKey, roleManagerController.grantRole);
 
 /**
  * @swagger
- * /api/role-manager/revoke:
+ * /api/v1/role-manager/revoke:
  *   post:
  *     summary: 撤销角色
- *     description: 撤销指定地址的特定角色
- *     tags: [角色管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -148,99 +69,173 @@ router.post('/grant', grantRole);
  *           schema:
  *             type: object
  *             required:
- *               - address
  *               - role
+ *               - account
+ *               - privateKey
  *             properties:
- *               address:
- *                 type: string
- *                 description: 被撤销角色的地址
- *                 example: "0x1234..."
  *               role:
  *                 type: string
- *                 enum: [admin, manager, trader]
- *                 description: 角色类型
- *                 example: "manager"
- *               adminRole:
+ *                 description: 角色ID（字节字符串）
+ *               account:
  *                 type: string
- *                 description: 管理员角色名称，默认为admin
- *                 example: "admin"
+ *                 description: 撤销角色的账户地址
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员私钥
  *     responses:
  *       200:
- *         description: 成功撤销角色
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     transaction:
- *                       type: string
- *                       example: "0xabcd..."
- *                     message:
- *                       type: string
- *                       example: "已成功撤销 0x1234... 的 manager 角色"
+ *         description: 成功，角色已撤销
  *       400:
- *         description: 参数错误
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
  *       500:
  *         description: 服务器错误
  */
-router.post('/revoke', revokeRole);
+router.post('/revoke', apiKey, roleManagerController.revokeRole);
 
 /**
  * @swagger
- * /api/role-manager/addresses:
- *   get:
- *     summary: 获取角色地址列表
- *     description: 获取所有角色的地址列表
- *     tags: [角色管理]
- *     parameters:
- *       - in: query
- *         name: api_key
- *         required: true
- *         schema:
- *           type: string
- *         description: API密钥
+ * /api/v1/role-manager/has-role:
+ *   post:
+ *     summary: 检查账户是否拥有角色
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *               - account
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 description: 角色ID（字节字符串）
+ *               account:
+ *                 type: string
+ *                 description: 账户地址
  *     responses:
  *       200:
- *         description: 成功返回角色地址列表
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     admins:
- *                       type: array
- *                       items:
- *                         type: string
- *                       example: ["0x1234...", "0x5678..."]
- *                     managers:
- *                       type: array
- *                       items:
- *                         type: string
- *                       example: ["0x9abc...", "0xdef0..."]
- *                     traders:
- *                       type: array
- *                       items:
- *                         type: string
- *                       example: ["0x1122...", "0x3344..."]
+ *         description: 成功，返回角色检查结果
+ *       400:
+ *         description: 参数验证失败
  *       401:
  *         description: 未授权
  *       500:
  *         description: 服务器错误
  */
-router.get('/addresses', getRoleAddresses);
+router.post('/has-role', apiKey, roleManagerController.hasRole);
 
-export default router; 
+/**
+ * @swagger
+ * /api/v1/role-manager/role-members/{role}:
+ *   get:
+ *     summary: 获取角色成员列表
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: role
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 角色ID（字节字符串）
+ *     responses:
+ *       200:
+ *         description: 成功，返回角色成员列表
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/role-members/:role', apiKey, roleManagerController.getRoleMembers);
+
+/**
+ * @swagger
+ * /api/v1/role-manager/account-roles/{account}:
+ *   get:
+ *     summary: 获取账户的所有角色
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: account
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 账户地址
+ *     responses:
+ *       200:
+ *         description: 成功，返回账户角色列表
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/account-roles/:account', apiKey, roleManagerController.getAccountRoles);
+
+/**
+ * @swagger
+ * /api/v1/role-manager/all-roles:
+ *   get:
+ *     summary: 获取所有可用角色
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功，返回所有角色列表
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.get('/all-roles', apiKey, roleManagerController.getAllRoles);
+
+/**
+ * @swagger
+ * /api/v1/role-manager/create-role:
+ *   post:
+ *     summary: 创建新角色
+ *     tags: [Role Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - roleName
+ *               - privateKey
+ *             properties:
+ *               roleName:
+ *                 type: string
+ *                 description: 角色名称
+ *               privateKey:
+ *                 type: string
+ *                 description: 管理员私钥
+ *     responses:
+ *       201:
+ *         description: 成功，新角色已创建
+ *       400:
+ *         description: 参数验证失败
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/create-role', apiKey, roleManagerController.createRole);
+
+module.exports = router; 
