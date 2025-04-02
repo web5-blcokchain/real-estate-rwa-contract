@@ -245,9 +245,105 @@ const getAllProperties = async (req, res) => {
   }
 };
 
+/**
+ * 注册新房产并创建对应的代币
+ * @param {Object} req - Express请求对象
+ * @param {Object} res - Express响应对象
+ */
+const registerPropertyAndToken = async (req, res) => {
+  try {
+    const {
+      propertyId,
+      country,
+      metadataURI,
+      tokenName,
+      tokenSymbol,
+      initialSupply,
+      managerRole = 'admin' // 默认为admin角色
+    } = req.body;
+
+    // 基本参数验证
+    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply) {
+      return res.status(400).json({
+        success: false,
+        error: '参数错误',
+        message: '所有字段都是必填的'
+      });
+    }
+
+    logger.info(`注册新房产和代币: ${propertyId}, ${country}, ${tokenName}, ${tokenSymbol}, 初始供应量: ${initialSupply}`);
+    
+    // 获取当前网络信息
+    const networkInfo = {
+      name: networkUtils.getNetworkName(),
+      chainId: networkUtils.getChainId(),
+      isTestnet: networkUtils.isTestnet(),
+      isMainnet: networkUtils.isMainnet()
+    };
+
+    // 使用 contractHelpers 获取合约实例
+    const facade = await contractHelpers.getContractWithOptions({
+      contractName: 'Facade',
+      role: managerRole
+    });
+    
+    // 获取 PropertyToken 实现合约地址
+    const propertyTokenImplementation = await facade.propertyTokenContract();
+    
+    // 调用合约方法
+    const tx = await facade.registerPropertyAndCreateToken(
+      propertyId,
+      country,
+      metadataURI,
+      tokenName,
+      tokenSymbol,
+      ethers.parseEther(initialSupply.toString()),
+      propertyTokenImplementation
+    );
+    
+    // 等待交易确认
+    const receipt = await tx.wait();
+    
+    // 从事件中获取返回数据
+    const propertyRegisteredEvent = receipt.events.find(
+      event => event.eventName === 'PropertyRegistered'
+    );
+    
+    if (!propertyRegisteredEvent) {
+      throw new Error('Property registration event not found');
+    }
+
+    const { propertyIdHash, tokenAddress } = propertyRegisteredEvent.args;
+    
+    // 返回成功响应
+    return res.status(201).json({
+      success: true,
+      message: '房产和代币注册成功',
+      data: {
+        propertyId,
+        propertyIdHash,
+        tokenAddress,
+        tokenName,
+        tokenSymbol,
+        initialSupply,
+        transactionHash: receipt.hash,
+        network: networkInfo
+      }
+    });
+  } catch (error) {
+    logger.error(`注册房产和代币失败: ${error}`);
+    return res.status(500).json({
+      success: false,
+      error: '注册房产和代币失败',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   registerProperty,
   getPropertyInfo,
   updatePropertyInfo,
-  getAllProperties
+  getAllProperties,
+  registerPropertyAndToken
 }; 

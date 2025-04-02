@@ -6,7 +6,8 @@ const {
   registerProperty, 
   getPropertyInfo, 
   updatePropertyInfo, 
-  getAllProperties 
+  getAllProperties,
+  registerPropertyAndToken 
 } = require('../controllers/propertyManagerController');
 
 const router = Router();
@@ -102,6 +103,122 @@ const router = Router();
  *         description: 服务器错误
  */
 router.post('/register', registerProperty);
+
+/**
+ * @swagger
+ * /api/property-manager/register-property-token:
+ *   post:
+ *     summary: 注册新房产并创建代币
+ *     description: 注册一个新的房产并创建对应的代币
+ *     tags: [房产管理]
+ *     parameters:
+ *       - in: query
+ *         name: api_key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: API密钥
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - country
+ *               - metadataURI
+ *               - tokenName
+ *               - tokenSymbol
+ *               - initialSupply
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *                 description: 房产唯一标识符
+ *                 example: "P12345"
+ *               country:
+ *                 type: string
+ *                 description: 房产所在国家
+ *                 example: "Japan"
+ *               metadataURI:
+ *                 type: string
+ *                 description: 房产元数据URI
+ *                 example: "https://api.example.com/metadata/P12345"
+ *               tokenName:
+ *                 type: string
+ *                 description: 代币名称
+ *                 example: "Property Token P12345"
+ *               tokenSymbol:
+ *                 type: string
+ *                 description: 代币符号
+ *                 example: "PROP12345"
+ *               initialSupply:
+ *                 type: string
+ *                 description: 代币初始供应量
+ *                 example: "1000"
+ *               managerRole:
+ *                 type: string
+ *                 description: 管理员角色名称
+ *                 default: "admin"
+ *                 example: "admin"
+ *     responses:
+ *       201:
+ *         description: 成功注册房产和代币
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     propertyId:
+ *                       type: string
+ *                       example: "P12345"
+ *                     propertyIdHash:
+ *                       type: string
+ *                       example: "0x1234..."
+ *                     tokenAddress:
+ *                       type: string
+ *                       example: "0xabcd..."
+ *                     tokenName:
+ *                       type: string
+ *                       example: "Property Token P12345"
+ *                     tokenSymbol:
+ *                       type: string
+ *                       example: "PROP12345"
+ *                     initialSupply:
+ *                       type: string
+ *                       example: "1000"
+ *                     transactionHash:
+ *                       type: string
+ *                       example: "0xefgh..."
+ *                     network:
+ *                       type: object
+ *                       properties:
+ *                         name:
+ *                           type: string
+ *                           example: "localhost"
+ *                         chainId:
+ *                           type: number
+ *                           example: 31337
+ *                         isTestnet:
+ *                           type: boolean
+ *                           example: false
+ *                         isMainnet:
+ *                           type: boolean
+ *                           example: false
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
+router.post('/register-property-token', registerPropertyAndToken);
 
 /**
  * @swagger
