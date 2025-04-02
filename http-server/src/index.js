@@ -4,12 +4,11 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const { Logger } = require('../../shared/src');
 const routes = require('./routes');
-const errorHandler = require('./middlewares/errorHandler');
+const { errorHandler, requestLogger } = require('./middlewares');
 
 // 初始化Express应用
 const app = express();
@@ -20,7 +19,7 @@ const HOST = process.env.HOST || 'localhost';
 
 // 配置中间件
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(requestLogger);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
