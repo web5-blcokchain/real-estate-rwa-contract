@@ -27,19 +27,25 @@ let cachedDeploymentConfig = null;
 const readDeploymentConfig = (force = false) => {
   // 如果已缓存且不强制重新读取，则返回缓存
   if (cachedDeploymentConfig && !force) {
+    console.log('使用缓存的部署配置');
     return cachedDeploymentConfig;
   }
   
+  // 输出当前目录信息
+  console.log('当前目录:', process.cwd());
+  console.log('__dirname:', __dirname);
+  
   // 可能的部署配置文件路径
   const possiblePaths = [
-    // 直接使用相对路径
-    'config/deployment.json'
+    path.resolve(__dirname, '../../../config/deployment.json')
   ];
   
   console.log('尝试查找部署配置文件...');
+  console.log('可能的路径:', possiblePaths);
   
   for (const deploymentPath of possiblePaths) {
     try {
+      console.log(`检查路径: ${deploymentPath}`);
       // 检查文件是否存在
       if (fs.existsSync(deploymentPath)) {
         console.log(`找到部署配置文件: ${deploymentPath}`);
@@ -57,9 +63,12 @@ const readDeploymentConfig = (force = false) => {
         }
         
         return cachedDeploymentConfig;
+      } else {
+        console.log(`文件不存在: ${deploymentPath}`);
       }
     } catch (error) {
-      console.warn(`尝试读取 ${deploymentPath} 失败: ${error.message}`);
+      console.warn(`尝试读取 ${deploymentPath} 失败:`, error);
+      console.warn('错误详情:', error.stack);
     }
   }
   

@@ -40,34 +40,44 @@ const getContractABI = (contractName) => {
   console.log(`尝试从以下目录查找ABI文件:`);
   possibleDirs.forEach(dir => console.log(`- ${dir}`));
   
+  // 合约名称映射表
+  const contractNameMap = {
+    'Facade': 'RealEstateFacade',
+    'System': 'RealEstateSystem'
+  };
+  
+  // 获取可能的合约名称
+  const possibleNames = [
+    contractName,
+    contractNameMap[contractName],
+    contractName.toLowerCase(),
+    contractName.charAt(0).toLowerCase() + contractName.slice(1),
+    toCamelCase(contractName)
+  ];
+  
   // 首先尝试与合约名称完全匹配的文件名
   for (const dir of possibleDirs) {
-    const exactNamePath = path.join(dir, `${contractName}.json`);
-    try {
-      if (fs.existsSync(exactNamePath)) {
-        console.log(`找到ABI文件: ${exactNamePath}`);
-        const abiJson = fs.readFileSync(exactNamePath, 'utf8');
-        const abiData = JSON.parse(abiJson);
-        const abi = abiData.abi || abiData;
-        
-        if (Array.isArray(abi)) {
-          console.log(`成功加载合约 ${contractName} 的ABI`);
-          return abi;
+    for (const name of possibleNames) {
+      const exactNamePath = path.join(dir, `${name}.json`);
+      try {
+        if (fs.existsSync(exactNamePath)) {
+          console.log(`找到ABI文件: ${exactNamePath}`);
+          const abiJson = fs.readFileSync(exactNamePath, 'utf8');
+          const abiData = JSON.parse(abiJson);
+          const abi = abiData.abi || abiData;
+          
+          if (Array.isArray(abi)) {
+            console.log(`成功加载合约 ${contractName} 的ABI`);
+            return abi;
+          }
         }
+      } catch (error) {
+        console.warn(`尝试读取 ${exactNamePath} 失败:`, error.message);
       }
-    } catch (error) {
-      console.warn(`尝试读取 ${exactNamePath} 失败:`, error.message);
     }
   }
   
   // 如果没有找到完全匹配的，尝试其他可能的名称格式
-  const possibleNames = [
-    contractName.toLowerCase(),
-    contractName.charAt(0).toLowerCase() + contractName.slice(1),
-    // 可以使用toCamelCase函数进行尝试
-    toCamelCase(contractName)
-  ];
-  
   for (const dir of possibleDirs) {
     for (const name of possibleNames) {
       const filesToTry = [
