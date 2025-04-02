@@ -37,7 +37,13 @@ class Validation {
    * @returns {boolean} 是否有效
    */
   static isValidBlockNumber(blockNumber) {
-    return typeof blockNumber === 'number' && blockNumber >= 0;
+    if (typeof blockNumber === 'number') {
+      return Number.isInteger(blockNumber) && blockNumber >= 0;
+    }
+    if (typeof blockNumber === 'string') {
+      return /^\d+$/.test(blockNumber) && parseInt(blockNumber) >= 0;
+    }
+    return false;
   }
 
   /**
