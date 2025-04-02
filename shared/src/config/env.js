@@ -244,6 +244,18 @@ class EnvConfig {
   }
 
   /**
+   * 获取钱包配置
+   * @returns {Object} 钱包配置
+   */
+  static getWalletConfig() {
+    return {
+      WALLET_PRIVATE_KEY: process.env.WALLET_PRIVATE_KEY,
+      WALLET_MNEMONIC: process.env.WALLET_MNEMONIC,
+      WALLET_PATH: process.env.WALLET_PATH || "m/44'/60'/0'/0/0"
+    };
+  }
+
+  /**
    * 获取日志配置
    * @returns {Object} 日志配置
    */

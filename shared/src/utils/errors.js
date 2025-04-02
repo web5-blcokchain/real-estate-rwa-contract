@@ -3,6 +3,7 @@
  */
 const ErrorCodes = {
   NETWORK_ERROR: 1000,
+  PROVIDER_ERROR: 1500,
   WALLET_ERROR: 2000,
   CONTRACT_ERROR: 3000,
   TRANSACTION_ERROR: 4000,
@@ -56,6 +57,16 @@ class NetworkError extends BlockchainError {
   constructor(message, context = {}) {
     super(message, ErrorCodes.NETWORK_ERROR, context);
     this.name = 'NetworkError';
+  }
+}
+
+/**
+ * Provider错误类
+ */
+class ProviderError extends BlockchainError {
+  constructor(message, context = {}) {
+    super(message, ErrorCodes.PROVIDER_ERROR, context);
+    this.name = 'ProviderError';
   }
 }
 
@@ -161,6 +172,8 @@ const ErrorHandler = {
       return new ValidationError(error.message, context);
     } else if (error.message.includes('logger')) {
       return new LoggerError(error.message, context);
+    } else if (error.message.includes('provider')) {
+      return new ProviderError(error.message, context);
     }
 
     // 默认返回基础错误
@@ -172,6 +185,7 @@ module.exports = {
   ErrorCodes,
   BlockchainError,
   NetworkError,
+  ProviderError,
   WalletError,
   ContractError,
   TransactionError,

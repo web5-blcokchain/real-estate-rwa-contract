@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 const { ProviderError } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
+const Validation = require('../utils/validation');
 const EnvConfig = require('../config/env');
 
 /**
@@ -26,15 +26,12 @@ class Provider {
       const chainId = options.chainId || networkConfig.chainId;
 
       // 验证参数
-      Validation.validate(
-        Validation.isValidUrl(rpcUrl),
-        '无效的 RPC URL'
-      );
-
-      Validation.validate(
-        Validation.isValidChainId(chainId),
-        '无效的链 ID'
-      );
+      if (!Validation.isValidUrl(rpcUrl)) {
+        throw new ProviderError('无效的 RPC URL');
+      }
+      if (!Validation.isValidChainId(chainId)) {
+        throw new ProviderError('无效的链 ID');
+      }
 
       // 创建 Provider 实例
       const provider = new ethers.JsonRpcProvider(rpcUrl, chainId);
@@ -56,10 +53,9 @@ class Provider {
   static async getBlockNumber(provider) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
 
       // 获取区块号
       const blockNumber = await provider.getBlockNumber();
@@ -82,15 +78,12 @@ class Provider {
   static async getBlock(provider, blockNumber) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
-
-      Validation.validate(
-        Validation.isValidBlockNumber(blockNumber),
-        '无效的区块号'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
+      if (!Validation.isValidBlockNumber(blockNumber)) {
+        throw new ProviderError('无效的区块号');
+      }
 
       // 获取区块信息
       const block = await provider.getBlock(blockNumber);
@@ -113,15 +106,12 @@ class Provider {
   static async getTransaction(provider, txHash) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
-
-      Validation.validate(
-        Validation.isValidHash(txHash),
-        '无效的交易哈希'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
+      if (!Validation.isValidHash(txHash)) {
+        throw new ProviderError('无效的交易哈希');
+      }
 
       // 获取交易信息
       const tx = await provider.getTransaction(txHash);
@@ -144,15 +134,12 @@ class Provider {
   static async getTransactionReceipt(provider, txHash) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
-
-      Validation.validate(
-        Validation.isValidHash(txHash),
-        '无效的交易哈希'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
+      if (!Validation.isValidHash(txHash)) {
+        throw new ProviderError('无效的交易哈希');
+      }
 
       // 获取交易收据
       const receipt = await provider.getTransactionReceipt(txHash);
@@ -174,10 +161,9 @@ class Provider {
   static async getNetwork(provider) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
 
       // 获取网络信息
       const network = await provider.getNetwork();
@@ -200,21 +186,18 @@ class Provider {
   static async getBalance(provider, address) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidProvider(provider),
-        '无效的 Provider 实例'
-      );
-
-      Validation.validate(
-        Validation.isValidAddress(address),
-        '无效的账户地址'
-      );
+      if (!Validation.isValidProvider(provider)) {
+        throw new ProviderError('无效的 Provider 实例');
+      }
+      if (!Validation.isValidAddress(address)) {
+        throw new ProviderError('无效的账户地址');
+      }
 
       // 获取账户余额
       const balance = await provider.getBalance(address);
       
       // 记录日志
-      Logger.debug(`获取账户余额成功: ${address}`);
+      Logger.debug(`获取账户余额成功: ${address} = ${balance.toString()}`);
       
       return balance;
     } catch (error) {
@@ -223,4 +206,5 @@ class Provider {
   }
 }
 
+// 导出 Provider 类
 module.exports = Provider; 

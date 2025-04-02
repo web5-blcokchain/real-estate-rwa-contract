@@ -1,9 +1,9 @@
 const { ethers } = require('ethers');
-const { WalletError } = require('../utils/errors');
-const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
-const EnvConfig = require('../config/env');
+const { WalletError } = require('../utils');
+const Validation = require('../utils/validation');
 const Provider = require('./provider');
+const Logger = require('../utils/logger');
+const EnvConfig = require('../config/env');
 
 /**
  * Wallet 管理器类
@@ -11,42 +11,47 @@ const Provider = require('./provider');
 class Wallet {
   /**
    * 创建钱包实例
-   * @param {Object} options - 配置选项
-   * @param {string} [options.privateKey] - 私钥
-   * @param {string} [options.mnemonic] - 助记词
-   * @param {string} [options.path] - 派生路径
-   * @param {Object} [options.provider] - Provider 实例
-   * @returns {Promise<ethers.Wallet>} 钱包实例
+   * @param {Object} params - 创建参数
+   * @param {string} [params.privateKey] - 私钥
+   * @param {string} [params.mnemonic] - 助记词
+   * @param {Provider} params.provider - 网络提供者
+   * @returns {Promise<Wallet>} 钱包实例
+   * @throws {WalletError} 创建失败时抛出错误
    */
-  static async create(options = {}) {
+  static async create({ privateKey, mnemonic, provider }) {
     try {
-      const config = EnvConfig.getWalletConfig();
-      const privateKey = options.privateKey || config.WALLET_PRIVATE_KEY;
-      const mnemonic = options.mnemonic || config.WALLET_MNEMONIC;
-      const path = options.path || config.WALLET_PATH;
-      const provider = options.provider || Provider.create();
-
-      let wallet;
-      if (privateKey) {
-        Validation.validate(
-          Validation.isValidPrivateKey(privateKey),
-          '无效的私钥'
-        );
-        wallet = new ethers.Wallet(privateKey, provider);
-      } else if (mnemonic) {
-        Validation.validate(
-          Validation.isValidMnemonic(mnemonic),
-          '无效的助记词'
-        );
-        wallet = ethers.Wallet.fromPhrase(mnemonic, path, provider);
-      } else {
-        throw new WalletError('必须提供私钥或助记词');
+      // 验证参数
+      if (!privateKey && !mnemonic) {
+        throw new WalletError('创建钱包失败: 需要提供私钥或助记词');
       }
 
-      Logger.info(`钱包创建成功: ${wallet.address}`);
+      // 验证私钥格式
+      if (privateKey) {
+        Validation.validate(Validation.isValidPrivateKey(privateKey), '创建钱包失败: 无效的私钥');
+      }
+
+      // 验证助记词格式
+      if (mnemonic) {
+        Validation.validate(Validation.isValidMnemonic(mnemonic), '创建钱包失败: 无效的助记词');
+      }
+
+      // 验证网络提供者
+      if (!Validation.isValidProvider(provider)) {
+        throw new WalletError('创建钱包失败: 无效的网络提供者');
+      }
+
+      // 创建钱包实例
+      let wallet;
+      if (privateKey) {
+        wallet = new ethers.Wallet(privateKey, provider);
+      } else if (mnemonic) {
+        wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
+      }
+
       return wallet;
     } catch (error) {
-      throw new WalletError(`创建钱包失败: ${error.message}`);
+      Logger.error('创建钱包失败', { error });
+      throw error;
     }
   }
 
@@ -57,8 +62,11 @@ class Wallet {
    */
   static async getBalance(wallet) {
     try {
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('获取账户余额失败: 无效的钱包实例');
+      }
       const balance = await wallet.getBalance();
-      Logger.debug(`账户余额: ${wallet.address} = ${balance.toString()} wei`);
+      Logger.info('获取余额成功', { balance: balance.toString() });
       return balance;
     } catch (error) {
       throw new WalletError(`获取账户余额失败: ${error.message}`);
@@ -77,25 +85,14 @@ class Wallet {
    */
   static async sendTransaction(wallet, transaction) {
     try {
-      Validation.validate(
-        Validation.isValidAddress(transaction.to),
-        '无效的接收地址'
-      );
-
-      Validation.validate(
-        Validation.isValidAmount(transaction.value),
-        '无效的发送金额'
-      );
-
-      if (transaction.data) {
-        Validation.validate(
-          Validation.isValidHexString(transaction.data),
-          '无效的交易数据'
-        );
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('发送交易失败: 无效的钱包实例');
       }
-
+      if (!Validation.isValidTransaction(transaction)) {
+        throw new WalletError('发送交易失败: 无效的交易参数');
+      }
       const tx = await wallet.sendTransaction(transaction);
-      Logger.info(`交易已发送: ${tx.hash}`);
+      Logger.info('交易发送成功', { hash: tx.hash });
       return tx;
     } catch (error) {
       throw new WalletError(`发送交易失败: ${error.message}`);
@@ -110,13 +107,14 @@ class Wallet {
    */
   static async signMessage(wallet, message) {
     try {
-      Validation.validate(
-        Validation.isValidString(message),
-        '无效的消息内容'
-      );
-
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('签名消息失败: 无效的钱包实例');
+      }
+      if (!Validation.isValidString(message)) {
+        throw new WalletError('签名消息失败: 无效的消息');
+      }
       const signature = await wallet.signMessage(message);
-      Logger.debug(`消息签名成功: ${signature}`);
+      Logger.info('消息签名成功', { signature });
       return signature;
     } catch (error) {
       throw new WalletError(`签名消息失败: ${error.message}`);
@@ -125,26 +123,45 @@ class Wallet {
 
   /**
    * 验证签名
-   * @param {string} message - 原始消息
+   * @param {ethers.Wallet} wallet - 钱包实例
+   * @param {string} message - 消息
    * @param {string} signature - 签名
-   * @returns {Promise<string>} 签名者地址
+   * @returns {Promise<boolean>} 验证结果
    */
-  static async verifyMessage(message, signature) {
+  static async verifyMessage(wallet, message, signature) {
     try {
-      Validation.validate(
-        Validation.isValidString(message),
-        '无效的消息内容'
-      );
+      // 验证钱包实例
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('验证签名失败: 无效的钱包实例');
+      }
 
-      Validation.validate(
-        Validation.isValidSignature(signature),
-        '无效的签名'
-      );
+      // 验证消息
+      if (!message) {
+        throw new WalletError('验证签名失败: 无效的消息');
+      }
 
-      const address = ethers.verifyMessage(message, signature);
-      Logger.debug(`签名验证成功: ${address}`);
-      return address;
+      // 验证签名格式
+      if (!signature || typeof signature !== 'string' || !signature.startsWith('0x') || signature.length !== 132) {
+        throw new WalletError('验证签名失败: 无效的签名格式');
+      }
+
+      // 获取钱包地址
+      const address = await wallet.getAddress();
+
+      // 验证签名
+      const recoveredAddress = await ethers.verifyMessage(message, signature);
+      const isValid = address.toLowerCase() === recoveredAddress.toLowerCase();
+      
+      if (isValid) {
+        Logger.info('签名验证成功', { address });
+      }
+      return isValid;
     } catch (error) {
+      // 如果是我们的自定义错误，直接抛出
+      if (error instanceof WalletError) {
+        throw error;
+      }
+      // 其他错误统一处理
       throw new WalletError(`验证签名失败: ${error.message}`);
     }
   }
@@ -152,12 +169,15 @@ class Wallet {
   /**
    * 导出私钥
    * @param {ethers.Wallet} wallet - 钱包实例
-   * @returns {string} 私钥
+   * @returns {Promise<string>} 私钥
    */
-  static exportPrivateKey(wallet) {
+  static async exportPrivateKey(wallet) {
     try {
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('导出私钥失败: 无效的钱包实例');
+      }
       const privateKey = wallet.privateKey;
-      Logger.debug(`私钥导出成功: ${privateKey}`);
+      Logger.info('导出私钥成功');
       return privateKey;
     } catch (error) {
       throw new WalletError(`导出私钥失败: ${error.message}`);
@@ -167,16 +187,19 @@ class Wallet {
   /**
    * 导出助记词
    * @param {ethers.Wallet} wallet - 钱包实例
-   * @returns {string} 助记词
+   * @returns {Promise<string>} 助记词
    */
-  static exportMnemonic(wallet) {
+  static async exportMnemonic(wallet) {
     try {
-      const mnemonic = wallet.mnemonic;
-      if (!mnemonic) {
-        throw new WalletError('该钱包不是由助记词创建的');
+      if (!Validation.isValidWallet(wallet)) {
+        throw new WalletError('导出助记词失败: 无效的钱包实例');
       }
-      Logger.debug(`助记词导出成功: ${mnemonic.phrase}`);
-      return mnemonic.phrase;
+      if (!wallet.mnemonic) {
+        throw new WalletError('导出助记词失败: 该钱包不是由助记词创建的');
+      }
+      const mnemonic = wallet.mnemonic.phrase;
+      Logger.info('导出助记词成功');
+      return mnemonic;
     } catch (error) {
       throw new WalletError(`导出助记词失败: ${error.message}`);
     }

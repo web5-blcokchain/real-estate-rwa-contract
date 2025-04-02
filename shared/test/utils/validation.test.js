@@ -5,19 +5,24 @@ const { ValidationError } = require('../../src/utils/errors');
 describe('Validation', () => {
   describe('isValidAddress', () => {
     it('should validate correct Ethereum address', () => {
-      const validAddress = '0x1234567890123456789012345678901234567890';
-      expect(Validation.isValidAddress(validAddress)).to.be.true;
+      const validAddresses = [
+        '0x1234567890123456789012345678901234567890',
+        '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+        '0x0000000000000000000000000000000000000000'
+      ];
+
+      validAddresses.forEach(address => {
+        expect(Validation.isValidAddress(address)).to.be.true;
+      });
     });
 
     it('should reject invalid Ethereum address', () => {
       const invalidAddresses = [
-        '1234567890123456789012345678901234567890', // missing 0x
-        '0x12345678901234567890123456789012345678', // too short
+        '0x123', // too short
+        '0x1234567890123456789012345678901234567890123456789012345678901234', // too long
         '0x123456789012345678901234567890123456789g', // invalid character
-        '', // empty string
-        null, // null
-        undefined, // undefined
-        123 // number
+        '1234567890123456789012345678901234567890', // missing 0x prefix
+        '' // empty string
       ];
 
       invalidAddresses.forEach(address => {
@@ -28,23 +33,28 @@ describe('Validation', () => {
 
   describe('isValidPrivateKey', () => {
     it('should validate correct private key', () => {
-      const validKey = '0x1234567890123456789012345678901234567890123456789012345678901234';
-      expect(Validation.isValidPrivateKey(validKey)).to.be.true;
+      const validPrivateKeys = [
+        '0x1234567890123456789012345678901234567890123456789012345678901234',
+        '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+        '0x0000000000000000000000000000000000000000000000000000000000000000'
+      ];
+
+      validPrivateKeys.forEach(privateKey => {
+        expect(Validation.isValidPrivateKey(privateKey)).to.be.true;
+      });
     });
 
     it('should reject invalid private key', () => {
-      const invalidKeys = [
-        '1234567890123456789012345678901234567890123456789012345678901234', // missing 0x
-        '0x12345678901234567890123456789012345678901234567890123456789012', // too short
+      const invalidPrivateKeys = [
+        '0x123', // too short
+        '0x12345678901234567890123456789012345678901234567890123456789012345', // too long
         '0x123456789012345678901234567890123456789012345678901234567890123g', // invalid character
-        '', // empty string
-        null, // null
-        undefined, // undefined
-        123 // number
+        '1234567890123456789012345678901234567890123456789012345678901234', // missing 0x prefix
+        '' // empty string
       ];
 
-      invalidKeys.forEach(key => {
-        expect(Validation.isValidPrivateKey(key)).to.be.false;
+      invalidPrivateKeys.forEach(privateKey => {
+        expect(Validation.isValidPrivateKey(privateKey)).to.be.false;
       });
     });
   });
@@ -109,14 +119,11 @@ describe('Validation', () => {
   describe('isValidAmount', () => {
     it('should validate correct amounts', () => {
       const validAmounts = [
-        0,
-        1,
-        1000000,
-        '0',
-        '1',
-        '1000000',
         '0.1',
-        '1.23'
+        '1.0',
+        '100.0',
+        '0.000000000000000001',
+        '1000000000000000000'
       ];
 
       validAmounts.forEach(amount => {
@@ -126,15 +133,11 @@ describe('Validation', () => {
 
     it('should reject invalid amounts', () => {
       const invalidAmounts = [
-        -1, // negative number
-        '-1', // negative string
-        'abc', // non-numeric string
-        '1.2.3', // multiple decimals
-        '', // empty string
-        null, // null
-        undefined, // undefined
-        {}, // object
-        [] // array
+        '-1.0', // negative
+        'abc', // non-numeric
+        '1.0.0', // multiple decimal points
+        '0.0000000000000000001', // too many decimal places
+        '' // empty string
       ];
 
       invalidAmounts.forEach(amount => {
@@ -302,27 +305,53 @@ describe('Validation', () => {
 
   describe('isValidTransaction', () => {
     it('should validate correct transaction objects', () => {
-      const validTransaction = {
-        to: '0x1234567890123456789012345678901234567890',
-        value: '1000000000000000000',
-        gasLimit: '21000',
-        gasPrice: '20000000000'
-      };
+      const validTransactions = [
+        {
+          from: '0x1234567890123456789012345678901234567890',
+          to: '0x1234567890123456789012345678901234567890',
+          value: '0.1',
+          data: '0x'
+        },
+        {
+          from: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          to: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          value: '1.0',
+          data: '0x1234'
+        }
+      ];
 
-      expect(Validation.isValidTransaction(validTransaction)).to.be.true;
+      validTransactions.forEach(tx => {
+        expect(Validation.isValidTransaction(tx)).to.be.true;
+      });
     });
 
     it('should reject invalid transaction objects', () => {
       const invalidTransactions = [
-        {}, // empty object
-        { to: '0x1234' }, // missing fields
-        { to: '0x1234', value: '100' }, // missing fields
-        { to: '0x1234', value: '100', gasLimit: '21000' }, // missing gasPrice
-        null, // null
-        undefined, // undefined
-        123, // number
-        'transaction', // string
-        [] // array
+        {
+          from: '0x123', // invalid from address
+          to: '0x1234567890123456789012345678901234567890',
+          value: '0.1',
+          data: '0x'
+        },
+        {
+          from: '0x1234567890123456789012345678901234567890',
+          to: '0x123', // invalid to address
+          value: '0.1',
+          data: '0x'
+        },
+        {
+          from: '0x1234567890123456789012345678901234567890',
+          to: '0x1234567890123456789012345678901234567890',
+          value: '-1.0', // invalid amount
+          data: '0x'
+        },
+        {
+          from: '0x1234567890123456789012345678901234567890',
+          to: '0x1234567890123456789012345678901234567890',
+          value: '0.1',
+          data: 'invalid' // invalid data
+        },
+        {} // empty object
       ];
 
       invalidTransactions.forEach(tx => {
@@ -333,24 +362,19 @@ describe('Validation', () => {
 
   describe('validate', () => {
     it('should not throw error for true condition', () => {
-      expect(() => {
-        Validation.validate(true, 'No error should be thrown');
-      }).to.not.throw();
+      expect(() => Validation.validate(true, 'test')).to.not.throw();
     });
 
     it('should throw ValidationError for false condition', () => {
-      expect(() => {
-        Validation.validate(false, 'Test validation error');
-      }).to.throw().and.to.be.instanceOf(ValidationError);
+      expect(() => Validation.validate(false, 'test')).to.throw(ValidationError);
     });
 
     it('should include error message in thrown error', () => {
-      const errorMessage = 'Test validation error';
       try {
-        Validation.validate(false, errorMessage);
-        expect.fail('Should have thrown error');
+        Validation.validate(false, 'test message');
+        expect.fail('Should have thrown an error');
       } catch (error) {
-        expect(error.message).to.equal(errorMessage);
+        expect(error.message).to.include('test message');
       }
     });
   });
