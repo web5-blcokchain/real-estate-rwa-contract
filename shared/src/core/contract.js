@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 const { ContractError } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
+const Validation = require('../utils/validation');
 const EnvConfig = require('../config/env');
 const Provider = require('./provider');
 const Wallet = require('./wallet');
@@ -33,15 +33,13 @@ class Contract {
       const signer = options.signer || await Wallet.create();
 
       // 验证参数
-      Validation.validate(
-        Validation.isValidAddress(address),
-        '无效的合约地址'
-      );
+      if (!Validation.isValidAddress(address)) {
+        throw new Error('无效的合约地址');
+      }
 
-      Validation.validate(
-        Validation.isValidAbi(abi),
-        '无效的合约 ABI'
-      );
+      if (!Validation.isValidAbi(abi)) {
+        throw new Error('无效的合约 ABI');
+      }
 
       // 创建合约实例
       const contract = new ethers.Contract(address, abi, signer || provider);
@@ -65,15 +63,13 @@ class Contract {
   static async call(contract, method, args = []) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
-      Validation.validate(
-        Validation.isValidString(method),
-        '无效的方法名'
-      );
+      if (!Validation.isValidString(method)) {
+        throw new Error('无效的方法名');
+      }
 
       // 调用方法
       const result = await contract[method](...args);
@@ -98,15 +94,13 @@ class Contract {
   static async send(contract, method, args = [], options = {}) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
-      Validation.validate(
-        Validation.isValidString(method),
-        '无效的方法名'
-      );
+      if (!Validation.isValidString(method)) {
+        throw new Error('无效的方法名');
+      }
 
       // 发送交易
       const tx = await contract[method](...args, options);
@@ -131,25 +125,21 @@ class Contract {
   static async on(contract, event, filter = {}, callback) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
-      Validation.validate(
-        Validation.isValidString(event),
-        '无效的事件名'
-      );
+      if (!Validation.isValidString(event)) {
+        throw new Error('无效的事件名');
+      }
 
-      Validation.validate(
-        Validation.isValidObject(filter),
-        '无效的事件过滤器'
-      );
+      if (!Validation.isValidObject(filter)) {
+        throw new Error('无效的事件过滤器');
+      }
 
-      Validation.validate(
-        Validation.isValidFunction(callback),
-        '无效的回调函数'
-      );
+      if (!Validation.isValidFunction(callback)) {
+        throw new Error('无效的回调函数');
+      }
 
       // 设置事件监听
       const listener = contract.on(event, filter, callback);
@@ -174,20 +164,17 @@ class Contract {
   static async queryFilter(contract, event, filter = {}, options = {}) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
-      Validation.validate(
-        Validation.isValidString(event),
-        '无效的事件名'
-      );
+      if (!Validation.isValidString(event)) {
+        throw new Error('无效的事件名');
+      }
 
-      Validation.validate(
-        Validation.isValidObject(filter),
-        '无效的事件过滤器'
-      );
+      if (!Validation.isValidObject(filter)) {
+        throw new Error('无效的事件过滤器');
+      }
 
       // 查询事件
       const logs = await contract.queryFilter(event, filter, options);
@@ -209,16 +196,15 @@ class Contract {
   static async getBytecode(contract) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
       // 获取字节码
-      const bytecode = await contract.runner.provider.getCode(contract.target);
+      const bytecode = await contract.provider.getCode(contract.address);
       
       // 记录日志
-      Logger.debug(`获取合约字节码成功`);
+      Logger.debug(`获取合约字节码成功: ${contract.address}`);
       
       return bytecode;
     } catch (error) {
@@ -229,23 +215,22 @@ class Contract {
   /**
    * 获取合约接口
    * @param {ethers.Contract} contract - 合约实例
-   * @returns {Object} 合约接口
+   * @returns {string} 合约接口
    */
-  static getInterface(contract) {
+  static async getInterface(contract) {
     try {
       // 验证参数
-      Validation.validate(
-        Validation.isValidContract(contract),
-        '无效的合约实例'
-      );
+      if (!Validation.isValidContract(contract)) {
+        throw new Error('无效的合约实例');
+      }
 
       // 获取接口
-      const iface = contract.interface;
+      const contractInterface = contract.interface.format();
       
       // 记录日志
-      Logger.debug(`获取合约接口成功`);
+      Logger.debug(`获取合约接口成功: ${contract.address}`);
       
-      return iface;
+      return contractInterface;
     } catch (error) {
       throw new ContractError(`获取合约接口失败: ${error.message}`);
     }

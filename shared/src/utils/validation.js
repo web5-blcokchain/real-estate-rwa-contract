@@ -119,6 +119,62 @@ class Validation {
   }
 
   /**
+   * 验证合约实例
+   * @param {Object} contract - 合约实例
+   * @returns {boolean} 是否有效
+   */
+  static isValidContract(contract) {
+    return contract && typeof contract === 'object' && typeof contract.address === 'string';
+  }
+
+  /**
+   * 验证字符串
+   * @param {string} str - 字符串
+   * @returns {boolean} 是否有效
+   */
+  static isValidString(str) {
+    return typeof str === 'string' && str.length > 0;
+  }
+
+  /**
+   * 验证对象
+   * @param {Object} obj - 对象
+   * @returns {boolean} 是否有效
+   */
+  static isValidObject(obj) {
+    return obj && typeof obj === 'object' && !Array.isArray(obj);
+  }
+
+  /**
+   * 验证函数
+   * @param {Function} fn - 函数
+   * @returns {boolean} 是否有效
+   */
+  static isValidFunction(fn) {
+    return typeof fn === 'function';
+  }
+
+  /**
+   * 验证 ABI
+   * @param {Array|string} abi - 合约 ABI
+   * @returns {boolean} 是否有效
+   */
+  static isValidAbi(abi) {
+    if (Array.isArray(abi)) {
+      return abi.length > 0;
+    }
+    if (typeof abi === 'string') {
+      try {
+        const parsedAbi = JSON.parse(abi);
+        return Array.isArray(parsedAbi) && parsedAbi.length > 0;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
    * 验证交易对象
    * @param {Object} transaction - 交易对象
    * @returns {boolean} 是否有效

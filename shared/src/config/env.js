@@ -200,6 +200,38 @@ class EnvConfig {
   }
 
   /**
+   * 获取合约配置
+   * @param {string} [contractName] - 合约名称
+   * @returns {Object} 合约配置
+   */
+  static getContractConfig(contractName) {
+    try {
+      // 如果没有指定合约名称，返回默认合约配置
+      if (!contractName) {
+        return {
+          address: process.env.DEFAULT_CONTRACT_ADDRESS,
+          abi: JSON.parse(process.env.DEFAULT_CONTRACT_ABI || '[]')
+        };
+      }
+
+      // 获取指定合约的配置
+      const address = process.env[`${contractName.toUpperCase()}_CONTRACT_ADDRESS`];
+      const abi = process.env[`${contractName.toUpperCase()}_CONTRACT_ABI`];
+
+      if (!address || !abi) {
+        throw new ConfigError(`合约 ${contractName} 配置不完整`);
+      }
+
+      return {
+        address,
+        abi: JSON.parse(abi)
+      };
+    } catch (error) {
+      throw new ConfigError(`获取合约配置失败: ${error.message}`);
+    }
+  }
+
+  /**
    * 获取物业管理员私钥
    * @returns {string} 物业管理员私钥
    */
