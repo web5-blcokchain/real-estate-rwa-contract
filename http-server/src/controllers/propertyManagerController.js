@@ -21,7 +21,7 @@ const {
  */
 const registerProperty = async (req, res) => {
   try {
-    const { propertyId, location, area, description, initialSupply, decimals = 18, managerRole = 'manager' } = req.body;
+    const { propertyId, location, area, description, initialSupply, decimals = 18, managerRole = 'admin' } = req.body;
     
     // 基本参数验证
     if (!propertyId || !location || !area || !description || !initialSupply) {
@@ -32,19 +32,42 @@ const registerProperty = async (req, res) => {
       });
     }
 
-    logger.info(`注册新房产: ${propertyId}, ${location}, ${area}, ${description}, 初始供应量: ${initialSupply}`);
+    logger.info(`注册新房产: ${propertyId}, ${location}, ${area}, ${description}, 初始供应量: ${initialSupply}, 角色: ${managerRole}`);
     
-    // 获取当前网络信息 - 使用networkUtils单例
+    // 获取当前网络信息
     const networkInfo = {
       name: networkUtils.getNetworkName(),
       chainId: networkUtils.getChainId(),
       isTestnet: networkUtils.isTestnet(),
       isMainnet: networkUtils.isMainnet()
     };
+
+    // 获取PropertyManager合约实例
+    const propertyManager = await getContractWithSigner('PropertyManager', managerRole);
     
-    // 创建一个模拟的成功响应，因为没有实际的区块链环境
-    const mockTokenAddress = "0x" + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-    const mockTransactionHash = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+    // 获取调用者地址
+    const signer = await propertyManager.signer.getAddress();
+    logger.info(`调用者地址: ${signer}`);
+    
+    // 调用合约方法注册房产
+    logger.info(`调用合约方法注册房产: ${propertyId}`);
+    const tx = await propertyManager.registerProperty(
+      propertyId,
+      "JP", // country
+      `ipfs://${propertyId}` // metadataURI
+    );
+    
+    // 等待交易确认
+    logger.info(`等待交易确认: ${tx.hash}`);
+    const receipt = await tx.wait();
+    
+    // 从交易收据中获取代币地址
+    const propertyRegisteredEvent = receipt.logs.find(log => log.eventName === 'PropertyRegistered');
+    if (!propertyRegisteredEvent) {
+      throw new Error('Property registration event not found');
+    }
+    
+    const { propertyIdHash } = propertyRegisteredEvent.args;
     
     // 返回成功响应
     return res.status(201).json({
@@ -52,14 +75,16 @@ const registerProperty = async (req, res) => {
       message: '房产注册成功',
       data: {
         propertyId,
+        propertyIdHash,
         location,
         area,
         description,
         initialSupply,
         decimals,
-        transactionHash: mockTransactionHash,
-        tokenAddress: mockTokenAddress,
-        network: networkInfo
+        transactionHash: tx.hash,
+        network: networkInfo,
+        receipt: receipt,
+        caller: signer
       }
     });
   } catch (error) {
@@ -67,7 +92,8 @@ const registerProperty = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: '房产注册失败',
-      message: error.message
+      message: error.message,
+      details: error.stack
     });
   }
 };

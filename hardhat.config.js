@@ -7,11 +7,11 @@ require("solidity-coverage");
 require("@openzeppelin/hardhat-upgrades");
 
 // 加载环境配置
-const envConfig = require("./shared/src/config/env");
+const envConfig = require("./shared/src/config/env").load();
 
 // 获取账户配置
 const getAccounts = () => {
-  const privateKey = envConfig.get('DEPLOYER_PRIVATE_KEY');
+  const privateKey = envConfig.ADMIN_PRIVATE_KEY;
   const formattedKey = privateKey.replace(/^0x/, '');
   if (formattedKey.length !== 64) {
     throw new Error(`Invalid private key length: ${formattedKey.length}, expected 64 characters`);
@@ -33,7 +33,7 @@ const getNetworkConfig = (network) => {
   switch (network) {
     case 'hardhat':
       return {
-        chainId: envConfig.getInt('LOCALHOST_CHAIN_ID', 31337),
+        chainId: envConfig.HARDHAT_CHAIN_ID,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -49,8 +49,8 @@ const getNetworkConfig = (network) => {
     case 'localhost':
       return {
         ...baseConfig,
-        url: "http://127.0.0.1:8545",
-        chainId: envConfig.getInt('LOCALHOST_CHAIN_ID', 31337),
+        url: envConfig.LOCALHOST_RPC_URL,
+        chainId: envConfig.LOCALHOST_CHAIN_ID,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -58,18 +58,36 @@ const getNetworkConfig = (network) => {
     case 'testnet':
       return {
         ...baseConfig,
-        url: envConfig.get('TESTNET_RPC_URL'),
-        chainId: envConfig.getInt('TESTNET_CHAIN_ID')
+        url: envConfig.TESTNET_RPC_URL,
+        chainId: envConfig.TESTNET_CHAIN_ID
       };
     case 'mainnet':
       return {
         ...baseConfig,
-        url: envConfig.get('MAINNET_RPC_URL'),
-        chainId: envConfig.getInt('MAINNET_CHAIN_ID')
+        url: envConfig.MAINNET_RPC_URL,
+        chainId: envConfig.MAINNET_CHAIN_ID
       };
     default:
       throw new Error(`Unsupported network: ${network}`);
   }
+};
+
+// 根据当前网络类型获取激活的网络配置
+const getActiveNetworks = () => {
+  const networks = {
+    hardhat: getNetworkConfig('hardhat'),
+    localhost: getNetworkConfig('localhost'),
+    testnet: getNetworkConfig('testnet'),
+    mainnet: getNetworkConfig('mainnet')
+  };
+
+  // 根据 BLOCKCHAIN_NETWORK 激活对应网络
+  const activeNetwork = envConfig.BLOCKCHAIN_NETWORK;
+  if (!networks[activeNetwork]) {
+    throw new Error(`Invalid network type: ${activeNetwork}`);
+  }
+
+  return networks;
 };
 
 // Hardhat 配置
@@ -92,16 +110,11 @@ module.exports = {
   },
 
   // 网络配置
-  networks: {
-    hardhat: getNetworkConfig('hardhat'),
-    localhost: getNetworkConfig('localhost'),
-    testnet: getNetworkConfig('testnet'),
-    mainnet: getNetworkConfig('mainnet')
-  },
+  networks: getActiveNetworks(),
 
   // Gas 报告配置
   gasReporter: {
-    enabled: envConfig.getBoolean('REPORT_GAS'),
+    enabled: envConfig.REPORT_GAS,
     currency: "USD",
   },
 

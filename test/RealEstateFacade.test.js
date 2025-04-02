@@ -19,33 +19,38 @@ describe("RealEstateFacade", function () {
     
     // 部署 RoleManager
     const RoleManager = await ethers.getContractFactory("RoleManager");
-    roleManager = await upgrades.deployProxy(RoleManager, [], {
+    roleManager = await upgrades.deployProxy(RoleManager, [owner.address], {
       kind: "uups",
     });
+    await roleManager.waitForDeployment();
     
     // 部署 PropertyManager
     const PropertyManager = await ethers.getContractFactory("PropertyManager");
-    propertyManager = await upgrades.deployProxy(PropertyManager, [], {
+    propertyManager = await upgrades.deployProxy(PropertyManager, [await roleManager.getAddress()], {
       kind: "uups",
     });
+    await propertyManager.waitForDeployment();
     
     // 部署 PropertyToken
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    propertyToken = await upgrades.deployProxy(PropertyToken, [], {
+    propertyToken = await upgrades.deployProxy(PropertyToken, [await roleManager.getAddress()], {
       kind: "uups",
     });
+    await propertyToken.waitForDeployment();
     
     // 部署 TradingManager
     const TradingManager = await ethers.getContractFactory("TradingManager");
-    tradingManager = await upgrades.deployProxy(TradingManager, [], {
+    tradingManager = await upgrades.deployProxy(TradingManager, [await roleManager.getAddress()], {
       kind: "uups",
     });
+    await tradingManager.waitForDeployment();
     
     // 部署 RewardManager
     const RewardManager = await ethers.getContractFactory("RewardManager");
-    rewardManager = await upgrades.deployProxy(RewardManager, [], {
+    rewardManager = await upgrades.deployProxy(RewardManager, [await roleManager.getAddress()], {
       kind: "uups",
     });
+    await rewardManager.waitForDeployment();
     
     // 部署 RealEstateSystem
     const RealEstateSystem = await ethers.getContractFactory("RealEstateSystem");
@@ -104,8 +109,8 @@ describe("RealEstateFacade", function () {
       const propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -121,10 +126,10 @@ describe("RealEstateFacade", function () {
         )
       ).to.emit(facade, "PropertyListed");
       
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
       const tokenAddress = await propertyManager.propertyTokens(propertyIdHash);
       
-      expect(tokenAddress).to.not.equal(ethers.constants.AddressZero);
+      expect(tokenAddress).to.not.equal(ethers.ZeroAddress);
       
       const token = await ethers.getContractAt("PropertyToken", tokenAddress);
       expect(await token.name()).to.equal(name);
@@ -141,8 +146,8 @@ describe("RealEstateFacade", function () {
       propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -156,17 +161,17 @@ describe("RealEstateFacade", function () {
         description
       );
       
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
       tokenAddress = await propertyManager.propertyTokens(propertyIdHash);
       
       // 转移一些代币给用户
       const token = await ethers.getContractAt("PropertyToken", tokenAddress);
-      await token.transfer(user1.address, ethers.utils.parseEther("100"));
+      await token.transfer(user1.address, ethers.parseEther("100"));
     });
     
     it("应该成功创建卖单", async function () {
-      const amount = ethers.utils.parseEther("10");
-      const price = ethers.utils.parseEther("1");
+      const amount = ethers.parseEther("10");
+      const price = ethers.parseEther("1");
       
       await expect(
         facade.connect(user1).createOrder(tokenAddress, amount, price)
@@ -177,8 +182,8 @@ describe("RealEstateFacade", function () {
     });
     
     it("应该成功取消卖单", async function () {
-      const amount = ethers.utils.parseEther("10");
-      const price = ethers.utils.parseEther("1");
+      const amount = ethers.parseEther("10");
+      const price = ethers.parseEther("1");
       
       await facade.connect(user1).createOrder(tokenAddress, amount, price);
       const [orderIds] = await facade.getUserOrders(user1.address);
@@ -192,8 +197,8 @@ describe("RealEstateFacade", function () {
     });
     
     it("应该成功执行交易", async function () {
-      const amount = ethers.utils.parseEther("10");
-      const price = ethers.utils.parseEther("1");
+      const amount = ethers.parseEther("10");
+      const price = ethers.parseEther("1");
       
       await facade.connect(user1).createOrder(tokenAddress, amount, price);
       const [orderIds] = await facade.getUserOrders(user1.address);
@@ -215,8 +220,8 @@ describe("RealEstateFacade", function () {
       propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -230,17 +235,17 @@ describe("RealEstateFacade", function () {
         description
       );
       
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
       tokenAddress = await propertyManager.propertyTokens(propertyIdHash);
       
       // 转移一些代币给用户
       const token = await ethers.getContractAt("PropertyToken", tokenAddress);
-      await token.transfer(user1.address, ethers.utils.parseEther("100"));
+      await token.transfer(user1.address, ethers.parseEther("100"));
     });
     
     it("应该成功创建奖励分配", async function () {
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
-      const amount = ethers.utils.parseEther("100");
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
+      const amount = ethers.parseEther("100");
       const description = "Test distribution";
       
       await expect(
@@ -249,14 +254,14 @@ describe("RealEstateFacade", function () {
           amount,
           description,
           true,
-          ethers.constants.AddressZero
+          ethers.ZeroAddress
         )
       ).to.emit(facade, "DistributionCreated");
     });
     
     it("应该成功领取奖励", async function () {
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
-      const amount = ethers.utils.parseEther("100");
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
+      const amount = ethers.parseEther("100");
       const description = "Test distribution";
       
       await facade.connect(manager).createDistribution(
@@ -264,7 +269,7 @@ describe("RealEstateFacade", function () {
         amount,
         description,
         true,
-        ethers.constants.AddressZero
+        ethers.ZeroAddress
       );
       
       const [distributionIds] = await facade.getUserRewards(user1.address);
@@ -283,8 +288,8 @@ describe("RealEstateFacade", function () {
       propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -298,7 +303,7 @@ describe("RealEstateFacade", function () {
         description
       );
       
-      propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
     });
     
     it("应该成功更新房产状态", async function () {
@@ -311,7 +316,7 @@ describe("RealEstateFacade", function () {
     });
     
     it("应该成功更新房产估值", async function () {
-      const newValue = ethers.utils.parseEther("2");
+      const newValue = ethers.parseEther("2");
       
       await expect(
         facade.connect(manager).updatePropertyValuation(
@@ -331,8 +336,8 @@ describe("RealEstateFacade", function () {
       propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -346,12 +351,12 @@ describe("RealEstateFacade", function () {
         description
       );
       
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
       tokenAddress = await propertyManager.propertyTokens(propertyIdHash);
       
       // 转移一些代币给用户
       const token = await ethers.getContractAt("PropertyToken", tokenAddress);
-      await token.transfer(user1.address, ethers.utils.parseEther("100"));
+      await token.transfer(user1.address, ethers.parseEther("100"));
     });
     
     it("应该正确返回用户资产概览", async function () {
@@ -372,8 +377,8 @@ describe("RealEstateFacade", function () {
       propertyId = "PROP001";
       const name = "Test Property";
       const symbol = "TEST";
-      const initialSupply = ethers.utils.parseEther("1000");
-      const initialPrice = ethers.utils.parseEther("1");
+      const initialSupply = ethers.parseEther("1000");
+      const initialPrice = ethers.parseEther("1");
       const location = "Tokyo";
       const description = "Test property description";
       
@@ -387,12 +392,12 @@ describe("RealEstateFacade", function () {
         description
       );
       
-      const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
       tokenAddress = await propertyManager.propertyTokens(propertyIdHash);
       
       // 转移一些代币给用户
       const token = await ethers.getContractAt("PropertyToken", tokenAddress);
-      await token.transfer(user1.address, ethers.utils.parseEther("100"));
+      await token.transfer(user1.address, ethers.parseEther("100"));
     });
     
     describe("权限错误", function () {
@@ -400,8 +405,8 @@ describe("RealEstateFacade", function () {
         const propertyId = "PROP002";
         const name = "Test Property 2";
         const symbol = "TEST2";
-        const initialSupply = ethers.utils.parseEther("1000");
-        const initialPrice = ethers.utils.parseEther("1");
+        const initialSupply = ethers.parseEther("1000");
+        const initialPrice = ethers.parseEther("1");
         const location = "Tokyo";
         const description = "Test property description";
         
@@ -419,8 +424,8 @@ describe("RealEstateFacade", function () {
       });
       
       it("非管理员不能创建奖励分配", async function () {
-        const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
-        const amount = ethers.utils.parseEther("100");
+        const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
+        const amount = ethers.parseEther("100");
         const description = "Test distribution";
         
         await expect(
@@ -429,13 +434,13 @@ describe("RealEstateFacade", function () {
             amount,
             description,
             true,
-            ethers.constants.AddressZero
+            ethers.ZeroAddress
           )
         ).to.be.revertedWith("AccessControl: account");
       });
       
       it("非管理员不能更新房产状态", async function () {
-        const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
+        const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
         
         await expect(
           facade.connect(user1).updatePropertyStatus(
@@ -448,8 +453,8 @@ describe("RealEstateFacade", function () {
     
     describe("业务逻辑错误", function () {
       it("不能创建余额不足的卖单", async function () {
-        const amount = ethers.utils.parseEther("1000"); // 超过用户余额
-        const price = ethers.utils.parseEther("1");
+        const amount = ethers.parseEther("1000"); // 超过用户余额
+        const price = ethers.parseEther("1");
         
         await expect(
           facade.connect(user1).createOrder(tokenAddress, amount, price)
@@ -463,8 +468,8 @@ describe("RealEstateFacade", function () {
       });
       
       it("不能取消他人的订单", async function () {
-        const amount = ethers.utils.parseEther("10");
-        const price = ethers.utils.parseEther("1");
+        const amount = ethers.parseEther("10");
+        const price = ethers.parseEther("1");
         
         await facade.connect(user1).createOrder(tokenAddress, amount, price);
         const [orderIds] = await facade.getUserOrders(user1.address);
@@ -475,8 +480,8 @@ describe("RealEstateFacade", function () {
       });
       
       it("不能执行已取消的订单", async function () {
-        const amount = ethers.utils.parseEther("10");
-        const price = ethers.utils.parseEther("1");
+        const amount = ethers.parseEther("10");
+        const price = ethers.parseEther("1");
         
         await facade.connect(user1).createOrder(tokenAddress, amount, price);
         const [orderIds] = await facade.getUserOrders(user1.address);
@@ -495,8 +500,8 @@ describe("RealEstateFacade", function () {
       });
       
       it("不能重复领取奖励", async function () {
-        const propertyIdHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(propertyId));
-        const amount = ethers.utils.parseEther("100");
+        const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyId));
+        const amount = ethers.parseEther("100");
         const description = "Test distribution";
         
         await facade.connect(manager).createDistribution(
@@ -504,7 +509,7 @@ describe("RealEstateFacade", function () {
           amount,
           description,
           true,
-          ethers.constants.AddressZero
+          ethers.ZeroAddress
         );
         
         const [distributionIds] = await facade.getUserRewards(user1.address);
@@ -521,8 +526,8 @@ describe("RealEstateFacade", function () {
       it("系统暂停时不能执行操作", async function () {
         await system.pause();
         
-        const amount = ethers.utils.parseEther("10");
-        const price = ethers.utils.parseEther("1");
+        const amount = ethers.parseEther("10");
+        const price = ethers.parseEther("1");
         
         await expect(
           facade.connect(user1).createOrder(tokenAddress, amount, price)
@@ -532,8 +537,8 @@ describe("RealEstateFacade", function () {
       it("系统不活跃时不能执行操作", async function () {
         await system.setSystemStatus(0); // SystemStatus.Inactive
         
-        const amount = ethers.utils.parseEther("10");
-        const price = ethers.utils.parseEther("1");
+        const amount = ethers.parseEther("10");
+        const price = ethers.parseEther("1");
         
         await expect(
           facade.connect(user1).createOrder(tokenAddress, amount, price)

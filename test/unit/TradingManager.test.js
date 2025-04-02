@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { ethers, upgrades } = require("hardhat");
+const { ethers } = require("hardhat");
 
 describe("TradingManager", function () {
   let roleManager;
@@ -17,21 +17,20 @@ describe("TradingManager", function () {
   // 测试参数
   const tokenName = "Property Token";
   const tokenSymbol = "PROP";
-  const initialSupply = ethers.utils.parseEther("1000");
-  const tradeAmount = ethers.utils.parseEther("100");
-  const price = ethers.utils.parseEther("1"); // 每代币1 ETH
-  const totalPrice = price.mul(tradeAmount.div(ethers.utils.parseEther("1")));
+  const initialSupply = ethers.parseEther("1000");
+  const tradeAmount = ethers.parseEther("100");
+  const price = ethers.parseEther("1"); // 每代币1 ETH
+  const totalPrice = price * BigInt(tradeAmount) / ethers.parseEther("1");
   const feeRate = 250; // 2.5%
-  const feeAmount = totalPrice.mul(feeRate).div(10000);
+  const feeAmount = (totalPrice * BigInt(feeRate)) / BigInt(10000);
   
   beforeEach(async function () {
     [admin, seller, buyer, feeReceiver] = await ethers.getSigners();
     
     // 部署 RoleManager
     const RoleManager = await ethers.getContractFactory("RoleManager");
-    roleManager = await upgrades.deployProxy(RoleManager, [admin.address], {
-      kind: "uups",
-    });
+    roleManager = await RoleManager.deploy(admin.address);
+    await roleManager.waitForDeployment();
     
     // 获取角色常量
     ADMIN_ROLE = await roleManager.ADMIN_ROLE();
@@ -42,34 +41,32 @@ describe("TradingManager", function () {
     
     // 部署 PropertyToken (简化的测试代币)
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    propertyToken = await upgrades.deployProxy(PropertyToken, [
-      ethers.constants.HashZero, // 假设的propertyId
+    propertyToken = await PropertyToken.deploy(
+      ethers.ZeroHash, // 假设的propertyId
       tokenName,
       tokenSymbol,
       initialSupply,
       admin.address,
-      roleManager.address
-    ], {
-      kind: "uups",
-    });
+      await roleManager.getAddress()
+    );
+    await propertyToken.waitForDeployment();
     
     // 转移一些代币给卖家
-    await propertyToken.transfer(seller.address, tradeAmount.mul(2));
+    await propertyToken.transfer(seller.address, tradeAmount * BigInt(2));
     
     // 部署 TradingManager
     const TradingManager = await ethers.getContractFactory("TradingManager");
-    tradingManager = await upgrades.deployProxy(TradingManager, [roleManager.address], {
-      kind: "uups",
-    });
+    tradingManager = await TradingManager.deploy(await roleManager.getAddress());
+    await tradingManager.waitForDeployment();
     
     // 设置交易参数
     await tradingManager.setFeeRate(feeRate);
     await tradingManager.setFeeReceiver(feeReceiver.address);
-    await tradingManager.setMaxTradeAmount(ethers.utils.parseEther("500"));
-    await tradingManager.setMinTradeAmount(ethers.utils.parseEther("10"));
+    await tradingManager.setMaxTradeAmount(ethers.parseEther("500"));
+    await tradingManager.setMinTradeAmount(ethers.parseEther("10"));
     
     // 卖家授权TradingManager花费代币
-    await propertyToken.connect(seller).approve(tradingManager.address, tradeAmount.mul(2));
+    await propertyToken.connect(seller).approve(tradingManager.address, tradeAmount * BigInt(2));
   });
   
   describe("初始化和配置", function () {
@@ -86,11 +83,11 @@ describe("TradingManager", function () {
     });
     
     it("应正确设置最大交易数量", async function () {
-      expect(await tradingManager.maxTradeAmount()).to.equal(ethers.utils.parseEther("500"));
+      expect(await tradingManager.maxTradeAmount()).to.equal(ethers.parseEther("500"));
     });
     
     it("应正确设置最小交易数量", async function () {
-      expect(await tradingManager.minTradeAmount()).to.equal(ethers.utils.parseEther("10"));
+      expect(await tradingManager.minTradeAmount()).to.equal(ethers.parseEther("10"));
     });
     
     it("非管理员不应能设置费率", async function () {
@@ -120,7 +117,7 @@ describe("TradingManager", function () {
     });
     
     it("用户不应能创建金额小于最小交易数量的订单", async function () {
-      const smallAmount = ethers.utils.parseEther("5"); // 小于设置的最小值
+      const smallAmount = ethers.parseEther("5"); // 小于设置的最小值
       
       await expect(
         tradingManager.connect(seller).createTokenSellOrder(
@@ -132,7 +129,7 @@ describe("TradingManager", function () {
     });
     
     it("用户不应能创建金额大于最大交易数量的订单", async function () {
-      const largeAmount = ethers.utils.parseEther("600"); // 大于设置的最大值
+      const largeAmount = ethers.parseEther("600"); // 大于设置的最大值
       
       // 首先转移更多代币给卖家
       await propertyToken.transfer(seller.address, largeAmount);
@@ -148,7 +145,7 @@ describe("TradingManager", function () {
     });
     
     it("用户不应能用余额不足创建订单", async function () {
-      const excessAmount = ethers.utils.parseEther("300"); // 超过卖家余额
+      const excessAmount = ethers.parseEther("300"); // 超过卖家余额
       
       await expect(
         tradingManager.connect(buyer).createTokenSellOrder(
@@ -184,7 +181,7 @@ describe("TradingManager", function () {
       
       // 验证代币已返还给卖家
       const sellerBalance = await propertyToken.balanceOf(seller.address);
-      expect(sellerBalance).to.equal(tradeAmount.mul(2)); // 初始额度恢复
+      expect(sellerBalance).to.equal(tradeAmount * BigInt(2)); // 初始额度恢复
     });
     
     it("非卖家不应能取消订单", async function () {
@@ -256,14 +253,14 @@ describe("TradingManager", function () {
     });
     
     it("买家不应能用不足的ETH购买代币", async function () {
-      const insufficientAmount = totalPrice.sub(ethers.utils.parseEther("10"));
+      const insufficientAmount = totalPrice - ethers.parseEther("10");
       
       await expect(
         tradingManager.connect(buyer).buyTokens(
           orderId,
           { value: insufficientAmount }
         )
-      ).to.be.revertedWith("Insufficient payment");
+      ).to.be.revertedWith("Insufficient ETH sent");
     });
     
     it("不应能购买不存在的订单", async function () {

@@ -18,8 +18,8 @@ describe("紧急情况端到端测试", function () {
   const propertyId = "TOKYO123";
   const tokenName = "Tokyo Property";
   const tokenSymbol = "TKP";
-  const initialSupply = ethers.utils.parseEther("10000");
-  const initialPrice = ethers.utils.parseEther("0.1");
+  const initialSupply = ethers.parseEther("10000");
+  const initialPrice = ethers.parseEther("0.1");
   const location = "Tokyo, Japan";
   const description = "Premium property in Tokyo";
   
@@ -54,13 +54,13 @@ describe("紧急情况端到端测试", function () {
     // 配置交易参数
     await tradingManager.connect(admin).setFeeRate(250); // 2.5%
     await tradingManager.connect(admin).setFeeReceiver(admin.address);
-    await tradingManager.connect(admin).setMaxTradeAmount(ethers.utils.parseEther("5000"));
-    await tradingManager.connect(admin).setMinTradeAmount(ethers.utils.parseEther("1"));
+    await tradingManager.connect(admin).setMaxTradeAmount(ethers.parseEther("5000"));
+    await tradingManager.connect(admin).setMinTradeAmount(ethers.parseEther("1"));
     
     // 5. 部署 PropertyToken (仅作为工厂模板)
     const PropertyToken = await ethers.getContractFactory("PropertyToken");
     propertyToken = await upgrades.deployProxy(PropertyToken, [
-      ethers.constants.HashZero,
+      ethers.ZeroHash,
       "Template",
       "TPL",
       0,
@@ -77,7 +77,7 @@ describe("紧急情况端到端测试", function () {
       500, // platformFeeRate 5%
       200, // maintenanceFeeRate 2%
       admin.address, // feeReceiver
-      ethers.utils.parseEther("0.01") // minDistributionThreshold
+      ethers.parseEther("0.01") // minDistributionThreshold
     ], {
       kind: "uups",
     });
@@ -98,9 +98,6 @@ describe("紧急情况端到端测试", function () {
     facade = await upgrades.deployProxy(RealEstateFacade, [
       system.address,
       roleManager.address,
-      propertyManager.address,
-      tradingManager.address,
-      rewardManager.address
     ], {
       kind: "uups",
     });
