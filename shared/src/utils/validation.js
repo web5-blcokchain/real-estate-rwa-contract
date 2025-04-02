@@ -1,4 +1,4 @@
-const { ValidationError } = require('./errors');
+const { ErrorHandler } = require('./errors');
 
 /**
  * 验证工具类
@@ -32,55 +32,57 @@ class Validation {
   }
 
   /**
-   * 验证区块号
+   * 验证区块号格式
    * @param {number|string} blockNumber - 区块号
    * @returns {boolean} 是否有效
    */
   static isValidBlockNumber(blockNumber) {
-    const num = Number(blockNumber);
-    return !isNaN(num) && num >= 0 && Number.isInteger(num);
+    return typeof blockNumber === 'number' && blockNumber >= 0;
   }
 
   /**
    * 验证金额格式
-   * @param {string|number|bigint} amount - 金额
+   * @param {string|number} amount - 金额
    * @returns {boolean} 是否有效
    */
   static isValidAmount(amount) {
-    try {
-      const value = BigInt(amount);
-      return value >= 0n;
-    } catch {
-      return false;
+    if (typeof amount === 'number') {
+      return amount >= 0;
     }
+    if (typeof amount === 'string') {
+      return /^\d+(\.\d+)?$/.test(amount) && parseFloat(amount) >= 0;
+    }
+    return false;
   }
 
   /**
-   * 验证gas价格
-   * @param {string|number|bigint} gasPrice - gas价格
+   * 验证 Gas 价格格式
+   * @param {string|number} gasPrice - Gas 价格
    * @returns {boolean} 是否有效
    */
   static isValidGasPrice(gasPrice) {
-    try {
-      const value = BigInt(gasPrice);
-      return value > 0n;
-    } catch {
-      return false;
+    if (typeof gasPrice === 'number') {
+      return gasPrice > 0;
     }
+    if (typeof gasPrice === 'string') {
+      return /^\d+(\.\d+)?$/.test(gasPrice) && parseFloat(gasPrice) > 0;
+    }
+    return false;
   }
 
   /**
-   * 验证gas限制
-   * @param {string|number|bigint} gasLimit - gas限制
+   * 验证 Gas 限制格式
+   * @param {string|number} gasLimit - Gas 限制
    * @returns {boolean} 是否有效
    */
   static isValidGasLimit(gasLimit) {
-    try {
-      const value = BigInt(gasLimit);
-      return value > 0n;
-    } catch {
-      return false;
+    if (typeof gasLimit === 'number') {
+      return gasLimit > 0;
     }
+    if (typeof gasLimit === 'string') {
+      return /^\d+$/.test(gasLimit) && parseInt(gasLimit) > 0;
+    }
+    return false;
   }
 
   /**
@@ -89,7 +91,7 @@ class Validation {
    * @returns {boolean} 是否有效
    */
   static isValidNetworkType(networkType) {
-    return ['local', 'testnet', 'mainnet'].includes(networkType?.toLowerCase());
+    return ['mainnet', 'testnet', 'local'].includes(networkType);
   }
 
   /**
@@ -120,42 +122,19 @@ class Validation {
       return false;
     }
 
-    if (transaction.to && !this.isValidAddress(transaction.to)) {
-      return false;
-    }
-
-    if (transaction.value && !this.isValidAmount(transaction.value)) {
-      return false;
-    }
-
-    if (transaction.gasLimit && !this.isValidGasLimit(transaction.gasLimit)) {
-      return false;
-    }
-
-    if (transaction.gasPrice && !this.isValidGasPrice(transaction.gasPrice)) {
-      return false;
-    }
-
-    if (transaction.maxFeePerGas && !this.isValidGasPrice(transaction.maxFeePerGas)) {
-      return false;
-    }
-
-    if (transaction.maxPriorityFeePerGas && !this.isValidGasPrice(transaction.maxPriorityFeePerGas)) {
-      return false;
-    }
-
-    return true;
+    const requiredFields = ['to', 'value', 'gasLimit', 'gasPrice'];
+    return requiredFields.every(field => field in transaction);
   }
 
   /**
-   * 验证并抛出错误
+   * 验证条件并抛出错误
    * @param {boolean} condition - 验证条件
-   * @param {string} message - 错误消息
+   * @param {string} message - 错误信息
    * @throws {ValidationError} 验证错误
    */
   static validate(condition, message) {
     if (!condition) {
-      throw new ValidationError(message);
+      throw ErrorHandler.handle(new Error(message), { type: 'validation' });
     }
   }
 }
