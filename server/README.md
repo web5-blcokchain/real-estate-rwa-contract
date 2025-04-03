@@ -101,20 +101,13 @@ yarn install
 
 ### 配置
 
-在项目根目录创建`.env`文件，参考`.env.example`设置以下关键配置：
+使用项目根目录下的`.env`文件进行配置，无需在server目录下创建单独的环境配置文件。
 
-```
-# 服务器配置
-PORT=3000
-HOST=localhost
-API_BASE_PATH=/api/v1
-
-# 区块链网络配置
-BLOCKCHAIN_NETWORK=localhost  # localhost, testnet, mainnet
-LOCAL_RPC_URL=http://localhost:8545
-TESTNET_RPC_URL=https://sepolia.infura.io/v3/your-key
-MAINNET_RPC_URL=https://mainnet.infura.io/v3/your-key
-```
+主要配置项包括:
+- 区块链节点RPC URL
+- 服务账户私钥
+- 数据库连接信息
+- 日志级别和配置
 
 ### 启动服务器
 
@@ -173,4 +166,121 @@ GET /api/v1/contracts/addresses
     "PropertyRegistry": "0xabcdef1234567890abcdef1234567890abcdef12"
   }
 }
-``` 
+```
+
+# 区块链服务器 (Blockchain Server)
+
+## 概述
+
+区块链服务器模块提供了与区块链网络交互的核心功能，负责处理链上交易，管理合约调用，以及提供区块链数据访问API。
+
+## 特性
+
+- 区块链交易处理
+- 智能合约调用接口
+- 交易签名和验证
+- 区块监控和事件处理
+- 钱包管理
+- 区块链数据缓存
+
+## 目录结构
+
+```
+server/
+├── src/                   # 源代码
+│   ├── controllers/       # 控制器
+│   ├── services/          # 服务层
+│   ├── models/            # 数据模型
+│   ├── middlewares/       # 中间件
+│   ├── utils/             # 工具函数
+│   ├── config/            # 配置文件
+│   └── index.js           # 入口文件
+├── scripts/               # 服务器相关脚本
+│   ├── analyze-logs.js    # 日志分析工具
+│   └── generate-test-logs.js # 测试日志生成工具
+├── docs/                  # 文档
+└── README.md              # 说明文档
+```
+
+## 安装
+
+确保您已经安装了Node.js (>= 18.0.0)
+
+```bash
+# 安装依赖
+cd server
+npm install
+```
+
+## 配置
+
+使用项目根目录下的`.env`文件进行配置，无需在server目录下创建单独的环境配置文件。
+
+主要配置项包括:
+- 区块链节点RPC URL
+- 服务账户私钥
+- 数据库连接信息
+- 日志级别和配置
+
+## 启动服务
+
+```
+```
+
+## 脚本工具
+
+服务器模块提供了以下脚本工具：
+
+### 日志分析工具 (analyze-logs.js)
+
+分析服务器API请求日志，提取性能指标并生成统计报告。
+
+```bash
+# 分析日志文件
+node server/scripts/analyze-logs.js [日志文件路径]
+
+# 生成API接口文档
+node server/scripts/analyze-logs.js [日志文件路径] --api-docs
+```
+
+### 测试日志生成工具 (generate-test-logs.js)
+
+生成模拟的API请求日志，用于测试和开发。
+
+```bash
+# 生成测试日志
+node server/scripts/generate-test-logs.js [日志数量] [输出文件路径]
+```
+
+### 房产代币化流程测试脚本 (test-property-flow.js)
+
+测试房地产代币化的完整业务流程，包括房产注册、代币创建、转账、交易和收益分配。
+
+```bash
+# 运行测试流程
+node server/scripts/test-property-flow.js
+```
+
+**功能特点:**
+- 测试房产注册和代币创建
+- 验证代币详情和转账功能
+- 测试销售订单创建
+- 模拟收益分配和领取流程
+- 自动适应不同合约接口
+
+> 注意: 运行此脚本前需确保已配置好.env文件中的合约地址和私钥。
+
+### 房产代币化流程模拟测试脚本 (test-property-flow-mock.js)
+
+使用模拟数据测试房地产代币化的完整业务流程，无需实际连接区块链网络。
+
+```bash
+# 运行模拟测试流程
+node server/scripts/test-property-flow-mock.js
+```
+
+**功能特点:**
+- 使用模拟数据模拟完整流程
+- 无需区块链网络连接
+- 适合演示和开发测试
+- 完整模拟交易交互流程和等待时间

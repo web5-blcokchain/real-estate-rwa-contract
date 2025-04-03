@@ -18,6 +18,21 @@ class Validation {
   }
 
   /**
+   * 验证值是否非空
+   * @param {*} value - 要验证的值
+   * @returns {boolean} 是否非空
+   */
+  static isNotEmpty(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) return value.length > 0;
+      return Object.keys(value).length > 0;
+    }
+    return true;
+  }
+
+  /**
    * 验证地址格式
    * @param {string} address - 以太坊地址
    * @returns {boolean} 是否有效
@@ -115,7 +130,9 @@ class Validation {
    * @returns {boolean} 是否有效
    */
   static isValidNetworkType(networkType) {
-    return ['mainnet', 'testnet', 'local'].includes(networkType);
+    if (!networkType) return false;
+    // 只接受标准化的网络类型，不接受'local'
+    return ['mainnet', 'testnet', 'localhost'].includes(networkType.toLowerCase());
   }
 
   /**
@@ -227,8 +244,19 @@ class Validation {
    * @returns {boolean} 是否有效
    */
   static isValidChainId(chainId) {
-    if (!chainId || typeof chainId !== 'number') return false;
-    return chainId > 0;
+    if (chainId === undefined || chainId === null) return false;
+    
+    // 如果是数字
+    if (typeof chainId === 'number') {
+      return chainId > 0;
+    }
+    
+    // 如果是字符串
+    if (typeof chainId === 'string') {
+      return /^\d+$/.test(chainId) && parseInt(chainId) > 0;
+    }
+    
+    return false;
   }
 
   /**
@@ -291,6 +319,55 @@ class Validation {
     if (!hash.startsWith('0x')) return false;
     if (hash.length !== 66) return false;
     return /^0x[0-9a-fA-F]{64}$/.test(hash);
+  }
+
+  /**
+   * 验证事件过滤器
+   * @param {Object} filter - 事件过滤器
+   * @returns {boolean} 是否有效
+   */
+  static isValidEventFilter(filter) {
+    if (!this.isValidObject(filter)) return false;
+    
+    // 验证区块范围
+    if (filter.fromBlock !== undefined && 
+       !(['latest', 'earliest', 'pending'].includes(filter.fromBlock) || 
+         this.isValidBlockNumber(filter.fromBlock))) {
+      return false;
+    }
+    
+    if (filter.toBlock !== undefined && 
+       !(['latest', 'earliest', 'pending'].includes(filter.toBlock) || 
+         this.isValidBlockNumber(filter.toBlock))) {
+      return false;
+    }
+    
+    // 验证地址
+    if (filter.address !== undefined) {
+      if (Array.isArray(filter.address)) {
+        for (const addr of filter.address) {
+          if (!this.isValidAddress(addr)) return false;
+        }
+      } else if (!this.isValidAddress(filter.address)) {
+        return false;
+      }
+    }
+    
+    // 验证主题
+    if (filter.topics && Array.isArray(filter.topics)) {
+      for (const topic of filter.topics) {
+        if (topic === null) continue;
+        if (Array.isArray(topic)) {
+          for (const t of topic) {
+            if (t !== null && !this.isValidHash(t)) return false;
+          }
+        } else if (!this.isValidHash(topic)) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
   }
 }
 

@@ -74,11 +74,13 @@ const serverConfig = {
    * @returns {Object} 区块链配置
    */
   getBlockchainConfig() {
+    // 不提供默认值，完全依赖环境变量
     return {
-      networkType: process.env.BLOCKCHAIN_NETWORK || 'localhost',
-      gasLimit: process.env.GAS_LIMIT || '3000000',
-      gasPrice: process.env.GAS_PRICE || 'auto',
-      confirmations: parseInt(process.env.CONFIRMATIONS || '1', 10)
+      networkType: process.env.BLOCKCHAIN_NETWORK,
+      rpcUrl: process.env.BLOCKCHAIN_RPC_URL,
+      gasLimit: process.env.GAS_LIMIT,
+      gasPrice: process.env.GAS_PRICE,
+      confirmations: process.env.CONFIRMATIONS ? parseInt(process.env.CONFIRMATIONS, 10) : undefined
     };
   },
 

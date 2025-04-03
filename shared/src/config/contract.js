@@ -2,132 +2,114 @@ const path = require('path');
 const fs = require('fs');
 const { Validation } = require('../utils/validation');
 const { ConfigError } = require('../utils/errors');
+const EnvConfig = require('./env');
+const AbiConfig = require('./abi');
 
 /**
  * 合约配置类
  */
 class ContractConfig {
   /**
-   * 加载合约配置
-   * @param {Object} envConfig - 环境变量配置
-   * @returns {Object} 合约配置
-   */
-  static load(envConfig) {
-    try {
-      // 验证合约配置
-      this._validateContractConfig(envConfig);
-
-      // 加载ABI文件
-      const abi = this._loadABI(envConfig.CONTRACT_ABI_PATH);
-
-      return {
-        address: envConfig.CONTRACT_ADDRESS,
-        abiPath: envConfig.CONTRACT_ABI_PATH,
-        abi
-      };
-    } catch (error) {
-      throw new ConfigError(`加载合约配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 验证合约配置
-   * @private
-   * @param {Object} envConfig - 环境变量配置
-   */
-  static _validateContractConfig(envConfig) {
-    // 验证合约地址
-    Validation.validate(
-      Validation.isValidAddress(envConfig.CONTRACT_ADDRESS),
-      '无效的合约地址格式'
-    );
-
-    // 验证ABI文件路径
-    Validation.validate(
-      typeof envConfig.CONTRACT_ABI_PATH === 'string' && envConfig.CONTRACT_ABI_PATH.length > 0,
-      '无效的ABI文件路径'
-    );
-
-    // 验证ABI文件是否存在
-    const abiPath = path.resolve(process.cwd(), envConfig.CONTRACT_ABI_PATH);
-    Validation.validate(
-      fs.existsSync(abiPath),
-      'ABI文件不存在'
-    );
-  }
-
-  /**
-   * 加载ABI文件
-   * @private
-   * @param {string} abiPath - ABI文件路径
-   * @returns {Array} ABI数组
-   */
-  static _loadABI(abiPath) {
-    try {
-      const absolutePath = path.resolve(process.cwd(), abiPath);
-      const abiContent = fs.readFileSync(absolutePath, 'utf8');
-      return JSON.parse(abiContent);
-    } catch (error) {
-      throw new ConfigError(`加载ABI文件失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 获取合约ABI
-   * @param {string} contractName - 合约名称
-   * @returns {Object} 合约ABI
-   */
-  static getContractABI(contractName) {
-    try {
-      const abiPath = path.join(process.cwd(), 'config', 'contracts.json');
-      if (!fs.existsSync(abiPath)) {
-        throw new ConfigError('合约ABI文件不存在');
-      }
-
-      const abis = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-      if (!abis[contractName]) {
-        throw new ConfigError(`未找到合约 ${contractName} 的ABI`);
-      }
-
-      return abis[contractName];
-    } catch (error) {
-      throw new ConfigError(`获取合约ABI失败: ${error.message}`);
-    }
-  }
-
-  /**
    * 获取合约地址
    * @param {string} contractName - 合约名称
    * @returns {string} 合约地址
    */
   static getContractAddress(contractName) {
-    try {
-      const configPath = path.join(process.cwd(), 'config', 'contracts.js');
-      if (!fs.existsSync(configPath)) {
-        throw new ConfigError('合约配置文件不存在');
-      }
-
-      const config = require(configPath);
-      if (!config[contractName]) {
-        throw new ConfigError(`未找到合约 ${contractName} 的地址`);
-      }
-
-      return config[contractName];
-    } catch (error) {
-      throw new ConfigError(`获取合约地址失败: ${error.message}`);
+    if (!contractName) {
+      throw new ConfigError('合约名称不能为空');
     }
+
+    // 构造环境变量键名
+    const envKey = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName.toUpperCase()}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
+    const address = EnvConfig.getEnv(envKey);
+    
+    if (!address) {
+      throw new ConfigError(`未找到合约 ${contractName} 的地址`);
+    }
+    
+    return address;
+  }
+
+  /**
+   * 获取所有合约地址
+   * @returns {Object} 合约名称和地址的映射
+   */
+  static getAllContractAddresses() {
+    const addresses = {};
+    const prefix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX;
+    const suffix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX;
+    
+    // 遍历环境变量，查找合约地址
+    for (const key in process.env) {
+      const pattern = new RegExp(`^${prefix}([A-Z0-9_]+)${suffix}$`);
+      const match = key.match(pattern);
+      if (match) {
+        const contractName = match[1];
+        const address = EnvConfig.getEnv(key);
+        if (address) {
+          addresses[contractName] = address;
+        }
+      }
+    }
+    
+    return addresses;
   }
 
   /**
    * 获取合约实例配置
    * @param {string} contractName - 合约名称
-   * @returns {Object} 合约配置
+   * @returns {Object} 合约配置 {address, abi}
    */
   static getContractConfig(contractName) {
+    if (!contractName) {
+      throw new ConfigError('合约名称不能为空');
+    }
+    
+    // 获取合约地址
+    const address = this.getContractAddress(contractName);
+    
+    // 获取合约ABI
+    const contractInfo = AbiConfig.getContractAbi(contractName);
+    if (!contractInfo || !contractInfo.abi) {
+      throw new ConfigError(`未找到合约 ${contractName} 的ABI信息`);
+    }
+    
     return {
-      address: this.getContractAddress(contractName),
-      abi: this.getContractABI(contractName)
+      name: contractName,
+      address,
+      abi: contractInfo.abi,
+      functions: contractInfo.functions,
+      events: contractInfo.events
     };
+  }
+
+  /**
+   * 获取所有合约配置
+   * @returns {Object} 所有合约配置
+   */
+  static getAllContractConfigs() {
+    const addresses = this.getAllContractAddresses();
+    const contracts = {};
+    
+    for (const [contractName, address] of Object.entries(addresses)) {
+      try {
+        const contractInfo = AbiConfig.getContractAbi(contractName);
+        if (contractInfo && contractInfo.abi) {
+          contracts[contractName] = {
+            name: contractName,
+            address,
+            abi: contractInfo.abi,
+            functions: contractInfo.functions,
+            events: contractInfo.events
+          };
+        }
+      } catch (error) {
+        // 忽略不存在ABI的合约
+        console.warn(`未找到合约 ${contractName} 的ABI信息`);
+      }
+    }
+    
+    return contracts;
   }
 }
 

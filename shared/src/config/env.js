@@ -3,6 +3,62 @@ const path = require('path');
 const { ConfigError } = require('../utils/errors');
 
 /**
+ * 环境变量键名常量
+ * @enum {string}
+ */
+const ENV_KEYS = {
+  // 环境配置
+  NODE_ENV: 'NODE_ENV',
+  BLOCKCHAIN_NETWORK: 'BLOCKCHAIN_NETWORK',
+  
+  // 日志配置
+  LOG_LEVEL: 'LOG_LEVEL',
+  LOG_DIR: 'LOG_DIR',
+  
+  // Chain IDs
+  HARDHAT_CHAIN_ID: 'HARDHAT_CHAIN_ID',
+  LOCALHOST_CHAIN_ID: 'LOCALHOST_CHAIN_ID',
+  TESTNET_CHAIN_ID: 'TESTNET_CHAIN_ID',
+  MAINNET_CHAIN_ID: 'MAINNET_CHAIN_ID',
+  
+  // RPC URLs
+  RPC_URL: 'RPC_URL', // 通用RPC URL，优先级高于网络特定RPC
+  LOCALHOST_RPC_URL: 'LOCALHOST_RPC_URL',
+  
+  TESTNET_RPC_URL: 'TESTNET_RPC_URL',
+  MAINNET_RPC_URL: 'MAINNET_RPC_URL',
+  
+  // Gas配置
+  GAS_LIMIT: 'GAS_LIMIT',
+  GAS_PRICE: 'GAS_PRICE',
+  REPORT_GAS: 'REPORT_GAS',
+  
+  // 私钥配置
+  ADMIN_PRIVATE_KEY: 'ADMIN_PRIVATE_KEY',
+  MANAGER_PRIVATE_KEY: 'MANAGER_PRIVATE_KEY',
+  OPERATOR_PRIVATE_KEY: 'OPERATOR_PRIVATE_KEY',
+  CONTRACT_MANAGER_PRIVATE_KEY: 'CONTRACT_MANAGER_PRIVATE_KEY',
+  PROPERTY_MANAGER_PRIVATE_KEY: 'PROPERTY_MANAGER_PRIVATE_KEY',
+  DEPLOYER_PRIVATE_KEY: 'DEPLOYER_PRIVATE_KEY',
+  
+  // 钱包配置
+  WALLET_PRIVATE_KEY: 'WALLET_PRIVATE_KEY',
+  WALLET_MNEMONIC: 'WALLET_MNEMONIC',
+  WALLET_PATH: 'WALLET_PATH',
+  
+  // 合约配置前缀和后缀
+  CONTRACT_ADDRESS_PREFIX: 'CONTRACT_',
+  CONTRACT_ADDRESS_SUFFIX: '_ADDRESS',
+  
+  // API配置
+  API_KEY: 'API_KEY',
+  
+  // 服务器配置
+  PORT: 'PORT',
+  HOST: 'HOST'
+};
+
+/**
  * 环境变量配置类
  */
 class EnvConfig {
@@ -12,26 +68,26 @@ class EnvConfig {
    */
   static _defaultConfig = {
     // 环境配置
-    NODE_ENV: 'development',
-    BLOCKCHAIN_NETWORK: 'localhost',
+    [ENV_KEYS.NODE_ENV]: 'development',
+    [ENV_KEYS.BLOCKCHAIN_NETWORK]: 'localhost',
 
     // 日志配置
-    LOG_LEVEL: 'debug',
-    LOG_DIR: 'logs',
+    [ENV_KEYS.LOG_LEVEL]: 'debug',
+    [ENV_KEYS.LOG_DIR]: 'logs',
 
     // Chain IDs
-    HARDHAT_CHAIN_ID: '31337',
-    LOCALHOST_CHAIN_ID: '31337',
-    TESTNET_CHAIN_ID: '11155111',
-    MAINNET_CHAIN_ID: '1',
+    [ENV_KEYS.HARDHAT_CHAIN_ID]: '31337',
+    [ENV_KEYS.LOCALHOST_CHAIN_ID]: '31337',
+    [ENV_KEYS.TESTNET_CHAIN_ID]: '11155111',
+    [ENV_KEYS.MAINNET_CHAIN_ID]: '1',
 
     // RPC URLs
-    LOCALHOST_RPC_URL: 'http://localhost:8545',
+    [ENV_KEYS.LOCALHOST_RPC_URL]: 'http://localhost:8545',
     
     // Gas配置
-    GAS_LIMIT: '3000000',
-    GAS_PRICE: 'auto',
-    REPORT_GAS: 'true'
+    [ENV_KEYS.GAS_LIMIT]: '3000000',
+    [ENV_KEYS.GAS_PRICE]: 'auto',
+    [ENV_KEYS.REPORT_GAS]: 'true'
   };
 
   /**
@@ -63,10 +119,10 @@ class EnvConfig {
    */
   static _validateRequiredEnv(config) {
     const requiredEnv = [
-      'BLOCKCHAIN_NETWORK',
-      'ADMIN_PRIVATE_KEY',
-      'MANAGER_PRIVATE_KEY',
-      'OPERATOR_PRIVATE_KEY'
+      ENV_KEYS.BLOCKCHAIN_NETWORK,
+      ENV_KEYS.ADMIN_PRIVATE_KEY,
+      ENV_KEYS.MANAGER_PRIVATE_KEY,
+      ENV_KEYS.OPERATOR_PRIVATE_KEY
     ];
 
     for (const env of requiredEnv) {
@@ -77,8 +133,8 @@ class EnvConfig {
 
     // 验证网络类型
     const validNetworks = ['localhost', 'testnet', 'mainnet'];
-    if (!validNetworks.includes(config.BLOCKCHAIN_NETWORK)) {
-      throw new ConfigError(`无效的网络类型: ${config.BLOCKCHAIN_NETWORK}`);
+    if (!validNetworks.includes(config[ENV_KEYS.BLOCKCHAIN_NETWORK])) {
+      throw new ConfigError(`无效的网络类型: ${config[ENV_KEYS.BLOCKCHAIN_NETWORK]}`);
     }
 
     // 验证私钥格式
@@ -88,13 +144,13 @@ class EnvConfig {
       return /^[0-9a-fA-F]{64}$/.test(cleanKey);
     };
 
-    if (!isValidPrivateKey(config.ADMIN_PRIVATE_KEY)) {
+    if (!isValidPrivateKey(config[ENV_KEYS.ADMIN_PRIVATE_KEY])) {
       throw new ConfigError('无效的管理员私钥格式');
     }
-    if (!isValidPrivateKey(config.MANAGER_PRIVATE_KEY)) {
+    if (!isValidPrivateKey(config[ENV_KEYS.MANAGER_PRIVATE_KEY])) {
       throw new ConfigError('无效的管理者私钥格式');
     }
-    if (!isValidPrivateKey(config.OPERATOR_PRIVATE_KEY)) {
+    if (!isValidPrivateKey(config[ENV_KEYS.OPERATOR_PRIVATE_KEY])) {
       throw new ConfigError('无效的操作者私钥格式');
     }
   }
@@ -108,11 +164,11 @@ class EnvConfig {
   static _convertConfigTypes(config) {
     return {
       ...config,
-      HARDHAT_CHAIN_ID: parseInt(config.HARDHAT_CHAIN_ID),
-      LOCALHOST_CHAIN_ID: parseInt(config.LOCALHOST_CHAIN_ID),
-      TESTNET_CHAIN_ID: parseInt(config.TESTNET_CHAIN_ID),
-      MAINNET_CHAIN_ID: parseInt(config.MAINNET_CHAIN_ID),
-      REPORT_GAS: config.REPORT_GAS === 'true'
+      [ENV_KEYS.HARDHAT_CHAIN_ID]: parseInt(config[ENV_KEYS.HARDHAT_CHAIN_ID]),
+      [ENV_KEYS.LOCALHOST_CHAIN_ID]: parseInt(config[ENV_KEYS.LOCALHOST_CHAIN_ID]),
+      [ENV_KEYS.TESTNET_CHAIN_ID]: parseInt(config[ENV_KEYS.TESTNET_CHAIN_ID]),
+      [ENV_KEYS.MAINNET_CHAIN_ID]: parseInt(config[ENV_KEYS.MAINNET_CHAIN_ID]),
+      [ENV_KEYS.REPORT_GAS]: config[ENV_KEYS.REPORT_GAS] === 'true'
     };
   }
 
@@ -134,14 +190,19 @@ class EnvConfig {
 
   /**
    * 获取网络类型
-   * @returns {string} 网络类型 (local|testnet|mainnet)
+   * @returns {string} 网络类型
    */
   static getNetworkType() {
-    const networkType = process.env.NETWORK_TYPE?.toLowerCase();
-    if (!networkType || !['local', 'testnet', 'mainnet'].includes(networkType)) {
-      throw new ConfigError('无效的网络类型配置');
+    const networkType = process.env[ENV_KEYS.BLOCKCHAIN_NETWORK]?.toLowerCase();
+    
+    // 处理空值或无效网络类型
+    if (!networkType || !['localhost', 'local', 'testnet', 'mainnet'].includes(networkType)) {
+      console.warn(`未知的网络类型: ${networkType}，将使用localhost`);
+      return 'localhost';
     }
-    return networkType;
+    
+    // 统一将local返回为localhost
+    return networkType === 'local' ? 'localhost' : networkType;
   }
 
   /**
@@ -150,23 +211,33 @@ class EnvConfig {
    */
   static getNetworkConfig() {
     const networkType = this.getNetworkType();
+    
+    // 检查是否有全局RPC_URL配置，如果有则优先使用
+    const globalRpcUrl = process.env[ENV_KEYS.RPC_URL];
+    
     const config = {
-      local: {
-        rpcUrl: process.env.LOCAL_RPC_URL,
-        chainId: parseInt(process.env.LOCAL_CHAIN_ID),
-        name: 'Local Network'
+      localhost: {
+        rpcUrl: globalRpcUrl || process.env[ENV_KEYS.LOCALHOST_RPC_URL] || 'http://localhost:8545',
+        chainId: parseInt(process.env[ENV_KEYS.LOCALHOST_CHAIN_ID] || '31337'),
+        name: 'Localhost Network'
       },
       testnet: {
-        rpcUrl: process.env.TESTNET_RPC_URL,
-        chainId: parseInt(process.env.TESTNET_CHAIN_ID),
+        rpcUrl: globalRpcUrl || process.env[ENV_KEYS.TESTNET_RPC_URL],
+        chainId: parseInt(process.env[ENV_KEYS.TESTNET_CHAIN_ID]),
         name: 'Test Network'
       },
       mainnet: {
-        rpcUrl: process.env.MAINNET_RPC_URL,
-        chainId: parseInt(process.env.MAINNET_CHAIN_ID),
+        rpcUrl: globalRpcUrl || process.env[ENV_KEYS.MAINNET_RPC_URL],
+        chainId: parseInt(process.env[ENV_KEYS.MAINNET_CHAIN_ID]),
         name: 'Main Network'
       }
     };
+
+    // 如果未找到指定网络类型，使用本地网络配置
+    if (!config[networkType]) {
+      console.warn(`未知的网络类型: ${networkType}，将使用localhost配置`);
+      return config.localhost;
+    }
 
     if (!config[networkType].rpcUrl || !config[networkType].chainId) {
       throw new ConfigError(`${networkType}网络配置不完整`);
@@ -180,7 +251,7 @@ class EnvConfig {
    * @returns {string} 管理员私钥
    */
   static getAdminPrivateKey() {
-    const privateKey = process.env.ADMIN_PRIVATE_KEY;
+    const privateKey = process.env[ENV_KEYS.ADMIN_PRIVATE_KEY];
     if (!privateKey) {
       throw new ConfigError('管理员私钥未配置');
     }
@@ -192,7 +263,7 @@ class EnvConfig {
    * @returns {string} 合约管理员私钥
    */
   static getContractManagerPrivateKey() {
-    const privateKey = process.env.CONTRACT_MANAGER_PRIVATE_KEY;
+    const privateKey = process.env[ENV_KEYS.CONTRACT_MANAGER_PRIVATE_KEY];
     if (!privateKey) {
       throw new ConfigError('合约管理员私钥未配置');
     }
@@ -206,26 +277,36 @@ class EnvConfig {
    */
   static getContractConfig(contractName) {
     try {
-      // 如果没有指定合约名称，返回默认合约配置
+      // 如果没有指定合约名称，抛出错误
       if (!contractName) {
-        return {
-          address: process.env.DEFAULT_CONTRACT_ADDRESS,
-          abi: JSON.parse(process.env.DEFAULT_CONTRACT_ABI || '[]')
-        };
+        throw new ConfigError('合约名称不能为空');
       }
 
       // 获取指定合约的配置
-      const address = process.env[`${contractName.toUpperCase()}_CONTRACT_ADDRESS`];
-      const abi = process.env[`${contractName.toUpperCase()}_CONTRACT_ABI`];
+      const prefix = ENV_KEYS.CONTRACT_ADDRESS_PREFIX;
+      const suffix = ENV_KEYS.CONTRACT_ADDRESS_SUFFIX;
+      const addressKey = `${prefix}${contractName.toUpperCase()}${suffix}`;
+      const abiKey = `${addressKey}_ABI`;
+      
+      const address = process.env[addressKey];
+      const abi = process.env[abiKey];
 
-      if (!address || !abi) {
-        throw new ConfigError(`合约 ${contractName} 配置不完整`);
+      if (!address) {
+        throw new ConfigError(`合约 ${contractName} 地址未配置`);
       }
 
-      return {
-        address,
-        abi: JSON.parse(abi)
-      };
+      if (!abi) {
+        throw new ConfigError(`合约 ${contractName} ABI未配置`);
+      }
+
+      try {
+        return {
+          address,
+          abi: JSON.parse(abi)
+        };
+      } catch (e) {
+        throw new ConfigError(`合约 ${contractName} ABI格式无效: ${e.message}`);
+      }
     } catch (error) {
       throw new ConfigError(`获取合约配置失败: ${error.message}`);
     }
@@ -236,11 +317,22 @@ class EnvConfig {
    * @returns {string} 物业管理员私钥
    */
   static getPropertyManagerPrivateKey() {
-    const privateKey = process.env.PROPERTY_MANAGER_PRIVATE_KEY;
+    const privateKey = process.env[ENV_KEYS.PROPERTY_MANAGER_PRIVATE_KEY];
     if (!privateKey) {
       throw new ConfigError('物业管理员私钥未配置');
     }
     return privateKey;
+  }
+
+  /**
+   * 获取环境变量值
+   * @param {string} keyName - 环境变量名称
+   * @param {*} [defaultValue=null] - 默认值（当环境变量不存在时返回）
+   * @returns {string|null} 环境变量值，如不存在且未提供默认值则返回null
+   */
+  static getEnv(keyName, defaultValue = null) {
+    if (!keyName) return defaultValue;
+    return process.env[keyName] || defaultValue;
   }
 
   /**
@@ -249,9 +341,9 @@ class EnvConfig {
    */
   static getWalletConfig() {
     return {
-      WALLET_PRIVATE_KEY: process.env.WALLET_PRIVATE_KEY,
-      WALLET_MNEMONIC: process.env.WALLET_MNEMONIC,
-      WALLET_PATH: process.env.WALLET_PATH || "m/44'/60'/0'/0/0"
+      [ENV_KEYS.WALLET_PRIVATE_KEY]: process.env[ENV_KEYS.WALLET_PRIVATE_KEY],
+      [ENV_KEYS.WALLET_MNEMONIC]: process.env[ENV_KEYS.WALLET_MNEMONIC],
+      [ENV_KEYS.WALLET_PATH]: process.env[ENV_KEYS.WALLET_PATH] || "m/44'/60'/0'/0/0"
     };
   }
 
@@ -261,11 +353,13 @@ class EnvConfig {
    */
   static getLoggerConfig() {
     return {
-      level: process.env.LOG_LEVEL || 'info',
+      level: process.env[ENV_KEYS.LOG_LEVEL] || 'info',
       dir: path.join(process.cwd(), 'logs'),
       filename: 'blockchain.log'
     };
   }
 }
 
-module.exports = EnvConfig; 
+// 导出常量和类
+module.exports = EnvConfig;
+module.exports.ENV_KEYS = ENV_KEYS; 

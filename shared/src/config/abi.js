@@ -5,49 +5,44 @@ const { ConfigError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 
 /**
+ * ABI路径常量
+ */
+const DEFAULT_ABI_DIR = 'config/abi';
+
+/**
  * ABI配置类
+ * 专门负责合约ABI文件的加载和解析
  */
 class ABIConfig {
   /**
    * 加载ABI配置
-   * @param {Object} envConfig - 环境变量配置
+   * @param {string} [abiPath] - ABI文件路径
    * @returns {Object} ABI配置
    */
-  static load(envConfig) {
+  static load(abiPath) {
     try {
-      // 验证ABI配置
-      this._validateABIConfig(envConfig);
-
-      // 加载ABI文件
-      const abi = this._loadABI(envConfig.CONTRACT_ABI_PATH);
-
+      const resolvedPath = abiPath || DEFAULT_ABI_DIR;
+      
+      // 验证路径存在
+      const absolutePath = path.resolve(process.cwd(), resolvedPath);
+      if (!fs.existsSync(absolutePath)) {
+        throw new ConfigError(`ABI路径不存在: ${absolutePath}`);
+      }
+      
+      // 如果是目录，加载所有ABI文件
+      if (fs.statSync(absolutePath).isDirectory()) {
+        return this.loadAllContractAbis(resolvedPath);
+      }
+      
+      // 否则加载单个ABI文件
+      const abi = this._loadABI(resolvedPath);
       return {
-        path: envConfig.CONTRACT_ABI_PATH,
+        path: resolvedPath,
         abi
       };
     } catch (error) {
       throw new ConfigError(`加载ABI配置失败: ${error.message}`);
     }
-  }
-
-  /**
-   * 验证ABI配置
-   * @private
-   * @param {Object} envConfig - 环境变量配置
-   */
-  static _validateABIConfig(envConfig) {
-    // 验证ABI文件路径
-    Validation.validate(
-      typeof envConfig.CONTRACT_ABI_PATH === 'string' && envConfig.CONTRACT_ABI_PATH.length > 0,
-      '无效的ABI文件路径'
-    );
-
-    // 验证ABI文件是否存在
-    const abiPath = path.resolve(process.cwd(), envConfig.CONTRACT_ABI_PATH);
-    Validation.validate(
-      fs.existsSync(abiPath),
-      'ABI文件不存在'
-    );
   }
 
   /**
@@ -80,7 +75,7 @@ class ABIConfig {
    * @param {Array} abi - ABI数组
    * @returns {Object} 方法ABI
    */
-  static getMethodABI(methodName, abi) {
+  static getMethodAbi(methodName, abi) {
     const method = abi.find(item => 
       item.type === 'function' && 
       item.name === methodName
@@ -99,7 +94,7 @@ class ABIConfig {
    * @param {Array} abi - ABI数组
    * @returns {Object} 事件ABI
    */
-  static getEventABI(eventName, abi) {
+  static getEventAbi(eventName, abi) {
     const event = abi.find(item => 
       item.type === 'event' && 
       item.name === eventName
@@ -114,10 +109,10 @@ class ABIConfig {
 
   /**
    * 加载指定目录下的所有ABI文件
-   * @param {string} [dirPath='config/abi'] - ABI文件目录路径
-   * @returns {Object} 合约ABI映射表 {contractName: {abi, functions, events, address}}
+   * @param {string} [dirPath=DEFAULT_ABI_DIR] - ABI文件目录路径
+   * @returns {Object} 合约ABI映射表 {contractName: {abi, functions, events}}
    */
-  static loadAllContracts(dirPath = 'config/abi') {
+  static loadAllContractAbis(dirPath = DEFAULT_ABI_DIR) {
     try {
       const abiDir = path.resolve(process.cwd(), dirPath);
       if (!fs.existsSync(abiDir)) {
@@ -136,7 +131,7 @@ class ABIConfig {
         
         try {
           const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          const contractInfo = this._parseContractABI(abiJson, contractName);
+          const contractInfo = this._parseContractAbi(abiJson, contractName);
           contracts[contractName] = contractInfo;
           
           Logger.info(`已加载合约ABI: ${contractName}`);
@@ -159,7 +154,7 @@ class ABIConfig {
    * @param {string} contractName - 合约名称
    * @returns {Object} 解析后的合约信息
    */
-  static _parseContractABI(abi, contractName) {
+  static _parseContractAbi(abi, contractName) {
     const functions = {};
     const events = {};
     const readFunctions = {};
@@ -187,28 +182,23 @@ class ABIConfig {
       }
     }
     
-    // 尝试从环境变量获取合约地址
-    const envKey = `CONTRACT_${contractName.toUpperCase()}_ADDRESS`;
-    const address = process.env[envKey] || null;
-    
     return {
       name: contractName,
       abi,
       functions,
       readFunctions,
       writeFunctions,
-      events,
-      address
+      events
     };
   }
 
   /**
    * 获取指定合约的ABI信息
    * @param {string} contractName - 合约名称
-   * @param {string} [dirPath='config/abi'] - ABI文件目录路径
+   * @param {string} [dirPath=DEFAULT_ABI_DIR] - ABI文件目录路径
    * @returns {Object} 合约ABI信息
    */
-  static getContractABI(contractName, dirPath = 'config/abi') {
+  static getContractAbi(contractName, dirPath = DEFAULT_ABI_DIR) {
     try {
       const filePath = path.join(path.resolve(process.cwd(), dirPath), `${contractName}.json`);
       
@@ -217,11 +207,13 @@ class ABIConfig {
       }
       
       const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      return this._parseContractABI(abiJson, contractName);
+      return this._parseContractAbi(abiJson, contractName);
     } catch (error) {
       throw new ConfigError(`获取合约ABI失败: ${error.message}`);
     }
   }
 }
 
-module.exports = ABIConfig; 
+// 导出常量和类
+module.exports = ABIConfig;
+module.exports.DEFAULT_ABI_DIR = DEFAULT_ABI_DIR; 

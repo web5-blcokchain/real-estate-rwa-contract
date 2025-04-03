@@ -7,6 +7,7 @@ const Validation = require('./validation');
 const Logger = require('./logger');
 const PerformanceMonitor = require('./performance');
 const SecurityAuditor = require('./security');
+const ContractUtils = require('./contract');
 const { 
   ErrorCodes,
   BlockchainError,
@@ -37,6 +38,9 @@ module.exports = {
   
   // 安全审计
   SecurityAuditor,
+
+  // 合约工具
+  ContractUtils,
   
   // 错误处理
   ErrorCodes,

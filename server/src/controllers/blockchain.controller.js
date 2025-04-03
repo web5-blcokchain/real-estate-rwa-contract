@@ -3,6 +3,8 @@
  */
 const { Logger, ErrorHandler } = require('../../../shared/src');
 const { validateParams } = require('../utils');
+const { success, error } = require('../utils/apiResponse');
+const { HTTP_STATUS, ERROR_CODES } = require('../constants');
 const blockchainService = require('../services/blockchain.service');
 
 /**
@@ -14,19 +16,16 @@ const blockchainService = require('../services/blockchain.service');
 async function getNetworkInfo(req, res, next) {
   try {
     const networkInfo = await blockchainService.getNetworkInfo();
-    res.json({
-      success: true,
-      data: networkInfo
-    });
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, networkInfo);
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'api',
       context: {
         method: 'getNetworkInfo'
       }
     });
     Logger.error('获取区块链网络信息失败', { error: handledError });
-    next(handledError);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -51,21 +50,15 @@ async function getTransaction(req, res, next) {
     const transaction = await blockchainService.getTransaction(hash);
     
     if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'TRANSACTION_NOT_FOUND',
-          message: `交易 ${hash} 不存在或尚未确认`
-        }
-      });
+      const notFoundError = new Error(`交易 ${hash} 不存在或尚未确认`);
+      notFoundError.code = ERROR_CODES.TRANSACTION_NOT_FOUND;
+      notFoundError.statusCode = HTTP_STATUS.NOT_FOUND;
+      return error(res, notFoundError, HTTP_STATUS.NOT_FOUND);
     }
     
-    res.json({
-      success: true,
-      data: transaction
-    });
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, transaction);
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'api',
       context: {
         method: 'getTransaction',
@@ -73,7 +66,7 @@ async function getTransaction(req, res, next) {
       }
     });
     Logger.error(`获取交易 ${req.params.hash} 详情失败`, { error: handledError });
-    next(handledError);
+    return error(res, handledError);
   }
 }
 
@@ -86,22 +79,19 @@ async function getTransaction(req, res, next) {
 async function getGasPrice(req, res, next) {
   try {
     const gasPrice = await blockchainService.getGasPrice();
-    res.json({
-      success: true,
-      data: {
-        gasPrice: gasPrice.toString(),
-        formattedGasPrice: `${(Number(gasPrice) / 1e9).toFixed(2)} Gwei`
-      }
+    return success(res, {
+      gasPrice: gasPrice.toString(),
+      formattedGasPrice: `${(Number(gasPrice) / 1e9).toFixed(2)} Gwei`
     });
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'api',
       context: {
         method: 'getGasPrice'
       }
     });
     Logger.error('获取Gas价格失败', { error: handledError });
-    next(handledError);
+    return error(res, handledError);
   }
 }
 

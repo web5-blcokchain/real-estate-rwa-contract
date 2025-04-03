@@ -2,6 +2,7 @@ const { ethers } = require('ethers');
 const { ProviderError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const Validation = require('../utils/validation');
+const NetworkConfig = require('../config/network');
 const EnvConfig = require('../config/env');
 
 /**
@@ -24,20 +25,24 @@ class Provider {
       // 设置默认值
       const rpcUrl = options.rpcUrl || networkConfig.rpcUrl;
       const chainId = options.chainId || networkConfig.chainId;
-
+      
       // 验证参数
       if (!Validation.isValidUrl(rpcUrl)) {
         throw new ProviderError('无效的 RPC URL');
       }
+      
       if (!Validation.isValidChainId(chainId)) {
         throw new ProviderError('无效的链 ID');
       }
-
+      
       // 创建 Provider 实例
       const provider = new ethers.JsonRpcProvider(rpcUrl, chainId);
       
       // 记录日志
-      Logger.info(`Provider 实例创建成功: ${rpcUrl}`, { module: 'provider' });
+      Logger.info(`Provider 实例创建成功: ${rpcUrl}，链ID: ${chainId}`, { 
+        module: 'provider',
+        network: NetworkConfig.getNetworkType()
+      });
       
       return provider;
     } catch (error) {

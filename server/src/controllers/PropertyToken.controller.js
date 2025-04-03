@@ -4,6 +4,8 @@
  */
 const { Contract, Wallet, Provider, Logger, ErrorHandler, Validation } = require('../../../shared/src');
 const { validateParams } = require('../utils');
+const { success, error } = require('../utils/apiResponse');
+const { HTTP_STATUS, ERROR_CODES } = require('../constants');
 const { blockchainService } = require('../services');
 const contractService = require('../services/contract.service');
 
@@ -70,32 +72,6 @@ function processContractResult(result) {
 }
 
 /**
- * 统一的API响应格式
- * @param {Object} res - Express响应对象
- * @param {any} data - 响应数据
- * @param {string} errorMessage - 错误消息
- * @param {number} statusCode - HTTP状态码
- */
-function sendResponse(res, data = null, errorMessage = null, statusCode = 200) {
-  const success = !errorMessage;
-  
-  const response = {
-    success,
-    timestamp: new Date().toISOString()
-  };
-  
-  if (success) {
-    response.data = data;
-  } else {
-    response.error = {
-      message: errorMessage
-    };
-  }
-  
-  return res.status(statusCode).json(response);
-}
-
-/**
  * 获取合约地址
  */
 async function getContractAddress(req, res) {
@@ -104,17 +80,20 @@ async function getContractAddress(req, res) {
     const address = await contractService.getAddressByName(CONTRACT_NAME);
     
     if (!address) {
-      return sendResponse(res, null, `未找到${CONTRACT_NAME}合约地址`, 404);
+      const notFoundError = new Error(`未找到${CONTRACT_NAME}合约地址`);
+      notFoundError.code = ERROR_CODES.CONTRACT_NOT_FOUND;
+      notFoundError.statusCode = HTTP_STATUS.NOT_FOUND;
+      return error(res, notFoundError, HTTP_STATUS.NOT_FOUND);
     }
     
-    return sendResponse(res, { address });
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, { address });
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { method: 'getContractAddress', contractName: CONTRACT_NAME }
     });
     Logger.error(`获取${CONTRACT_NAME}合约地址失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -125,14 +104,14 @@ async function name(req, res) {
   try {
     const contract = await initContract();
     const result = await Contract.call(contract, 'name');
-    return sendResponse(res, result);
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, result);
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { method: 'name', contractName: CONTRACT_NAME }
     });
     Logger.error(`调用${CONTRACT_NAME}.name失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -143,14 +122,14 @@ async function symbol(req, res) {
   try {
     const contract = await initContract();
     const result = await Contract.call(contract, 'symbol');
-    return sendResponse(res, result);
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, result);
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { method: 'symbol', contractName: CONTRACT_NAME }
     });
     Logger.error(`调用${CONTRACT_NAME}.symbol失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -171,14 +150,14 @@ async function balanceOf(req, res) {
     
     const contract = await initContract();
     const result = await Contract.call(contract, 'balanceOf', [account]);
-    return sendResponse(res, processContractResult(result));
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, processContractResult(result));
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { method: 'balanceOf', contractName: CONTRACT_NAME, account: req.query.account }
     });
     Logger.error(`调用${CONTRACT_NAME}.balanceOf失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -189,14 +168,14 @@ async function totalSupply(req, res) {
   try {
     const contract = await initContract();
     const result = await Contract.call(contract, 'totalSupply');
-    return sendResponse(res, processContractResult(result));
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+    return success(res, processContractResult(result));
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { method: 'totalSupply', contractName: CONTRACT_NAME }
     });
     Logger.error(`调用${CONTRACT_NAME}.totalSupply失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -242,13 +221,13 @@ async function transfer(req, res) {
     Logger.info(`交易已提交: ${tx.hash}`, { method: 'transfer' });
     const receipt = await Provider.waitForTransaction(provider, tx.hash);
     
-    return sendResponse(res, {
+    return success(res, {
       txHash: tx.hash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toString()
     });
-  } catch (error) {
-    const handledError = ErrorHandler.handle(error, {
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
       type: 'contract',
       context: { 
         method: 'transfer', 
@@ -257,7 +236,7 @@ async function transfer(req, res) {
       }
     });
     Logger.error(`调用${CONTRACT_NAME}.transfer失败: ${handledError.message}`, { error: handledError });
-    return sendResponse(res, null, handledError.message, 500);
+    return error(res, handledError, HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }
 

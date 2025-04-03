@@ -186,3 +186,53 @@ yarn dev:http
 ## 许可证
 
 MIT © [Your Organization]
+
+## 日志管理工具
+
+项目包含以下日志管理和分析工具，位于`server/scripts`目录：
+
+### 日志生成工具
+
+用于生成测试日志数据，以便测试日志分析功能。
+
+```bash
+# 生成测试日志
+node server/scripts/generate-test-logs.js [日志数量] [输出文件路径]
+
+# 示例：生成500条日志记录
+node server/scripts/generate-test-logs.js 500 
+```
+
+### 日志分析工具
+
+用于分析API请求日志，提取性能指标并生成统计报告。
+
+```bash
+# 分析日志文件
+node server/scripts/analyze-logs.js [日志文件路径]
+
+# 示例：分析指定日志文件
+node server/scripts/analyze-logs.js logs/server.log
+
+# 生成API接口文档
+node server/scripts/analyze-logs.js logs/server.log --api-docs
+```
+
+#### 分析报告内容
+
+分析报告包含以下内容：
+
+- **基本指标**：总请求数、总响应数、错误率、慢请求数
+- **性能指标**：平均响应时间、最小/最大响应时间、内存消耗、响应大小
+- **状态码分布**：按HTTP状态码分组的请求数量和百分比
+- **路径分布**：按API路径分组的请求数量、响应时间和状态码分布
+- **时间分布**：24小时内各时段的请求数量分布
+
+### 使用建议
+
+1. 在开发环境中使用生成工具创建测试日志
+2. 使用分析工具评估API性能和错误率
+3. 定期分析生产环境日志，监控系统健康状况
+4. 关注慢请求和错误请求，进行性能优化
+
+更多详细信息请参阅 [server/README.md](./server/README.md#日志管理工具)。

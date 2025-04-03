@@ -3,8 +3,8 @@
  * 通过shared模块与区块链合约交互
  */
 const { ethers } = require('ethers');
-const { Logger } = require('./logger');
-const { Config } = require('../config');
+const Logger = require('./logger');
+const { EnvConfig, ContractConfig } = require('../config');
 const { Provider, Wallet } = require('../core');
 
 /**
@@ -26,7 +26,7 @@ async function callContractMethod(contractName, methodName, args = []) {
     const provider = await Provider.create();
     
     // 获取合约地址和ABI
-    const contractConfig = Config.getContractConfig(contractName);
+    const contractConfig = ContractConfig.getContractConfig(contractName);
     if (!contractConfig || !contractConfig.address || !contractConfig.abi) {
       throw new Error(`找不到合约配置: ${contractName}`);
     }
@@ -73,7 +73,7 @@ async function sendContractTransaction(contractName, methodName, args = [], opti
     const provider = await Provider.create();
     
     // 获取合约地址和ABI
-    const contractConfig = Config.getContractConfig(contractName);
+    const contractConfig = ContractConfig.getContractConfig(contractName);
     if (!contractConfig || !contractConfig.address || !contractConfig.abi) {
       throw new Error(`找不到合约配置: ${contractName}`);
     }

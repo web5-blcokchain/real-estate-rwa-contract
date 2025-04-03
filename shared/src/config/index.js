@@ -3,7 +3,7 @@
  * @module config
  */
 
-const EnvConfig = require('./EnvConfig');
+const EnvConfig = require('./env');
 const AbiConfig = require('./abi');
 const WalletConfig = require('./wallet');
 const ContractConfig = require('./contract');

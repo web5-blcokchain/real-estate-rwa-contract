@@ -38,11 +38,9 @@ class BlockchainService {
         '网络类型不能为空'
       );
 
-      // 创建Provider
-      this.provider = await Provider.create({
-        networkType: this.networkType,
-        url: blockchainConfig.rpcUrl
-      });
+      // 使用共享模块创建Provider，不传入任何参数
+      // 让Provider自己从环境变量中读取配置
+      this.provider = await Provider.create();
 
       // 验证连接
       const network = await Provider.getNetwork(this.provider);
