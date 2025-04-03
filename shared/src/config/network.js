@@ -1,5 +1,5 @@
-const { Validation } = require('../utils/validation');
-const { ConfigError } = require('../utils/errors');
+const { NetworkConfigError } = require('./errors');
+const validation = require('./validation');
 const EnvConfig = require('./env');
 
 /**
@@ -36,7 +36,7 @@ class NetworkConfig {
         ...this._getNetworkSpecificConfig(networkType)
       };
     } catch (error) {
-      throw new ConfigError(`加载网络配置失败: ${error.message}`);
+      throw new NetworkConfigError(`加载网络配置失败: ${error.message}`);
     }
   }
 
@@ -50,19 +50,19 @@ class NetworkConfig {
     const normalizedType = this._normalizeNetworkType(envConfig.NETWORK_TYPE);
     
     // 验证网络类型
-    Validation.validate(
-      Validation.isValidNetworkType(normalizedType),
+    validation.validate(
+      validation.isValidNetworkType(normalizedType),
       '无效的网络类型'
     );
 
     // 验证网络URL
-    Validation.validate(
+    validation.validate(
       typeof envConfig.NETWORK_URL === 'string' && envConfig.NETWORK_URL.length > 0,
       '无效的网络URL'
     );
 
     // 验证链ID
-    Validation.validate(
+    validation.validate(
       typeof envConfig.NETWORK_CHAIN_ID === 'number' && envConfig.NETWORK_CHAIN_ID > 0,
       '无效的链ID'
     );

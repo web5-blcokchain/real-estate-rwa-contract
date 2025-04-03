@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 const path = require('path');
-const { ConfigError } = require('../utils/errors');
+const { EnvError } = require('./errors');
+const validation = require('./validation');
 
 /**
  * 环境变量键名常量
@@ -108,7 +109,7 @@ class EnvConfig {
       // 转换配置类型
       return this._convertConfigTypes(config);
     } catch (error) {
-      throw new ConfigError(`加载环境变量失败: ${error.message}`);
+      throw new EnvError(`加载环境变量失败: ${error.message}`);
     }
   }
 
@@ -127,31 +128,25 @@ class EnvConfig {
 
     for (const env of requiredEnv) {
       if (!config[env]) {
-        throw new ConfigError(`缺少必需的环境变量: ${env}`);
+        throw new EnvError(`缺少必需的环境变量: ${env}`);
       }
     }
 
     // 验证网络类型
     const validNetworks = ['localhost', 'testnet', 'mainnet'];
     if (!validNetworks.includes(config[ENV_KEYS.BLOCKCHAIN_NETWORK])) {
-      throw new ConfigError(`无效的网络类型: ${config[ENV_KEYS.BLOCKCHAIN_NETWORK]}`);
+      throw new EnvError(`无效的网络类型: ${config[ENV_KEYS.BLOCKCHAIN_NETWORK]}`);
     }
 
     // 验证私钥格式
-    const isValidPrivateKey = (key) => {
-      if (!key) return false;
-      const cleanKey = key.replace('0x', '');
-      return /^[0-9a-fA-F]{64}$/.test(cleanKey);
-    };
-
-    if (!isValidPrivateKey(config[ENV_KEYS.ADMIN_PRIVATE_KEY])) {
-      throw new ConfigError('无效的管理员私钥格式');
+    if (!validation.isValidPrivateKey(config[ENV_KEYS.ADMIN_PRIVATE_KEY])) {
+      throw new EnvError('无效的管理员私钥格式');
     }
-    if (!isValidPrivateKey(config[ENV_KEYS.MANAGER_PRIVATE_KEY])) {
-      throw new ConfigError('无效的管理者私钥格式');
+    if (!validation.isValidPrivateKey(config[ENV_KEYS.MANAGER_PRIVATE_KEY])) {
+      throw new EnvError('无效的管理者私钥格式');
     }
-    if (!isValidPrivateKey(config[ENV_KEYS.OPERATOR_PRIVATE_KEY])) {
-      throw new ConfigError('无效的操作者私钥格式');
+    if (!validation.isValidPrivateKey(config[ENV_KEYS.OPERATOR_PRIVATE_KEY])) {
+      throw new EnvError('无效的操作者私钥格式');
     }
   }
 
@@ -240,7 +235,7 @@ class EnvConfig {
     }
 
     if (!config[networkType].rpcUrl || !config[networkType].chainId) {
-      throw new ConfigError(`${networkType}网络配置不完整`);
+      throw new EnvError(`${networkType}网络配置不完整`);
     }
 
     return config[networkType];
@@ -253,7 +248,7 @@ class EnvConfig {
   static getAdminPrivateKey() {
     const privateKey = process.env[ENV_KEYS.ADMIN_PRIVATE_KEY];
     if (!privateKey) {
-      throw new ConfigError('管理员私钥未配置');
+      throw new EnvError('管理员私钥未配置');
     }
     return privateKey;
   }
@@ -265,7 +260,7 @@ class EnvConfig {
   static getContractManagerPrivateKey() {
     const privateKey = process.env[ENV_KEYS.CONTRACT_MANAGER_PRIVATE_KEY];
     if (!privateKey) {
-      throw new ConfigError('合约管理员私钥未配置');
+      throw new EnvError('合约管理员私钥未配置');
     }
     return privateKey;
   }
@@ -279,7 +274,7 @@ class EnvConfig {
     try {
       // 如果没有指定合约名称，抛出错误
       if (!contractName) {
-        throw new ConfigError('合约名称不能为空');
+        throw new EnvError('合约名称不能为空');
       }
 
       // 获取指定合约的配置
@@ -292,11 +287,11 @@ class EnvConfig {
       const abi = process.env[abiKey];
 
       if (!address) {
-        throw new ConfigError(`合约 ${contractName} 地址未配置`);
+        throw new EnvError(`合约 ${contractName} 地址未配置`);
       }
 
       if (!abi) {
-        throw new ConfigError(`合约 ${contractName} ABI未配置`);
+        throw new EnvError(`合约 ${contractName} ABI未配置`);
       }
 
       try {
@@ -305,10 +300,10 @@ class EnvConfig {
           abi: JSON.parse(abi)
         };
       } catch (e) {
-        throw new ConfigError(`合约 ${contractName} ABI格式无效: ${e.message}`);
+        throw new EnvError(`合约 ${contractName} ABI格式无效: ${e.message}`);
       }
     } catch (error) {
-      throw new ConfigError(`获取合约配置失败: ${error.message}`);
+      throw new EnvError(`获取合约配置失败: ${error.message}`);
     }
   }
 
@@ -319,7 +314,7 @@ class EnvConfig {
   static getPropertyManagerPrivateKey() {
     const privateKey = process.env[ENV_KEYS.PROPERTY_MANAGER_PRIVATE_KEY];
     if (!privateKey) {
-      throw new ConfigError('物业管理员私钥未配置');
+      throw new EnvError('物业管理员私钥未配置');
     }
     return privateKey;
   }
@@ -353,9 +348,11 @@ class EnvConfig {
    */
   static getLoggerConfig() {
     return {
-      level: process.env[ENV_KEYS.LOG_LEVEL] || 'info',
-      dir: path.join(process.cwd(), 'logs'),
-      filename: 'blockchain.log'
+      level: this.getEnv(ENV_KEYS.LOG_LEVEL, 'info'),
+      dir: this.getEnv(ENV_KEYS.LOG_DIR, 'logs'),
+      maxSize: parseInt(this.getEnv('MAX_LOG_SIZE', (10 * 1024 * 1024).toString())),
+      maxFiles: parseInt(this.getEnv('MAX_LOG_FILES', '5')),
+      console: this.getEnv('LOG_CONSOLE', 'true') === 'true'
     };
   }
 
@@ -366,7 +363,7 @@ class EnvConfig {
    */
   static getPrivateKey(keyType) {
     if (!keyType) {
-      throw new ConfigError('私钥类型不能为空');
+      throw new EnvError('私钥类型不能为空');
     }
     
     // 构造环境变量键名
@@ -374,7 +371,7 @@ class EnvConfig {
     const privateKey = process.env[envKey];
     
     if (!privateKey) {
-      throw new ConfigError(`${keyType}私钥未配置`);
+      throw new EnvError(`${keyType}私钥未配置`);
     }
     
     return privateKey;
@@ -396,7 +393,7 @@ class EnvConfig {
    */
   static getContractAddress(contractName) {
     if (!contractName) {
-      throw new ConfigError('合约名称不能为空');
+      throw new EnvError('合约名称不能为空');
     }
 
     // 构造环境变量键名
@@ -404,7 +401,7 @@ class EnvConfig {
     const address = this.getEnv(key);
     
     if (!address) {
-      throw new ConfigError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
+      throw new EnvError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
     }
     
     return address;

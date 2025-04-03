@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
-const { Validation } = require('../utils/validation');
-const { ConfigError } = require('../utils/errors');
+const { ContractConfigError } = require('./errors');
+const validation = require('./validation');
 const EnvConfig = require('./env');
 const AbiConfig = require('./abi');
 const NetworkConfig = require('./network');
@@ -17,7 +17,7 @@ class ContractConfig {
    */
   static getContractAddress(contractName) {
     if (!contractName) {
-      throw new ConfigError('合约名称不能为空');
+      throw new ContractConfigError('合约名称不能为空');
     }
 
     // 使用规范化的方式获取合约地址
@@ -25,11 +25,11 @@ class ContractConfig {
     const address = EnvConfig.getEnv(key);
     
     if (!address) {
-      throw new ConfigError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
+      throw new ContractConfigError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
     }
     
-    if (!Validation.isValidAddress(address)) {
-      throw new ConfigError(`合约 ${contractName} 的地址格式无效: ${address}`);
+    if (!validation.isValidAddress(address)) {
+      throw new ContractConfigError(`合约 ${contractName} 的地址格式无效: ${address}`);
     }
     
     return address;
@@ -43,11 +43,11 @@ class ContractConfig {
    */
   static getNetworkSpecificContractAddress(contractName, networkType) {
     if (!contractName) {
-      throw new ConfigError('合约名称不能为空');
+      throw new ContractConfigError('合约名称不能为空');
     }
 
     if (!networkType) {
-      throw new ConfigError('网络类型不能为空');
+      throw new ContractConfigError('网络类型不能为空');
     }
 
     // 规范化网络类型
@@ -62,8 +62,8 @@ class ContractConfig {
       return this.getContractAddress(contractName);
     }
     
-    if (!Validation.isValidAddress(address)) {
-      throw new ConfigError(`网络 ${networkType} 下合约 ${contractName} 的地址格式无效: ${address}`);
+    if (!validation.isValidAddress(address)) {
+      throw new ContractConfigError(`网络 ${networkType} 下合约 ${contractName} 的地址格式无效: ${address}`);
     }
     
     return address;
@@ -85,8 +85,8 @@ class ContractConfig {
       const match = key.match(pattern);
       if (match) {
         const contractName = match[1];
-        const address = allEnv[key];
-        if (address && Validation.isValidAddress(address)) {
+        const address = EnvConfig.getEnv(key);
+        if (address && validation.isValidAddress(address)) {
           addresses[contractName] = address;
         }
       }
@@ -103,7 +103,7 @@ class ContractConfig {
    */
   static getContractConfig(contractName) {
     if (!contractName) {
-      throw new ConfigError('合约名称不能为空');
+      throw new ContractConfigError('合约名称不能为空');
     }
     
     // 获取合约地址
@@ -112,7 +112,7 @@ class ContractConfig {
     // 获取合约ABI
     const contractInfo = AbiConfig.getContractAbi(contractName);
     if (!contractInfo || !contractInfo.abi) {
-      throw new ConfigError(`未找到合约 ${contractName} 的ABI信息`);
+      throw new ContractConfigError(`未找到合约 ${contractName} 的ABI信息`);
     }
     
     // 返回完整配置
@@ -165,7 +165,7 @@ class ContractConfig {
       
       // 验证合约地址
       const address = this.getContractAddress(contractName);
-      if (!address || !Validation.isValidAddress(address)) return false;
+      if (!address || !validation.isValidAddress(address)) return false;
       
       // 验证合约ABI
       const contractInfo = AbiConfig.getContractAbi(contractName);

@@ -8,6 +8,10 @@ const utils = require('./utils');
 const config = require('./config');
 const core = require('./core');
 
+// 配置Logger
+// 让Logger的配置由EnvConfig负责，遵循职责边界
+utils.Logger.configure(config.EnvConfig.getLoggerConfig());
+
 /**
  * 模块层次结构:
  * 

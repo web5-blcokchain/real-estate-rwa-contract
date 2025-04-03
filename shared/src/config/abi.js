@@ -1,8 +1,8 @@
 const path = require('path');
 const fs = require('fs');
-const { Validation } = require('../utils/validation');
-const { ConfigError } = require('../utils/errors');
-const Logger = require('../utils/logger');
+const { AbiConfigError } = require('./errors');
+const validation = require('./validation');
+const EnvConfig = require('./env');
 
 /**
  * ABI路径常量
@@ -26,7 +26,7 @@ class ABIConfig {
       // 验证路径存在
       const absolutePath = path.resolve(process.cwd(), resolvedPath);
       if (!fs.existsSync(absolutePath)) {
-        throw new ConfigError(`ABI路径不存在: ${absolutePath}`);
+        throw new AbiConfigError(`ABI路径不存在: ${absolutePath}`);
       }
       
       // 如果是目录，加载所有ABI文件
@@ -41,7 +41,7 @@ class ABIConfig {
         abi
       };
     } catch (error) {
-      throw new ConfigError(`加载ABI配置失败: ${error.message}`);
+      throw new AbiConfigError(`加载ABI配置失败: ${error.message}`);
     }
   }
 
@@ -58,14 +58,14 @@ class ABIConfig {
       const abi = JSON.parse(abiContent);
 
       // 验证ABI格式
-      Validation.validate(
+      validation.validate(
         Array.isArray(abi),
         '无效的ABI格式'
       );
 
       return abi;
     } catch (error) {
-      throw new ConfigError(`加载ABI文件失败: ${error.message}`);
+      throw new AbiConfigError(`加载ABI文件失败: ${error.message}`);
     }
   }
 
@@ -82,7 +82,7 @@ class ABIConfig {
     );
 
     if (!method) {
-      throw new ConfigError(`未找到方法: ${methodName}`);
+      throw new AbiConfigError(`未找到方法: ${methodName}`);
     }
 
     return method;
@@ -101,7 +101,7 @@ class ABIConfig {
     );
 
     if (!event) {
-      throw new ConfigError(`未找到事件: ${eventName}`);
+      throw new AbiConfigError(`未找到事件: ${eventName}`);
     }
 
     return event;
@@ -116,7 +116,7 @@ class ABIConfig {
     try {
       const abiDir = path.resolve(process.cwd(), dirPath);
       if (!fs.existsSync(abiDir)) {
-        Logger.warn(`ABI目录不存在: ${abiDir}`);
+        console.warn(`ABI目录不存在: ${abiDir}`);
         return {};
       }
 
@@ -134,16 +134,16 @@ class ABIConfig {
           const contractInfo = this._parseContractAbi(abiJson, contractName);
           contracts[contractName] = contractInfo;
           
-          Logger.info(`已加载合约ABI: ${contractName}`);
+          console.info(`已加载合约ABI: ${contractName}`);
         } catch (error) {
-          Logger.error(`加载合约ABI失败: ${contractName}`, { error: error.message });
+          console.error(`加载合约ABI失败: ${contractName}`, error.message);
         }
       }
       
       return contracts;
     } catch (error) {
-      Logger.error('加载所有合约ABI失败', { error: error.message });
-      throw new ConfigError(`加载所有合约ABI失败: ${error.message}`);
+      console.error('加载所有合约ABI失败', error.message);
+      throw new AbiConfigError(`加载所有合约ABI失败: ${error.message}`);
     }
   }
 
@@ -203,13 +203,13 @@ class ABIConfig {
       const filePath = path.join(path.resolve(process.cwd(), dirPath), `${contractName}.json`);
       
       if (!fs.existsSync(filePath)) {
-        throw new ConfigError(`合约ABI文件不存在: ${filePath}`);
+        throw new AbiConfigError(`合约ABI文件不存在: ${filePath}`);
       }
       
       const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       return this._parseContractAbi(abiJson, contractName);
     } catch (error) {
-      throw new ConfigError(`获取合约ABI失败: ${error.message}`);
+      throw new AbiConfigError(`获取合约ABI失败: ${error.message}`);
     }
   }
 }
