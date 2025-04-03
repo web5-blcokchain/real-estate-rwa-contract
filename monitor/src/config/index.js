@@ -2,7 +2,7 @@
  * 配置文件
  */
 
-const sharedEnv = require('../../../shared/src/config/env');
+const { Config } = require('../../../shared/src');
 
 // 数据库配置
 const database = {
@@ -17,7 +17,7 @@ const database = {
 // 区块链配置
 const blockchain = {
   // 重用shared中的provider配置
-  provider: sharedEnv.blockchain.provider,
+  provider: Config.blockchain.provider,
   // 扫描间隔（毫秒）
   scanInterval: parseInt(process.env.SCAN_INTERVAL || '60000', 10),
   // 每次扫描的区块数量

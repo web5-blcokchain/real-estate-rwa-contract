@@ -1,7 +1,7 @@
 /**
  * API密钥验证中间件
  */
-const { Logger } = require('../../../shared/src/utils');
+const { Logger } = require('../../../shared/src');
 const serverConfig = require('../config');
 
 /**

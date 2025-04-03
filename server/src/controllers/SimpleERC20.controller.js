@@ -5,7 +5,7 @@
 const { ethers } = require('ethers');
 const fs = require('fs');
 const path = require('path');
-const { Logger } = require('../../../shared/src/utils');
+const { Logger } = require('../../../shared/src');
 const { blockchainService } = require('../services');
 
 // 读取ABI文件

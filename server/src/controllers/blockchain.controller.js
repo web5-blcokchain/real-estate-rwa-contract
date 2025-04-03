@@ -1,7 +1,8 @@
 /**
  * 区块链相关控制器
  */
-const { Logger } = require('../../../shared/src/utils');
+const { Logger, ErrorHandler } = require('../../../shared/src');
+const { validateParams } = require('../utils');
 const blockchainService = require('../services/blockchain.service');
 
 /**
@@ -18,8 +19,14 @@ async function getNetworkInfo(req, res, next) {
       data: networkInfo
     });
   } catch (error) {
-    Logger.error('获取区块链网络信息失败', error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getNetworkInfo'
+      }
+    });
+    Logger.error('获取区块链网络信息失败', { error: handledError });
+    next(handledError);
   }
 }
 
@@ -32,6 +39,15 @@ async function getNetworkInfo(req, res, next) {
 async function getTransaction(req, res, next) {
   try {
     const { hash } = req.params;
+    
+    // 验证参数
+    validateParams(
+      { hash },
+      {
+        hash: { type: 'string', required: true, format: 'txHash' }
+      }
+    );
+    
     const transaction = await blockchainService.getTransaction(hash);
     
     if (!transaction) {
@@ -49,8 +65,15 @@ async function getTransaction(req, res, next) {
       data: transaction
     });
   } catch (error) {
-    Logger.error(`获取交易 ${req.params.hash} 详情失败`, error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getTransaction',
+        hash: req.params.hash
+      }
+    });
+    Logger.error(`获取交易 ${req.params.hash} 详情失败`, { error: handledError });
+    next(handledError);
   }
 }
 
@@ -65,11 +88,20 @@ async function getGasPrice(req, res, next) {
     const gasPrice = await blockchainService.getGasPrice();
     res.json({
       success: true,
-      data: gasPrice
+      data: {
+        gasPrice: gasPrice.toString(),
+        formattedGasPrice: `${(Number(gasPrice) / 1e9).toFixed(2)} Gwei`
+      }
     });
   } catch (error) {
-    Logger.error('获取Gas价格失败', error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getGasPrice'
+      }
+    });
+    Logger.error('获取Gas价格失败', { error: handledError });
+    next(handledError);
   }
 }
 

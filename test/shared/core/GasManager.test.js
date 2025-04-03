@@ -1,11 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
 const { ethers } = require('ethers');
-const GasManager = require('../../../shared/src/core/gas-manager');
-const Provider = require('../../../shared/src/core/provider');
-const Logger = require('../../../shared/src/utils/logger');
-const EnvConfig = require('../../../shared/src/config/env');
-const { GasError } = require('../../../shared/src/utils/errors');
+const { GasManager, Provider, Logger, Config, GasError } = require('../../../shared/src');
 const { config } = require('../../../shared/src/config');
 const { logger } = require('../../../shared/src/utils/logger');
 

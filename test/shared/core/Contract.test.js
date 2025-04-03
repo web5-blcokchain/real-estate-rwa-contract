@@ -1,12 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
 const { ethers } = require('ethers');
-const Contract = require('../../../shared/src/core/contract');
-const Provider = require('../../../shared/src/core/provider');
-const Wallet = require('../../../shared/src/core/wallet');
-const Logger = require('../../../shared/src/utils/logger');
-const EnvConfig = require('../../../shared/src/config/env');
-const { ContractError } = require('../../../shared/src/utils/errors');
+const { Contract, Provider, Wallet, Logger, Config, ContractError } = require('../../../shared/src');
 
 describe('Contract', () => {
   let sandbox;
@@ -39,7 +34,7 @@ describe('Contract', () => {
     process.env.OPERATOR_PRIVATE_KEY = '0x1234567890123456789012345678901234567890123456789012345678901234';
 
     // Load environment config
-    EnvConfig.load();
+    Config.load();
 
     // Mock Provider and Wallet
     mockProvider = {

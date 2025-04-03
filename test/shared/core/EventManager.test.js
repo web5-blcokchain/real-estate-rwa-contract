@@ -1,12 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
 const { ethers } = require('ethers');
-const EventManager = require('../../../shared/src/core/event-manager');
-const Contract = require('../../../shared/src/core/contract');
-const Provider = require('../../../shared/src/core/provider');
-const Logger = require('../../../shared/src/utils/logger');
-const EnvConfig = require('../../../shared/src/config/env');
-const { EventError } = require('../../../shared/src/utils/errors');
+const { EventManager, Contract, Provider, Logger, Config, EventError } = require('../../../shared/src');
 
 describe('EventManager', () => {
   let eventManager;
@@ -30,7 +25,7 @@ describe('EventManager', () => {
     process.env.EVENT_BATCH_SIZE = '100';
     
     // Load environment config
-    EnvConfig.load();
+    Config.load();
     
     // Mock Provider
     mockProvider = {

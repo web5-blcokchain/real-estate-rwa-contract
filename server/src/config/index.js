@@ -3,7 +3,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { Logger } = require('../../../shared/src/utils');
+const { Logger } = require('../../../shared/src');
 
 // 配置缓存
 let configCache = null;

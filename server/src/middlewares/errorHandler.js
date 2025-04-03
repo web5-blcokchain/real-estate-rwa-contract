@@ -1,7 +1,7 @@
 /**
  * 错误处理中间件
  */
-const { Logger } = require('../../../shared/src/utils');
+const { Logger, ErrorHandler } = require('../../../shared/src');
 
 /**
  * 错误处理
@@ -11,14 +11,24 @@ const { Logger } = require('../../../shared/src/utils');
  * @param {Function} next - 下一个中间件
  */
 function errorHandler(err, req, res, next) {
+  // 使用 ErrorHandler 统一处理错误
+  const handledError = ErrorHandler.handle(err, {
+    type: 'api',
+    context: {
+      path: req.path,
+      method: req.method,
+      ip: req.ip
+    }
+  });
+  
   // 提取错误信息
-  const statusCode = err.statusCode || 500;
-  const errorCode = err.code || 'INTERNAL_SERVER_ERROR';
-  const message = err.message || '服务器内部错误';
+  const statusCode = handledError.statusCode || 500;
+  const errorCode = handledError.code || 'INTERNAL_SERVER_ERROR';
+  const message = handledError.message || '服务器内部错误';
   
   // 记录错误日志
   Logger.error(`API错误: ${message}`, {
-    error: err,
+    error: handledError,
     statusCode,
     path: req.path,
     method: req.method,
@@ -36,14 +46,19 @@ function errorHandler(err, req, res, next) {
   
   // 在开发环境中添加详细信息
   if (process.env.NODE_ENV === 'development') {
-    errorResponse.error.stack = err.stack;
+    errorResponse.error.stack = handledError.stack;
     
     // 如果是区块链错误，添加更多上下文
-    if (err.originalError) {
+    if (handledError.originalError) {
       errorResponse.error.originalError = {
-        message: err.originalError.message,
-        code: err.originalError.code
+        message: handledError.originalError.message,
+        code: handledError.originalError.code
       };
+    }
+    
+    // 添加上下文信息（如果有）
+    if (handledError.context) {
+      errorResponse.error.context = handledError.context;
     }
   }
   

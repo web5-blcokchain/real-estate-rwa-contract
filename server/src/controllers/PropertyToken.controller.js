@@ -2,31 +2,13 @@
  * PropertyToken合约控制器
  * 直接代理PropertyToken.json ABI文件中的所有方法
  */
-const { ethers } = require('ethers');
-const fs = require('fs');
-const path = require('path');
-const { Logger } = require('../../../shared/src/utils');
+const { Contract, Wallet, Provider, Logger, ErrorHandler, Validation } = require('../../../shared/src');
+const { validateParams } = require('../utils');
 const { blockchainService } = require('../services');
+const contractService = require('../services/contract.service');
 
-// 读取ABI文件
-const abiPath = path.resolve(process.cwd(), 'config/abi/PropertyToken.json');
-const abi = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-
-// 合约地址配置
-const addressConfigPath = path.resolve(process.cwd(), 'config/contract-addresses.json');
-let contractAddress;
-
-// 从配置文件获取合约地址
-if (fs.existsSync(addressConfigPath)) {
-  const addressConfig = JSON.parse(fs.readFileSync(addressConfigPath, 'utf8'));
-  const networkType = process.env.BLOCKCHAIN_NETWORK || 'localhost';
-  contractAddress = addressConfig[networkType]?.PropertyToken;
-}
-
-// 如果配置文件中没有，尝试从环境变量获取
-if (!contractAddress) {
-  contractAddress = process.env.CONTRACT_PROPERTYTOKEN_ADDRESS;
-}
+// 合约名称
+const CONTRACT_NAME = 'PropertyToken';
 
 // 合约实例
 let contractInstance = null;
@@ -37,14 +19,20 @@ let contractInstance = null;
 async function initContract() {
   try {
     if (!contractInstance) {
-      await blockchainService.initialize();
-      contractInstance = blockchainService.getContractInstance(abi, contractAddress);
-      Logger.info('PropertyToken合约初始化成功', { address: contractAddress });
+      // 使用合约服务获取合约实例
+      contractInstance = await contractService.getContractInstance(CONTRACT_NAME);
+      Logger.info(`${CONTRACT_NAME}合约初始化成功`, { 
+        address: await Contract.getAddress(contractInstance) 
+      });
     }
     return contractInstance;
   } catch (error) {
-    Logger.error(`PropertyToken合约初始化失败: ${error.message}`, { error });
-    throw error;
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'initContract', contractName: CONTRACT_NAME }
+    });
+    Logger.error(`${CONTRACT_NAME}合约初始化失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -61,8 +49,8 @@ function processContractResult(result) {
   
   // 如果是对象
   if (result && typeof result === 'object') {
-    // 检查是否是BigNumber（ethers.js中BigNumber有_hex属性）
-    if (result._hex !== undefined) {
+    // 检查是否是BigNumber
+    if (result._isBigNumber || result._hex !== undefined) {
       return result.toString();
     }
     
@@ -112,10 +100,21 @@ function sendResponse(res, data = null, errorMessage = null, statusCode = 200) {
  */
 async function getContractAddress(req, res) {
   try {
-    return sendResponse(res, { address: contractAddress });
+    // 使用合约服务获取地址
+    const address = await contractService.getAddressByName(CONTRACT_NAME);
+    
+    if (!address) {
+      return sendResponse(res, null, `未找到${CONTRACT_NAME}合约地址`, 404);
+    }
+    
+    return sendResponse(res, { address });
   } catch (error) {
-    Logger.error(`获取PropertyToken合约地址失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getContractAddress', contractName: CONTRACT_NAME }
+    });
+    Logger.error(`获取${CONTRACT_NAME}合约地址失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 
@@ -125,11 +124,15 @@ async function getContractAddress(req, res) {
 async function name(req, res) {
   try {
     const contract = await initContract();
-    const result = await contract.name();
+    const result = await Contract.call(contract, 'name');
     return sendResponse(res, result);
   } catch (error) {
-    Logger.error(`调用PropertyToken.name失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'name', contractName: CONTRACT_NAME }
+    });
+    Logger.error(`调用${CONTRACT_NAME}.name失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 
@@ -139,11 +142,15 @@ async function name(req, res) {
 async function symbol(req, res) {
   try {
     const contract = await initContract();
-    const result = await contract.symbol();
+    const result = await Contract.call(contract, 'symbol');
     return sendResponse(res, result);
   } catch (error) {
-    Logger.error(`调用PropertyToken.symbol失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'symbol', contractName: CONTRACT_NAME }
+    });
+    Logger.error(`调用${CONTRACT_NAME}.symbol失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 
@@ -152,18 +159,26 @@ async function symbol(req, res) {
  */
 async function balanceOf(req, res) {
   try {
-    const contract = await initContract();
     const { account } = req.query;
     
-    if (!account) {
-      return sendResponse(res, null, '缺少必要参数: account', 400);
-    }
+    // 验证参数
+    validateParams(
+      { account },
+      {
+        account: { type: 'string', required: true, format: 'address' }
+      }
+    );
     
-    const result = await contract.balanceOf(account);
+    const contract = await initContract();
+    const result = await Contract.call(contract, 'balanceOf', [account]);
     return sendResponse(res, processContractResult(result));
   } catch (error) {
-    Logger.error(`调用PropertyToken.balanceOf失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'balanceOf', contractName: CONTRACT_NAME, account: req.query.account }
+    });
+    Logger.error(`调用${CONTRACT_NAME}.balanceOf失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 
@@ -173,11 +188,15 @@ async function balanceOf(req, res) {
 async function totalSupply(req, res) {
   try {
     const contract = await initContract();
-    const result = await contract.totalSupply();
+    const result = await Contract.call(contract, 'totalSupply');
     return sendResponse(res, processContractResult(result));
   } catch (error) {
-    Logger.error(`调用PropertyToken.totalSupply失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'totalSupply', contractName: CONTRACT_NAME }
+    });
+    Logger.error(`调用${CONTRACT_NAME}.totalSupply失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 
@@ -188,30 +207,40 @@ async function transfer(req, res) {
   try {
     const { to, amount } = req.body;
     
-    if (!to || amount === undefined) {
-      return sendResponse(res, null, '缺少必要参数: to, amount', 400);
-    }
+    // 验证参数
+    validateParams(
+      { to, amount },
+      {
+        to: { type: 'string', required: true, format: 'address' },
+        amount: { type: 'string', required: true }
+      }
+    );
     
     // 获取私钥
     const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
-    if (!privateKey) {
-      return sendResponse(res, null, '未配置区块链私钥，无法发送交易', 400);
-    }
     
-    // 创建签名者
-    await blockchainService.initialize();
-    const provider = blockchainService.provider;
-    const wallet = new ethers.Wallet(privateKey, provider);
+    // 验证私钥
+    Validation.validate(
+      Validation.isNotEmpty(privateKey),
+      '未配置区块链私钥，无法发送交易'
+    );
     
-    // 获取带签名者的合约实例
-    const contract = new ethers.Contract(contractAddress, abi, wallet);
+    // 获取合约实例
+    const contract = await contractService.getContractInstance(CONTRACT_NAME);
+    
+    // 创建钱包
+    const provider = await blockchainService.provider;
+    const wallet = await Wallet.create({
+      privateKey,
+      provider
+    });
     
     // 发送交易
-    const tx = await contract.transfer(to, amount);
+    const tx = await Contract.send(contract, 'transfer', [to, amount], { signer: wallet });
     
     // 等待交易确认
     Logger.info(`交易已提交: ${tx.hash}`, { method: 'transfer' });
-    const receipt = await tx.wait();
+    const receipt = await Provider.waitForTransaction(provider, tx.hash);
     
     return sendResponse(res, {
       txHash: tx.hash,
@@ -219,8 +248,16 @@ async function transfer(req, res) {
       gasUsed: receipt.gasUsed.toString()
     });
   } catch (error) {
-    Logger.error(`调用PropertyToken.transfer失败: ${error.message}`, { error });
-    return sendResponse(res, null, error.message, 500);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { 
+        method: 'transfer', 
+        contractName: CONTRACT_NAME,
+        to: req.body.to
+      }
+    });
+    Logger.error(`调用${CONTRACT_NAME}.transfer失败: ${handledError.message}`, { error: handledError });
+    return sendResponse(res, null, handledError.message, 500);
   }
 }
 

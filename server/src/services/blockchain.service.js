@@ -2,8 +2,7 @@
  * 区块链服务模块
  * 实现与区块链交互的业务逻辑
  */
-const { ethers } = require('ethers');
-const { Logger } = require('../../../shared/src/utils');
+const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../../../shared/src');
 const blockchainService = require('./BlockchainService');
 const serverConfig = require('../config');
 
@@ -25,17 +24,24 @@ async function getNetworkInfo() {
 
     // 获取网络类型
     const networkType = blockchainService.getNetworkType();
+    
+    // 格式化 gas 价格
+    const formattedGasPrice = await Provider.formatUnits(gasPrice, 'gwei');
 
     return {
       chainId,
       blockNumber,
-      gasPrice: ethers.utils.formatUnits(gasPrice, 'gwei'),
+      gasPrice: formattedGasPrice,
       networkType,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
-    Logger.error(`获取区块链网络信息失败: ${error.message}`, { error });
-    throw new Error(`获取区块链网络信息失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'blockchain',
+      context: { method: 'getNetworkInfo' }
+    });
+    Logger.error(`获取区块链网络信息失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -46,6 +52,12 @@ async function getNetworkInfo() {
  */
 async function getTransaction(txHash) {
   try {
+    // 验证交易哈希
+    Validation.validate(
+      Validation.isValidTxHash(txHash),
+      '无效的交易哈希'
+    );
+    
     // 检查区块链服务是否已初始化
     if (!await blockchainService.isConnected()) {
       throw new Error('区块链服务未连接');
@@ -67,9 +79,9 @@ async function getTransaction(txHash) {
       blockHash: tx.blockHash,
       from: tx.from,
       to: tx.to,
-      value: ethers.utils.formatEther(tx.value),
+      value: await Provider.formatEther(tx.value),
       gasLimit: tx.gasLimit.toString(),
-      gasPrice: ethers.utils.formatUnits(tx.gasPrice, 'gwei'),
+      gasPrice: await Provider.formatUnits(tx.gasPrice, 'gwei'),
       nonce: tx.nonce,
       data: tx.data,
       timestamp: new Date().toISOString()
@@ -81,7 +93,7 @@ async function getTransaction(txHash) {
         status: receipt.status === 1 ? '成功' : '失败',
         gasUsed: receipt.gasUsed.toString(),
         cumulativeGasUsed: receipt.cumulativeGasUsed.toString(),
-        effectiveGasPrice: ethers.utils.formatUnits(receipt.effectiveGasPrice, 'gwei'),
+        effectiveGasPrice: await Provider.formatUnits(receipt.effectiveGasPrice, 'gwei'),
         logs: receipt.logs.map(log => ({
           address: log.address,
           topics: log.topics,
@@ -92,8 +104,12 @@ async function getTransaction(txHash) {
 
     return transaction;
   } catch (error) {
-    Logger.error(`获取交易信息失败: ${error.message}`, { error, txHash });
-    throw new Error(`获取交易信息失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'transaction',
+      context: { method: 'getTransaction', txHash }
+    });
+    Logger.error(`获取交易信息失败: ${handledError.message}`, { error: handledError, txHash });
+    throw handledError;
   }
 }
 
@@ -111,15 +127,14 @@ async function getGasPrice() {
     // 获取当前Gas价格
     const gasPrice = await blockchainService.getGasPrice();
 
-    return {
-      wei: gasPrice.toString(),
-      gwei: ethers.utils.formatUnits(gasPrice, 'gwei'),
-      eth: ethers.utils.formatEther(gasPrice),
-      timestamp: new Date().toISOString()
-    };
+    return gasPrice;
   } catch (error) {
-    Logger.error(`获取Gas价格失败: ${error.message}`, { error });
-    throw new Error(`获取Gas价格失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'gas',
+      context: { method: 'getGasPrice' }
+    });
+    Logger.error(`获取Gas价格失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 

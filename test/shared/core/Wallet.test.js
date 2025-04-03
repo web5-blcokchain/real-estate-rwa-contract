@@ -1,11 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
 const { ethers } = require('ethers');
-const Wallet = require('../../../shared/src/core/wallet');
-const Provider = require('../../../shared/src/core/provider');
-const Logger = require('../../../shared/src/utils/logger');
-const EnvConfig = require('../../../shared/src/config/env');
-const { WalletError } = require('../../../shared/src/utils/errors');
+const { Wallet, Provider, Logger, Config, WalletError } = require('../../../shared/src');
 
 describe('Wallet', () => {
   let wallet;
@@ -26,7 +22,7 @@ describe('Wallet', () => {
     };
     
     // Mock config
-    sandbox.stub(EnvConfig, 'get').callsFake((key) => {
+    sandbox.stub(Config, 'get').callsFake((key) => {
       if (key === 'wallet.privateKey') return mockPrivateKey;
       if (key === 'wallet.password') return 'testpassword';
       throw new Error(`Unknown key: ${key}`);

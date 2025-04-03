@@ -1,10 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
 const { ethers } = require('ethers');
-const Provider = require('../../../shared/src/core/provider');
-const Logger = require('../../../shared/src/utils/logger');
-const EnvConfig = require('../../../shared/src/config/env');
-const { ProviderError } = require('../../../shared/src/utils/errors');
+const { Provider, Logger, Config, ProviderError } = require('../../../shared/src');
 
 describe('Provider', () => {
   let provider;

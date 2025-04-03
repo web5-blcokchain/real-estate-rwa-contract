@@ -2,8 +2,7 @@
  * 区块链服务类
  * 提供与区块链交互的相关功能
  */
-const { ethers } = require('ethers');
-const { Logger } = require('../../../shared/src/utils');
+const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../../../shared/src');
 const serverConfig = require('../config');
 
 /**
@@ -33,32 +32,20 @@ class BlockchainService {
       const blockchainConfig = serverConfig.getBlockchainConfig();
       this.networkType = blockchainConfig.networkType;
 
-      // 根据网络类型获取RPC URL
-      let rpcUrl;
-      
-      switch (this.networkType) {
-        case 'localhost':
-          rpcUrl = process.env.LOCAL_RPC_URL || 'http://localhost:8545';
-          break;
-        case 'testnet':
-          rpcUrl = process.env.TESTNET_RPC_URL;
-          break;
-        case 'mainnet':
-          rpcUrl = process.env.MAINNET_RPC_URL;
-          break;
-        default:
-          throw new Error(`不支持的网络类型: ${this.networkType}`);
-      }
-
-      if (!rpcUrl) {
-        throw new Error(`未配置${this.networkType}的RPC URL`);
-      }
+      // 验证网络类型
+      Validation.validate(
+        Validation.isNotEmpty(this.networkType),
+        '网络类型不能为空'
+      );
 
       // 创建Provider
-      this.provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-      
+      this.provider = await Provider.create({
+        networkType: this.networkType,
+        url: blockchainConfig.rpcUrl
+      });
+
       // 验证连接
-      const network = await this.provider.getNetwork();
+      const network = await Provider.getNetwork(this.provider);
       Logger.info(`已连接到区块链网络: ${this.networkType}`, {
         chainId: network.chainId,
         name: network.name
@@ -66,8 +53,15 @@ class BlockchainService {
 
       this.initialized = true;
     } catch (error) {
-      Logger.error(`区块链服务初始化失败: ${error.message}`, { error });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'network',
+        context: {
+          method: 'initialize',
+          networkType: this.networkType
+        }
+      });
+      Logger.error(`区块链服务初始化失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
@@ -89,10 +83,13 @@ class BlockchainService {
         return false;
       }
       
-      const network = await this.provider.getNetwork();
+      const network = await Provider.getNetwork(this.provider);
       return !!network.chainId;
     } catch (error) {
-      Logger.error(`检查连接状态失败: ${error.message}`, { error });
+      ErrorHandler.handle(error, {
+        type: 'network',
+        context: { method: 'isConnected' }
+      });
       return false;
     }
   }
@@ -107,11 +104,15 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      const network = await this.provider.getNetwork();
+      const network = await Provider.getNetwork(this.provider);
       return network.chainId;
     } catch (error) {
-      Logger.error(`获取网络ID失败: ${error.message}`, { error });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'network',
+        context: { method: 'getNetworkId' }
+      });
+      Logger.error(`获取网络ID失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
@@ -125,10 +126,14 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return await this.provider.getBlockNumber();
+      return await Provider.getBlockNumber(this.provider);
     } catch (error) {
-      Logger.error(`获取区块高度失败: ${error.message}`, { error });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'network',
+        context: { method: 'getBlockNumber' }
+      });
+      Logger.error(`获取区块高度失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
@@ -143,10 +148,20 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return await this.provider.getTransaction(txHash);
+      // 验证交易哈希
+      Validation.validate(
+        Validation.isValidTxHash(txHash),
+        '无效的交易哈希'
+      );
+      
+      return await Provider.getTransaction(this.provider, txHash);
     } catch (error) {
-      Logger.error(`获取交易信息失败: ${error.message}`, { error, txHash });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'transaction',
+        context: { method: 'getTransaction', txHash }
+      });
+      Logger.error(`获取交易信息失败: ${handledError.message}`, { error: handledError, txHash });
+      throw handledError;
     }
   }
 
@@ -161,10 +176,20 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return await this.provider.getTransactionReceipt(txHash);
+      // 验证交易哈希
+      Validation.validate(
+        Validation.isValidTxHash(txHash),
+        '无效的交易哈希'
+      );
+      
+      return await Provider.getTransactionReceipt(this.provider, txHash);
     } catch (error) {
-      Logger.error(`获取交易收据失败: ${error.message}`, { error, txHash });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'transaction',
+        context: { method: 'getTransactionReceipt', txHash }
+      });
+      Logger.error(`获取交易收据失败: ${handledError.message}`, { error: handledError, txHash });
+      throw handledError;
     }
   }
 
@@ -178,10 +203,14 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return await this.provider.getGasPrice();
+      return await Provider.getGasPrice(this.provider);
     } catch (error) {
-      Logger.error(`获取Gas价格失败: ${error.message}`, { error });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'gas',
+        context: { method: 'getGasPrice' }
+      });
+      Logger.error(`获取Gas价格失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
@@ -191,16 +220,30 @@ class BlockchainService {
    * @param {string} address - 合约地址
    * @returns {Contract} 合约实例
    */
-  getContractInstance(abi, address) {
+  async getContractInstance(abi, address) {
     try {
       if (!this.initialized) {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return new ethers.Contract(address, abi, this.provider);
+      // 验证合约地址
+      Validation.validate(
+        Validation.isValidAddress(address),
+        '无效的合约地址'
+      );
+      
+      return await Contract.create({
+        address,
+        abi,
+        provider: this.provider
+      });
     } catch (error) {
-      Logger.error(`创建合约实例失败: ${error.message}`, { error, address });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'contract',
+        context: { method: 'getContractInstance', address }
+      });
+      Logger.error(`创建合约实例失败: ${handledError.message}`, { error: handledError, address });
+      throw handledError;
     }
   }
 
@@ -211,21 +254,43 @@ class BlockchainService {
    * @param {string} privateKey - 私钥
    * @returns {Contract} 带签名者的合约实例
    */
-  getSignedContractInstance(abi, address, privateKey) {
+  async getSignedContractInstance(abi, address, privateKey) {
     try {
       if (!this.initialized) {
         throw new Error('区块链服务尚未初始化');
       }
       
-      if (!privateKey) {
-        throw new Error('未提供私钥，无法创建带签名者的合约实例');
-      }
+      // 验证参数
+      Validation.validate(
+        Validation.isValidAddress(address),
+        '无效的合约地址'
+      );
       
-      const wallet = new ethers.Wallet(privateKey, this.provider);
-      return new ethers.Contract(address, abi, wallet);
+      Validation.validate(
+        Validation.isNotEmpty(privateKey),
+        '未提供私钥，无法创建带签名者的合约实例'
+      );
+      
+      // 创建钱包
+      const wallet = await Wallet.create({
+        privateKey,
+        provider: this.provider
+      });
+      
+      // 创建合约实例
+      return await Contract.create({
+        address,
+        abi,
+        provider: this.provider,
+        signer: wallet
+      });
     } catch (error) {
-      Logger.error(`创建带签名者的合约实例失败: ${error.message}`, { error, address });
-      throw error;
+      const handledError = ErrorHandler.handle(error, {
+        type: 'contract',
+        context: { method: 'getSignedContractInstance', address }
+      });
+      Logger.error(`创建带签名者的合约实例失败: ${handledError.message}`, { error: handledError, address });
+      throw handledError;
     }
   }
 }

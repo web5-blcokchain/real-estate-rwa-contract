@@ -4,7 +4,7 @@
  */
 const fs = require('fs').promises;
 const path = require('path');
-const { Logger } = require('../../../shared/src/utils');
+const { Logger, Contract, AbiConfig, ContractConfig, ErrorHandler, Validation } = require('../../../shared/src');
 const blockchainService = require('./BlockchainService');
 const serverConfig = require('../config');
 
@@ -32,8 +32,12 @@ async function getAllABI() {
 
     return abis;
   } catch (error) {
-    Logger.error(`获取所有合约ABI失败: ${error.message}`, { error });
-    throw new Error(`获取所有合约ABI失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getAllABI' }
+    });
+    Logger.error(`获取所有合约ABI失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -44,6 +48,22 @@ async function getAllABI() {
  */
 async function getABIByName(contractName) {
   try {
+    // 验证合约名称
+    Validation.validate(
+      Validation.isNotEmpty(contractName),
+      '合约名称不能为空'
+    );
+    
+    // 尝试从AbiConfig获取ABI
+    try {
+      const abi = await AbiConfig.getAbi(contractName);
+      if (abi) {
+        return abi;
+      }
+    } catch (configError) {
+      Logger.debug(`从AbiConfig获取ABI失败，尝试从本地缓存获取: ${configError.message}`);
+    }
+    
     // 如果缓存为空，加载ABI
     if (abiCache.size === 0) {
       await loadContractABIs();
@@ -58,8 +78,12 @@ async function getABIByName(contractName) {
 
     return abi;
   } catch (error) {
-    Logger.error(`获取合约 ${contractName} 的ABI失败: ${error.message}`, { error });
-    throw new Error(`获取合约 ${contractName} 的ABI失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getABIByName', contractName }
+    });
+    Logger.error(`获取合约 ${contractName} 的ABI失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -69,6 +93,16 @@ async function getABIByName(contractName) {
  */
 async function getAllAddresses() {
   try {
+    // 尝试从ContractConfig获取所有地址
+    try {
+      const addresses = await ContractConfig.getAllAddresses();
+      if (addresses && Object.keys(addresses).length > 0) {
+        return addresses;
+      }
+    } catch (configError) {
+      Logger.debug(`从ContractConfig获取地址失败，尝试从本地缓存获取: ${configError.message}`);
+    }
+    
     // 如果缓存为空，加载地址
     if (addressCache.size === 0) {
       await loadContractAddresses();
@@ -82,8 +116,12 @@ async function getAllAddresses() {
 
     return addresses;
   } catch (error) {
-    Logger.error(`获取所有合约地址失败: ${error.message}`, { error });
-    throw new Error(`获取所有合约地址失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getAllAddresses' }
+    });
+    Logger.error(`获取所有合约地址失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -94,6 +132,22 @@ async function getAllAddresses() {
  */
 async function getAddressByName(contractName) {
   try {
+    // 验证合约名称
+    Validation.validate(
+      Validation.isNotEmpty(contractName),
+      '合约名称不能为空'
+    );
+    
+    // 尝试从ContractConfig获取地址
+    try {
+      const address = await ContractConfig.getAddress(contractName);
+      if (address) {
+        return address;
+      }
+    } catch (configError) {
+      Logger.debug(`从ContractConfig获取地址失败，尝试从本地缓存获取: ${configError.message}`);
+    }
+    
     // 如果缓存为空，加载地址
     if (addressCache.size === 0) {
       await loadContractAddresses();
@@ -108,8 +162,12 @@ async function getAddressByName(contractName) {
 
     return address;
   } catch (error) {
-    Logger.error(`获取合约 ${contractName} 的地址失败: ${error.message}`, { error });
-    throw new Error(`获取合约 ${contractName} 的地址失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getAddressByName', contractName }
+    });
+    Logger.error(`获取合约 ${contractName} 的地址失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -156,8 +214,12 @@ async function loadContractABIs() {
     
     Logger.info(`已加载 ${abiCache.size} 个合约的ABI数据`);
   } catch (error) {
-    Logger.error(`加载合约ABI失败: ${error.message}`, { error });
-    throw new Error(`加载合约ABI失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'loadContractABIs' }
+    });
+    Logger.error(`加载合约ABI失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -179,8 +241,12 @@ async function loadContractAddresses() {
     
     Logger.info(`已加载 ${addressCache.size} 个合约的地址数据`);
   } catch (error) {
-    Logger.error(`加载合约地址失败: ${error.message}`, { error });
-    throw new Error(`加载合约地址失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'loadContractAddresses' }
+    });
+    Logger.error(`加载合约地址失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 
@@ -191,6 +257,22 @@ async function loadContractAddresses() {
  */
 async function getContractInstance(contractName) {
   try {
+    // 验证合约名称
+    Validation.validate(
+      Validation.isNotEmpty(contractName),
+      '合约名称不能为空'
+    );
+    
+    // 尝试通过Contract.getContract获取
+    try {
+      const contract = await Contract.getContract(contractName);
+      if (contract) {
+        return contract;
+      }
+    } catch (contractError) {
+      Logger.debug(`通过Contract.getContract获取合约失败，尝试手动创建: ${contractError.message}`);
+    }
+    
     // 获取合约的ABI
     const abi = await getABIByName(contractName);
     if (!abi) {
@@ -204,10 +286,14 @@ async function getContractInstance(contractName) {
     }
     
     // 创建合约实例
-    return blockchainService.getContractInstance(abi, address);
+    return await blockchainService.getContractInstance(abi, address);
   } catch (error) {
-    Logger.error(`获取合约 ${contractName} 实例失败: ${error.message}`, { error });
-    throw new Error(`获取合约 ${contractName} 实例失败: ${error.message}`);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getContractInstance', contractName }
+    });
+    Logger.error(`获取合约 ${contractName} 实例失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
   }
 }
 

@@ -1,7 +1,8 @@
 /**
  * 合约相关控制器
  */
-const { Logger } = require('../../../shared/src/utils');
+const { Logger, ErrorHandler } = require('../../../shared/src');
+const { validateParams } = require('../utils');
 const contractService = require('../services/contract.service');
 
 /**
@@ -18,8 +19,14 @@ async function getAllABI(req, res, next) {
       data: abis
     });
   } catch (error) {
-    Logger.error('获取所有合约ABI失败', error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getAllABI'
+      }
+    });
+    Logger.error('获取所有合约ABI失败', { error: handledError });
+    next(handledError);
   }
 }
 
@@ -32,6 +39,15 @@ async function getAllABI(req, res, next) {
 async function getABIByName(req, res, next) {
   try {
     const { contractName } = req.params;
+    
+    // 验证参数
+    validateParams(
+      { contractName },
+      {
+        contractName: { type: 'string', required: true }
+      }
+    );
+    
     const abi = await contractService.getABIByName(contractName);
     
     if (!abi) {
@@ -49,8 +65,15 @@ async function getABIByName(req, res, next) {
       data: abi
     });
   } catch (error) {
-    Logger.error(`获取合约 ${req.params.contractName} 的ABI失败`, error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getABIByName',
+        contractName: req.params.contractName
+      }
+    });
+    Logger.error(`获取合约 ${req.params.contractName} 的ABI失败`, { error: handledError });
+    next(handledError);
   }
 }
 
@@ -68,8 +91,14 @@ async function getAllAddresses(req, res, next) {
       data: addresses
     });
   } catch (error) {
-    Logger.error('获取所有合约地址失败', error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getAllAddresses'
+      }
+    });
+    Logger.error('获取所有合约地址失败', { error: handledError });
+    next(handledError);
   }
 }
 
@@ -82,6 +111,15 @@ async function getAllAddresses(req, res, next) {
 async function getAddressByName(req, res, next) {
   try {
     const { contractName } = req.params;
+    
+    // 验证参数
+    validateParams(
+      { contractName },
+      {
+        contractName: { type: 'string', required: true }
+      }
+    );
+    
     const address = await contractService.getAddressByName(contractName);
     
     if (!address) {
@@ -99,8 +137,15 @@ async function getAddressByName(req, res, next) {
       data: address
     });
   } catch (error) {
-    Logger.error(`获取合约 ${req.params.contractName} 的地址失败`, error);
-    next(error);
+    const handledError = ErrorHandler.handle(error, {
+      type: 'api',
+      context: {
+        method: 'getAddressByName',
+        contractName: req.params.contractName
+      }
+    });
+    Logger.error(`获取合约 ${req.params.contractName} 的地址失败`, { error: handledError });
+    next(handledError);
   }
 }
 

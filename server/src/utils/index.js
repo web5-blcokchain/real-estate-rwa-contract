@@ -3,7 +3,9 @@
  * 统一导出所有工具
  */
 const apiResponse = require('./apiResponse');
+const validateParams = require('./validateParams');
 
 module.exports = {
-  ...apiResponse
+  ...apiResponse,
+  validateParams
 }; 
