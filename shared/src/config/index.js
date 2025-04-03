@@ -4,24 +4,32 @@
  */
 
 const EnvConfig = require('./env');
+const NetworkConfig = require('./network');
 const AbiConfig = require('./abi');
 const ContractConfig = require('./contract');
-const NetworkConfig = require('./network');
 
 /**
  * 导出配置
  * @exports config
  */
 module.exports = {
-  // 环境配置
+  /**
+   * 环境变量配置类
+   */
   EnvConfig,
   
-  // ABI配置
+  /**
+   * 网络配置类
+   */
+  NetworkConfig,
+  
+  /**
+   * ABI配置类
+   */
   AbiConfig,
   
-  // 合约配置
-  ContractConfig,
-  
-  // 网络配置
-  NetworkConfig
+  /**
+   * 合约配置类
+   */
+  ContractConfig
 }; 

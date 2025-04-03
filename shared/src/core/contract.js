@@ -2,7 +2,7 @@ const { ethers } = require('ethers');
 const { ContractError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const Validation = require('../utils/validation');
-const ContractConfig = require('../config/contract');
+const { ContractConfig } = require('../config');
 const Provider = require('./provider');
 const Wallet = require('./wallet');
 
@@ -21,21 +21,33 @@ class Contract {
    * @param {Object} [options.signer] - 签名者实例
    * @param {string} [options.privateKey] - 私钥
    * @param {string} [options.keyType] - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
+   * @param {string} [options.networkType] - 网络类型
    * @returns {Promise<ethers.Contract>} 合约实例
    */
   static async create(options = {}) {
     try {
       let address = options.address;
       let abi = options.abi;
+      const networkType = options.networkType;
       
       // 如果提供了合约名称，使用ContractConfig获取地址和ABI
       if (options.contractName) {
         try {
           if (!address) {
-            address = ContractConfig.getContractAddress(options.contractName);
+            if (networkType) {
+              // 获取特定网络的合约地址
+              address = ContractConfig.getNetworkSpecificContractAddress(
+                options.contractName, 
+                networkType
+              );
+            } else {
+              // 获取默认合约地址
+              address = ContractConfig.getContractAddress(options.contractName);
+            }
           }
           
           if (!abi) {
+            // 获取合约ABI
             const contractConfig = ContractConfig.getContractConfig(options.contractName);
             abi = contractConfig.abi;
           }
@@ -63,15 +75,24 @@ class Contract {
       }
 
       // 创建Provider
-      const provider = options.provider || await Provider.create();
+      const provider = options.provider || await Provider.create({
+        networkType: networkType
+      });
       
       // 创建签名者
       let signer = options.signer;
-      if (!signer && options.privateKey) {
-        signer = new ethers.Wallet(options.privateKey, provider);
-      } else if (!signer && options.keyType) {
-        const wallet = await Wallet.create({ keyType: options.keyType, provider });
-        signer = wallet;
+      if (!signer) {
+        if (options.privateKey) {
+          // 使用私钥创建签名者
+          signer = new ethers.Wallet(options.privateKey, provider);
+        } else if (options.keyType) {
+          // 使用密钥类型创建钱包
+          const wallet = await Wallet.create({ 
+            keyType: options.keyType, 
+            provider 
+          });
+          signer = wallet;
+        }
       }
 
       // 创建合约实例
@@ -80,7 +101,8 @@ class Contract {
       // 记录日志
       Logger.info('合约实例创建成功', { 
         contractName: options.contractName || '未命名合约',
-        address
+        address,
+        networkType: networkType || '默认网络'
       });
       
       return contract;

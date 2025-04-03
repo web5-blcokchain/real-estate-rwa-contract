@@ -20,7 +20,7 @@ class ContractConfig {
       throw new ConfigError('合约名称不能为空');
     }
 
-    // 构造合约地址的环境变量键名
+    // 使用规范化的方式获取合约地址
     const key = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
     const address = EnvConfig.getEnv(key);
     
@@ -36,6 +36,40 @@ class ContractConfig {
   }
 
   /**
+   * 获取网络特定的合约地址
+   * @param {string} contractName - 合约名称 
+   * @param {string} networkType - 网络类型
+   * @returns {string} 合约地址
+   */
+  static getNetworkSpecificContractAddress(contractName, networkType) {
+    if (!contractName) {
+      throw new ConfigError('合约名称不能为空');
+    }
+
+    if (!networkType) {
+      throw new ConfigError('网络类型不能为空');
+    }
+
+    // 规范化网络类型
+    const normalizedNetworkType = NetworkConfig.normalizeNetworkType(networkType);
+    
+    // 构造网络特定环境变量键名
+    const key = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${normalizedNetworkType}_${contractName}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
+    const address = EnvConfig.getEnv(key);
+    
+    if (!address) {
+      // 如果找不到网络特定地址，回退到默认地址
+      return this.getContractAddress(contractName);
+    }
+    
+    if (!Validation.isValidAddress(address)) {
+      throw new ConfigError(`网络 ${networkType} 下合约 ${contractName} 的地址格式无效: ${address}`);
+    }
+    
+    return address;
+  }
+
+  /**
    * 获取所有合约地址
    * @returns {Object} 合约名称和地址的映射
    */
@@ -44,16 +78,14 @@ class ContractConfig {
     const prefix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX;
     const suffix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX;
     
-    // 获取所有环境变量
-    const envVars = EnvConfig.getAllEnv();
-    
     // 遍历环境变量，查找合约地址
-    for (const key in envVars) {
+    const allEnv = EnvConfig.getAllEnv();
+    for (const key in allEnv) {
       const pattern = new RegExp(`^${prefix}([A-Z0-9_]+)${suffix}$`);
       const match = key.match(pattern);
       if (match) {
         const contractName = match[1];
-        const address = envVars[key];
+        const address = allEnv[key];
         if (address && Validation.isValidAddress(address)) {
           addresses[contractName] = address;
         }
@@ -74,27 +106,23 @@ class ContractConfig {
       throw new ConfigError('合约名称不能为空');
     }
     
-    try {
-      // 获取合约地址
-      const address = this.getContractAddress(contractName);
-      
-      // 获取合约ABI
-      const contractInfo = AbiConfig.getContractAbi(contractName);
-      if (!contractInfo || !contractInfo.abi) {
-        throw new ConfigError(`未找到合约 ${contractName} 的ABI信息`);
-      }
-      
-      // 返回完整配置
-      return {
-        name: contractName,
-        address,
-        abi: contractInfo.abi,
-        functions: contractInfo.functions || {},
-        events: contractInfo.events || {}
-      };
-    } catch (error) {
-      throw new ConfigError(`获取合约 ${contractName} 配置失败: ${error.message}`);
+    // 获取合约地址
+    const address = this.getContractAddress(contractName);
+    
+    // 获取合约ABI
+    const contractInfo = AbiConfig.getContractAbi(contractName);
+    if (!contractInfo || !contractInfo.abi) {
+      throw new ConfigError(`未找到合约 ${contractName} 的ABI信息`);
     }
+    
+    // 返回完整配置
+    return {
+      name: contractName,
+      address,
+      abi: contractInfo.abi,
+      functions: contractInfo.functions || {},
+      events: contractInfo.events || {}
+    };
   }
 
   /**
@@ -118,8 +146,8 @@ class ContractConfig {
           };
         }
       } catch (error) {
-        // 忽略不存在ABI的合约，但记录警告日志
-        console.warn(`未找到合约 ${contractName} 的ABI信息: ${error.message}`);
+        // 忽略不存在ABI的合约
+        console.warn(`未找到合约 ${contractName} 的ABI信息`);
       }
     }
     
@@ -147,37 +175,6 @@ class ContractConfig {
     } catch (error) {
       return false;
     }
-  }
-  
-  /**
-   * 根据网络类型获取对应网络的合约地址
-   * @param {string} contractName - 合约名称
-   * @param {string} [networkType] - 网络类型，默认使用当前环境配置的网络类型
-   * @returns {string} 合约地址
-   */
-  static getNetworkSpecificContractAddress(contractName, networkType) {
-    if (!contractName) {
-      throw new ConfigError('合约名称不能为空');
-    }
-    
-    // 如果未指定网络类型，使用当前环境配置的网络类型
-    const network = networkType || NetworkConfig.getNetworkType();
-    const normalizedNetwork = NetworkConfig.normalizeNetworkType(network);
-    
-    // 构造特定网络的合约地址键名
-    const key = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName}_${normalizedNetwork}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
-    const address = EnvConfig.getEnv(key);
-    
-    if (!address) {
-      // 尝试获取通用合约地址
-      return this.getContractAddress(contractName);
-    }
-    
-    if (!Validation.isValidAddress(address)) {
-      throw new ConfigError(`网络 ${normalizedNetwork} 上合约 ${contractName} 的地址格式无效: ${address}`);
-    }
-    
-    return address;
   }
 }
 

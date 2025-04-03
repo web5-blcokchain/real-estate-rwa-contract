@@ -13,16 +13,11 @@
 
 ## 模块概述
 
-Shared 模块是区块链应用的基础设施，提供以下核心功能：
+Shared 模块提供了与区块链交互的统一接口，采用了清晰的分层结构设计，确保各个组件之间的职责分离。模块分为三个主要层次：
 
-- 合约交互
-- 网络连接
-- 钱包管理
-- 交易处理
-- 事件监听
-- 错误处理
-- 日志记录
-- 配置管理
+1. **配置层 (config)**: 负责管理环境变量、网络配置、ABI和合约设置
+2. **工具层 (utils)**: 提供通用工具函数和类，如验证、日志记录、错误处理
+3. **核心层 (core)**: 提供高级抽象，封装区块链交互的核心功能
 
 ## 安装与配置
 
@@ -49,6 +44,113 @@ MNEMONIC=your-mnemonic
 # 合约配置
 CONTRACT_ADDRESS=0x...
 ```
+
+## 安装和引用
+
+将 shared 模块添加到项目中：
+
+```javascript
+// 引入整个shared模块
+const shared = require('../shared');
+
+// 或者按需引入特定组件
+const { Contract, Wallet, Logger } = require('../shared');
+```
+
+## 模块分层和职责
+
+### 1. 配置层 (config)
+
+配置层负责处理所有静态配置和环境变量，保持纯粹的数据获取和管理：
+
+```javascript
+const { EnvConfig, NetworkConfig, ContractConfig, AbiConfig } = require('../shared');
+
+// 获取环境变量
+const networkType = EnvConfig.getNetworkType();
+
+// 获取网络配置
+const networkConfig = NetworkConfig.getNetworkSpecificConfig(networkType);
+
+// 获取合约地址
+const contractAddress = ContractConfig.getContractAddress('RoleManager');
+
+// 获取合约ABI
+const contractConfig = ContractConfig.getContractConfig('RoleManager');
+```
+
+#### 主要组件
+
+- **EnvConfig**: 环境变量管理
+- **NetworkConfig**: 网络配置管理
+- **AbiConfig**: ABI配置管理
+- **ContractConfig**: 合约配置管理
+
+### 2. 工具层 (utils)
+
+工具层提供纯函数和通用工具，独立于业务逻辑：
+
+```javascript
+const { 
+  Logger, 
+  Validation, 
+  callContractMethod,
+  ConfigError 
+} = require('../shared');
+
+// 日志记录
+Logger.info('操作开始', { method: 'createProperty' });
+
+// 数据验证
+if (!Validation.isValidAddress(address)) {
+  throw new ConfigError('无效的地址格式');
+}
+
+// 合约调用工具
+const result = await callContractMethod('PropertyManager', 'getProperty', [propertyId]);
+```
+
+#### 主要组件
+
+- **Logger**: 日志记录工具
+- **Validation**: 数据验证工具
+- **错误类**: 各种专用错误类型
+- **合约工具函数**: 便捷的合约交互函数
+
+### 3. 核心层 (core)
+
+核心层提供高级封装，基于配置层和工具层构建：
+
+```javascript
+const { Provider, Wallet, Contract } = require('../shared');
+
+// 创建Provider
+const provider = await Provider.create();
+
+// 创建钱包
+const wallet = await Wallet.create({ 
+  keyType: 'ADMIN',
+  provider 
+});
+
+// 创建合约实例
+const contract = await Contract.create({
+  contractName: 'PropertyManager',
+  signer: wallet
+});
+
+// 调用合约方法
+const result = await Contract.call(contract, 'getProperty', [propertyId]);
+
+// 发送交易
+const tx = await Contract.send(contract, 'createProperty', [propertyData]);
+```
+
+#### 主要组件
+
+- **Provider**: 网络连接管理
+- **Wallet**: 钱包和账户管理
+- **Contract**: 合约交互管理
 
 ## 核心模块使用
 
@@ -274,58 +376,148 @@ describe('Contract Module', () => {
 
 ## 最佳实践
 
-1. **错误处理**
-   - 始终使用 ErrorHandler
-   - 添加详细的错误上下文
-   - 记录错误日志
+### 遵循模块分层
 
-2. **日志记录**
-   - 使用合适的日志级别
-   - 添加必要的上下文信息
-   - 避免记录敏感信息
+- **配置层**: 保持纯粹的数据获取与配置管理，不包含业务逻辑
+- **工具层**: 提供独立的工具函数，避免依赖特定业务场景
+- **核心层**: 使用配置层和工具层构建高级功能，不直接访问环境变量
 
-3. **配置管理**
-   - 使用环境变量
-   - 避免硬编码
-   - 提供默认配置
+### 错误处理
 
-4. **代码组织**
-   - 遵循模块化原则
-   - 保持代码简洁
-   - 添加必要注释
+始终使用提供的错误类进行错误处理：
 
-5. **测试编写**
-   - 编写完整的测试用例
-   - 覆盖边界条件
-   - 保持测试独立
+```javascript
+const { ContractError, TransactionError } = require('../shared');
+
+try {
+  const result = await Contract.call(contract, 'getProperty', [propertyId]);
+  return result;
+} catch (error) {
+  if (error instanceof ContractError) {
+    Logger.error('合约调用失败', { error: error.message });
+    // 处理合约相关错误
+  } else {
+    throw new TransactionError(`获取属性失败: ${error.message}`);
+  }
+}
+```
+
+### 日志记录
+
+使用统一的日志工具记录关键操作和错误：
+
+```javascript
+const { Logger } = require('../shared');
+
+Logger.info('开始处理', { operation: 'createToken', propertyId });
+// 执行操作...
+Logger.debug('处理完成', { result: 'success', txHash });
+```
+
+## 常见用例
+
+### 完整流程示例
+
+以下是一个完整的流程示例，展示了如何使用shared模块创建资产：
+
+```javascript
+const { 
+  Contract, 
+  Wallet, 
+  Provider, 
+  Logger, 
+  ConfigError 
+} = require('../shared');
+
+async function createProperty(propertyData) {
+  try {
+    Logger.info('开始创建资产', { propertyData });
+    
+    // 创建钱包
+    const wallet = await Wallet.create({ keyType: 'ADMIN' });
+    
+    // 创建合约实例
+    const contract = await Contract.create({
+      contractName: 'PropertyManager',
+      signer: wallet
+    });
+    
+    // 发送交易
+    const tx = await Contract.send(contract, 'createProperty', [propertyData]);
+    Logger.info('交易已发送', { hash: tx.hash });
+    
+    // 等待交易确认
+    const receipt = await tx.wait();
+    Logger.info('资产创建成功', { hash: receipt.hash });
+    
+    return receipt;
+  } catch (error) {
+    Logger.error('创建资产失败', { error: error.message, stack: error.stack });
+    throw new ConfigError(`创建资产失败: ${error.message}`);
+  }
+}
+```
 
 ## 常见问题
 
-1. **如何处理网络错误？**
-   ```javascript
-   try {
-     await Contract.call(contract, 'method', []);
-   } catch (error) {
-     const handledError = ErrorHandler.handle(error, {
-       type: 'network',
-       context: { method: 'method' }
-     });
-     // 处理错误
-   }
-   ```
+### 1. 如何处理网络切换？
 
-2. **如何配置日志路径？**
-   ```javascript
-   Logger.setPath('your-module-name');
-   ```
+在创建Provider或合约实例时指定网络类型：
 
-3. **如何验证参数？**
-   ```javascript
-   Validation.validate(
-     Validation.isValidAddress(address),
-     '无效的地址格式'
-   );
-   ```
+```javascript
+// 创建特定网络的Provider
+const provider = await Provider.create({ networkType: 'mainnet' });
+
+// 创建特定网络的合约实例
+const contract = await Contract.create({
+  contractName: 'PropertyManager',
+  networkType: 'mainnet'
+});
+```
+
+### 2. 如何处理不同环境的合约地址？
+
+使用网络特定的合约地址命名方式：
+
+```
+# 测试网合约地址
+CONTRACT_ADDRESS_TESTNET_PROPERTY_MANAGER=0x...
+
+# 主网合约地址
+CONTRACT_ADDRESS_MAINNET_PROPERTY_MANAGER=0x...
+```
+
+然后通过 `ContractConfig.getNetworkSpecificContractAddress()` 获取：
+
+```javascript
+const address = ContractConfig.getNetworkSpecificContractAddress('PROPERTY_MANAGER', 'testnet');
+```
+
+### 3. 如何监听合约事件？
+
+使用Contract类的listen方法：
+
+```javascript
+const filter = Contract.listen(contract, 'PropertyCreated', (event) => {
+  Logger.info('新资产创建', { 
+    propertyId: event.args.propertyId,
+    owner: event.args.owner
+  });
+});
+
+// 停止监听
+Contract.stopListening(contract, filter);
+```
+
+## 扩展和贡献
+
+如需扩展shared模块功能，请遵循以下原则：
+
+1. 保持模块分层清晰，不跨层调用
+2. 底层模块不依赖高层模块
+3. 使用适当的错误处理和日志记录
+4. 编写完整的单元测试
+5. 更新文档和注释
 
 ## 更新日志
 
