@@ -84,7 +84,10 @@ const swaggerOptions = {
       { ApiKeyAuth: [] }
     ]
   },
-  apis: ['./server/src/routes/*.js']
+  apis: [
+    './server/src/routes/*.js',
+    './server/src/routes/contracts/*.js' // 包含动态生成的合约路由
+  ]
 };
 
 const swaggerDocs = swaggerJsdoc(swaggerOptions);

@@ -5,7 +5,7 @@
 const dotenv = require('dotenv');
 const { Logger } = require('../../shared/src/utils');
 const app = require('./app');
-const blockchainService = require('./services/BlockchainService');
+const { blockchainService } = require('./services');
 const serverConfig = require('./config');
 
 // 加载环境变量

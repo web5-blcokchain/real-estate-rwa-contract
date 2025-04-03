@@ -28,6 +28,41 @@ server/
 - 支持API文档自动生成（Swagger）
 - 提供完善的日志记录和错误处理
 
+### 合约接口代理
+
+系统为`config/abi`目录下的每个ABI文件创建专门的控制器，每个控制器代理对应合约的所有方法。
+
+* **专用控制器**: 每个ABI文件有一个专门的控制器，如`SimpleERC20.controller.js`、`PropertyToken.controller.js`
+* **直接方法映射**: 控制器中的每个方法直接对应合约中的方法
+* **直观接口**: API路径直接反映合约名称和方法名称，易于理解和使用
+
+每个合约的API端点遵循以下格式:
+
+- `GET /api/v1/contracts/{contractName}/address`: 获取合约部署地址
+- 只读方法: `GET /api/v1/contracts/{contractName}/{methodName}`
+- 写入方法: `POST /api/v1/contracts/{contractName}/{methodName}`
+
+示例:
+
+```
+# 获取PropertyToken合约地址
+GET /api/v1/contracts/PropertyToken/address
+
+# 获取PropertyToken的名称
+GET /api/v1/contracts/PropertyToken/name
+
+# 查询账户余额
+GET /api/v1/contracts/PropertyToken/balanceOf?account=0x1234...5678
+
+# 转账
+POST /api/v1/contracts/PropertyToken/transfer
+Body:
+{
+  "to": "0xabcd...1234",
+  "amount": "1000000000000000000"
+}
+```
+
 ## 服务架构
 
 ### 区块链服务

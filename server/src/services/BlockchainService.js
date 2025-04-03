@@ -203,6 +203,31 @@ class BlockchainService {
       throw error;
     }
   }
+
+  /**
+   * 创建带签名者的合约实例
+   * @param {Array} abi - 合约ABI
+   * @param {string} address - 合约地址
+   * @param {string} privateKey - 私钥
+   * @returns {Contract} 带签名者的合约实例
+   */
+  getSignedContractInstance(abi, address, privateKey) {
+    try {
+      if (!this.initialized) {
+        throw new Error('区块链服务尚未初始化');
+      }
+      
+      if (!privateKey) {
+        throw new Error('未提供私钥，无法创建带签名者的合约实例');
+      }
+      
+      const wallet = new ethers.Wallet(privateKey, this.provider);
+      return new ethers.Contract(address, abi, wallet);
+    } catch (error) {
+      Logger.error(`创建带签名者的合约实例失败: ${error.message}`, { error, address });
+      throw error;
+    }
+  }
 }
 
 // 创建单例实例

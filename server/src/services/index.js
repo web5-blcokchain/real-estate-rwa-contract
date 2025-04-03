@@ -1,12 +1,9 @@
 /**
- * 服务器服务模块入口
+ * 服务模块索引
+ * 统一导出所有服务
  */
 const blockchainService = require('./BlockchainService');
-const blockchainBusinessService = require('./blockchain.service');
-const contractService = require('./contract.service');
 
 module.exports = {
-  blockchainService,
-  blockchainBusinessService,
-  contractService
+  blockchainService
 }; 
