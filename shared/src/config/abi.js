@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { Validation } = require('../utils/validation');
 const { ConfigError } = require('../utils/errors');
+const Logger = require('../utils/logger');
 
 /**
  * ABI配置类
@@ -109,6 +110,117 @@ class ABIConfig {
     }
 
     return event;
+  }
+
+  /**
+   * 加载指定目录下的所有ABI文件
+   * @param {string} [dirPath='config/abi'] - ABI文件目录路径
+   * @returns {Object} 合约ABI映射表 {contractName: {abi, functions, events, address}}
+   */
+  static loadAllContracts(dirPath = 'config/abi') {
+    try {
+      const abiDir = path.resolve(process.cwd(), dirPath);
+      if (!fs.existsSync(abiDir)) {
+        Logger.warn(`ABI目录不存在: ${abiDir}`);
+        return {};
+      }
+
+      const contracts = {};
+      const files = fs.readdirSync(abiDir);
+      
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        
+        const contractName = path.basename(file, '.json');
+        const filePath = path.join(abiDir, file);
+        
+        try {
+          const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const contractInfo = this._parseContractABI(abiJson, contractName);
+          contracts[contractName] = contractInfo;
+          
+          Logger.info(`已加载合约ABI: ${contractName}`);
+        } catch (error) {
+          Logger.error(`加载合约ABI失败: ${contractName}`, { error: error.message });
+        }
+      }
+      
+      return contracts;
+    } catch (error) {
+      Logger.error('加载所有合约ABI失败', { error: error.message });
+      throw new ConfigError(`加载所有合约ABI失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 解析合约ABI获取函数和事件信息
+   * @private
+   * @param {Array} abi - 合约ABI
+   * @param {string} contractName - 合约名称
+   * @returns {Object} 解析后的合约信息
+   */
+  static _parseContractABI(abi, contractName) {
+    const functions = {};
+    const events = {};
+    const readFunctions = {};
+    const writeFunctions = {};
+    
+    for (const item of abi) {
+      if (item.type === 'function') {
+        functions[item.name] = item;
+        
+        // 区分读写函数
+        const isReadOnly = ['view', 'pure'].includes(item.stateMutability);
+        if (isReadOnly) {
+          readFunctions[item.name] = {
+            ...item,
+            isReadOnly: true
+          };
+        } else {
+          writeFunctions[item.name] = {
+            ...item,
+            isReadOnly: false
+          };
+        }
+      } else if (item.type === 'event') {
+        events[item.name] = item;
+      }
+    }
+    
+    // 尝试从环境变量获取合约地址
+    const envKey = `CONTRACT_${contractName.toUpperCase()}_ADDRESS`;
+    const address = process.env[envKey] || null;
+    
+    return {
+      name: contractName,
+      abi,
+      functions,
+      readFunctions,
+      writeFunctions,
+      events,
+      address
+    };
+  }
+
+  /**
+   * 获取指定合约的ABI信息
+   * @param {string} contractName - 合约名称
+   * @param {string} [dirPath='config/abi'] - ABI文件目录路径
+   * @returns {Object} 合约ABI信息
+   */
+  static getContractABI(contractName, dirPath = 'config/abi') {
+    try {
+      const filePath = path.join(path.resolve(process.cwd(), dirPath), `${contractName}.json`);
+      
+      if (!fs.existsSync(filePath)) {
+        throw new ConfigError(`合约ABI文件不存在: ${filePath}`);
+      }
+      
+      const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      return this._parseContractABI(abiJson, contractName);
+    } catch (error) {
+      throw new ConfigError(`获取合约ABI失败: ${error.message}`);
+    }
   }
 }
 

@@ -5,12 +5,18 @@
 require('dotenv').config();
 
 /**
+ * HTTP服务器配置
+ */
+const { Config } = require('../../../shared/src');
+
+/**
  * 服务器配置
  */
 const server = {
   port: process.env.PORT || 3000,
   host: process.env.HOST || 'localhost',
-  corsOrigin: process.env.CORS_ORIGIN || '*'
+  corsOrigin: process.env.CORS_ORIGIN || '*',
+  env: process.env.NODE_ENV || 'development'
 };
 
 /**
@@ -28,7 +34,9 @@ const env = {
  */
 const api = {
   version: '1.0.0',
-  keys: process.env.API_KEYS ? process.env.API_KEYS.split(',') : []
+  keys: process.env.API_KEYS ? process.env.API_KEYS.split(',') : [],
+  API_VERSION: '1.0.0',
+  API_KEY: process.env.API_KEY || 'default-api-key'
 };
 
 /**
@@ -36,6 +44,8 @@ const api = {
  */
 const blockchain = {
   defaultNetwork: process.env.DEFAULT_NETWORK || 'local',
+  networkType: Config.getNetworkType(),
+  contractAddresses: Config.getContractAddresses(),
   
   // 网络配置
   networks: {

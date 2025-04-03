@@ -2,7 +2,10 @@
  * 合约交互工具
  * 通过shared模块与区块链合约交互
  */
-const { Contract, Provider, Wallet, Logger } = require('../../../shared/src');
+const { ethers } = require('ethers');
+const { Logger } = require('./logger');
+const { Config } = require('../config');
+const { Provider, Wallet } = require('../core');
 
 /**
  * 调用合约只读方法
@@ -19,15 +22,24 @@ async function callContractMethod(contractName, methodName, args = []) {
       args: JSON.stringify(args) 
     });
     
-    // 创建合约实例
+    // 创建Provider
     const provider = await Provider.create();
-    const contract = await Contract.create({
-      name: contractName,
+    
+    // 获取合约地址和ABI
+    const contractConfig = Config.getContractConfig(contractName);
+    if (!contractConfig || !contractConfig.address || !contractConfig.abi) {
+      throw new Error(`找不到合约配置: ${contractName}`);
+    }
+    
+    // 创建合约实例
+    const contract = new ethers.Contract(
+      contractConfig.address,
+      contractConfig.abi,
       provider
-    });
+    );
     
     // 调用合约方法
-    const result = await Contract.call(contract, methodName, args);
+    const result = await contract[methodName](...args);
     return result;
   } catch (error) {
     Logger.error('调用合约方法失败', {
@@ -57,36 +69,43 @@ async function sendContractTransaction(contractName, methodName, args = [], opti
       args: JSON.stringify(args) 
     });
     
-    // 创建合约实例
+    // 创建Provider
     const provider = await Provider.create();
-    let wallet;
     
+    // 获取合约地址和ABI
+    const contractConfig = Config.getContractConfig(contractName);
+    if (!contractConfig || !contractConfig.address || !contractConfig.abi) {
+      throw new Error(`找不到合约配置: ${contractName}`);
+    }
+    
+    // 获取钱包
+    let wallet;
     if (options.wallet) {
       // 使用传入的钱包
       wallet = options.wallet;
-      wallet.connect(provider);
+      wallet = wallet.connect(provider);
     } else if (options.privateKey) {
       // 使用私钥创建钱包
-      wallet = await Wallet.create({
-        privateKey: options.privateKey,
-        provider
-      });
+      wallet = new ethers.Wallet(options.privateKey, provider);
     } else {
       throw new Error('未提供钱包或私钥');
     }
     
-    // 创建已连接钱包的合约实例
-    const contract = await Contract.create({
-      name: contractName,
-      provider,
-      signer: wallet
-    });
+    // 创建合约实例
+    const contract = new ethers.Contract(
+      contractConfig.address,
+      contractConfig.abi,
+      wallet
+    );
+    
+    // 构建交易选项
+    const txOptions = {};
+    if (options.gasLimit) txOptions.gasLimit = options.gasLimit;
+    if (options.gasPrice) txOptions.gasPrice = options.gasPrice;
     
     // 发送交易
-    const receipt = await Contract.send(contract, methodName, args, {
-      gasLimit: options.gasLimit,
-      gasPrice: options.gasPrice
-    });
+    const tx = await contract[methodName](...args, txOptions);
+    const receipt = await tx.wait();
     
     return receipt;
   } catch (error) {

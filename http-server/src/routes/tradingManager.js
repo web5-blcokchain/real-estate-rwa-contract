@@ -19,7 +19,7 @@ const { apiKey } = require('../middlewares');
  * /api/v1/trading-manager/order:
  *   post:
  *     summary: 创建交易订单
- *     tags: [TradingManager]
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     requestBody:
@@ -30,30 +30,25 @@ const { apiKey } = require('../middlewares');
  *             type: object
  *             required:
  *               - propertyId
- *               - tokenAmount
- *               - pricePerToken
- *               - expireTime
+ *               - amount
+ *               - price
  *               - privateKey
  *             properties:
  *               propertyId:
  *                 type: string
  *                 description: 资产ID
- *               tokenAmount:
+ *               amount:
  *                 type: string
- *                 description: 交易代币数量
- *               pricePerToken:
+ *                 description: 交易数量
+ *               price:
  *                 type: string
- *                 description: 单个代币价格
- *               expireTime:
- *                 type: string
- *                 format: date-time
- *                 description: 订单过期时间
+ *                 description: 交易价格
  *               privateKey:
  *                 type: string
- *                 description: 卖家私钥
+ *                 description: 创建者私钥
  *     responses:
- *       201:
- *         description: 成功，订单已创建
+ *       200:
+ *         description: 订单创建成功
  *       400:
  *         description: 参数验证失败
  *       401:
@@ -68,23 +63,25 @@ router.post('/order', tradingManagerController.createOrder);
  * /api/v1/trading-manager/order/{orderId}:
  *   get:
  *     summary: 获取订单信息
- *     tags: [TradingManager]
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     parameters:
- *       - name: orderId
- *         in: path
+ *       - in: path
+ *         name: orderId
  *         required: true
  *         schema:
  *           type: string
  *         description: 订单ID
  *     responses:
  *       200:
- *         description: 成功，返回订单信息
+ *         description: 返回订单信息
  *       400:
  *         description: 参数验证失败
  *       401:
  *         description: 未授权
+ *       404:
+ *         description: 订单不存在
  *       500:
  *         description: 服务器错误
  */
@@ -94,8 +91,8 @@ router.get('/order/:orderId', tradingManagerController.getOrderInfo);
  * @swagger
  * /api/v1/trading-manager/execute:
  *   post:
- *     summary: 执行订单交易
- *     tags: [TradingManager]
+ *     summary: 执行交易
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     requestBody:
@@ -106,21 +103,27 @@ router.get('/order/:orderId', tradingManagerController.getOrderInfo);
  *             type: object
  *             required:
  *               - orderId
+ *               - amount
  *               - privateKey
  *             properties:
  *               orderId:
  *                 type: string
  *                 description: 订单ID
+ *               amount:
+ *                 type: string
+ *                 description: 交易数量
  *               privateKey:
  *                 type: string
  *                 description: 买家私钥
  *     responses:
  *       200:
- *         description: 成功，订单已执行
+ *         description: 交易执行成功
  *       400:
  *         description: 参数验证失败
  *       401:
  *         description: 未授权
+ *       404:
+ *         description: 订单不存在
  *       500:
  *         description: 服务器错误
  */
@@ -131,7 +134,7 @@ router.post('/execute', tradingManagerController.executeOrder);
  * /api/v1/trading-manager/cancel:
  *   post:
  *     summary: 取消订单
- *     tags: [TradingManager]
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     requestBody:
@@ -149,14 +152,16 @@ router.post('/execute', tradingManagerController.executeOrder);
  *                 description: 订单ID
  *               privateKey:
  *                 type: string
- *                 description: 卖家私钥
+ *                 description: 创建者私钥
  *     responses:
  *       200:
- *         description: 成功，订单已取消
+ *         description: 订单取消成功
  *       400:
  *         description: 参数验证失败
  *       401:
  *         description: 未授权
+ *       404:
+ *         description: 订单不存在
  *       500:
  *         description: 服务器错误
  */
@@ -166,13 +171,13 @@ router.post('/cancel', tradingManagerController.cancelOrder);
  * @swagger
  * /api/v1/trading-manager/active-orders:
  *   get:
- *     summary: 获取所有活跃订单
- *     tags: [TradingManager]
+ *     summary: 获取所有激活的订单
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     responses:
  *       200:
- *         description: 成功，返回活跃订单列表
+ *         description: 返回激活的订单列表
  *       401:
  *         description: 未授权
  *       500:
@@ -184,20 +189,20 @@ router.get('/active-orders', tradingManagerController.getActiveOrders);
  * @swagger
  * /api/v1/trading-manager/user-orders/{address}:
  *   get:
- *     summary: 获取用户订单
- *     tags: [TradingManager]
+ *     summary: 获取用户的订单
+ *     tags: [Trading Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     parameters:
- *       - name: address
- *         in: path
+ *       - in: path
+ *         name: address
  *         required: true
  *         schema:
  *           type: string
  *         description: 用户地址
  *     responses:
  *       200:
- *         description: 成功，返回用户订单列表
+ *         description: 返回用户的订单列表
  *       400:
  *         description: 参数验证失败
  *       401:
