@@ -11,18 +11,31 @@ const EnvConfig = require('../config/env');
 class Wallet {
   /**
    * 创建钱包实例
-   * @param {Object} params - 创建参数
-   * @param {string} [params.privateKey] - 私钥
-   * @param {string} [params.mnemonic] - 助记词
-   * @param {Provider} params.provider - 网络提供者
-   * @returns {Promise<Wallet>} 钱包实例
-   * @throws {WalletError} 创建失败时抛出错误
+   * @param {Object} [options={}] - 选项
+   * @param {string} [options.privateKey] - 私钥
+   * @param {string} [options.mnemonic] - 助记词
+   * @param {string} [options.keyType] - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
+   * @param {Object} [options.provider] - Provider实例
+   * @returns {Promise<ethers.Wallet>} 钱包实例
    */
-  static async create({ privateKey, mnemonic, provider }) {
+  static async create(options = {}) {
     try {
+      let privateKey = options.privateKey;
+      const mnemonic = options.mnemonic;
+      const keyType = options.keyType;
+      
+      // 如果没有提供privateKey，但提供了keyType，则从环境变量获取
+      if (!privateKey && keyType) {
+        try {
+          privateKey = EnvConfig.getPrivateKey(keyType);
+        } catch (error) {
+          throw new WalletError(`从环境变量获取${keyType}私钥失败: ${error.message}`);
+        }
+      }
+      
       // 验证参数
       if (!privateKey && !mnemonic) {
-        throw new WalletError('创建钱包失败: 需要提供私钥或助记词');
+        throw new WalletError('创建钱包失败: 需要提供私钥、助记词或有效的私钥类型');
       }
 
       // 验证私钥格式
@@ -35,11 +48,19 @@ class Wallet {
         Validation.validate(Validation.isValidMnemonic(mnemonic), '创建钱包失败: 无效的助记词');
       }
 
-      // 验证网络提供者
-      if (!Validation.isValidProvider(provider)) {
-        throw new WalletError('创建钱包失败: 无效的网络提供者');
+      // 获取Provider
+      let provider = options.provider;
+      if (!provider) {
+        provider = await Provider.create();
+      } else {
+        // 验证提供的Provider
+        const isValid = await this.validateProvider(provider);
+        if (!isValid) {
+          Logger.warn('提供的Provider无效，将创建新的Provider实例');
+          provider = await Provider.create();
+        }
       }
-
+      
       // 创建钱包实例
       let wallet;
       if (privateKey) {
@@ -48,40 +69,10 @@ class Wallet {
         wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
       }
 
+      Logger.info('钱包创建成功', { address: await wallet.getAddress() });
       return wallet;
     } catch (error) {
-      Logger.error('创建钱包失败', { error });
-      throw error;
-    }
-  }
-
-  /**
-   * 从私钥创建钱包实例
-   * @param {string} privateKey - 私钥
-   * @returns {Promise<ethers.Wallet>} 钱包实例
-   */
-  static async createFromPrivateKey(privateKey) {
-    try {
-      // 验证私钥格式
-      if (!privateKey) {
-        throw new WalletError('创建钱包失败: 私钥不能为空');
-      }
-
-      // 验证私钥格式
-      if (!Validation.isValidPrivateKey(privateKey)) {
-        throw new WalletError('创建钱包失败: 无效的私钥');
-      }
-
-      // 获取活动网络提供者
-      const provider = await Provider.getActiveProvider();
-      
-      // 创建钱包实例
-      const wallet = new ethers.Wallet(privateKey, provider);
-      Logger.info('从私钥创建钱包成功');
-      
-      return wallet;
-    } catch (error) {
-      Logger.error('从私钥创建钱包失败', { error: error.message });
+      Logger.error('创建钱包失败', { error: error.message, stack: error.stack });
       if (error instanceof WalletError) {
         throw error;
       }
@@ -236,6 +227,24 @@ class Wallet {
       return mnemonic;
     } catch (error) {
       throw new WalletError(`导出助记词失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 验证Provider实例
+   * @param {Object} provider - Provider实例
+   * @returns {Promise<boolean>} 是否有效
+   */
+  static async validateProvider(provider) {
+    try {
+      if (!provider) return false;
+      
+      // 简单的连接测试
+      await provider.getNetwork();
+      return true;
+    } catch (error) {
+      Logger.error('Provider验证失败', { error: error.message });
+      return false;
     }
   }
 }

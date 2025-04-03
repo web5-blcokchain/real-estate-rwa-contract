@@ -196,7 +196,7 @@ class EnvConfig {
     const networkType = process.env[ENV_KEYS.BLOCKCHAIN_NETWORK]?.toLowerCase();
     
     // 处理空值或无效网络类型
-    if (!networkType || !['localhost', 'local', 'testnet', 'mainnet'].includes(networkType)) {
+    if (!networkType || !['localhost', 'testnet', 'mainnet'].includes(networkType)) {
       console.warn(`未知的网络类型: ${networkType}，将使用localhost`);
       return 'localhost';
     }
@@ -357,6 +357,57 @@ class EnvConfig {
       dir: path.join(process.cwd(), 'logs'),
       filename: 'blockchain.log'
     };
+  }
+
+  /**
+   * 获取私钥
+   * @param {string} keyType - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
+   * @returns {string} 私钥
+   */
+  static getPrivateKey(keyType) {
+    if (!keyType) {
+      throw new ConfigError('私钥类型不能为空');
+    }
+    
+    // 构造环境变量键名
+    const envKey = `${keyType.toUpperCase()}_PRIVATE_KEY`;
+    const privateKey = process.env[envKey];
+    
+    if (!privateKey) {
+      throw new ConfigError(`${keyType}私钥未配置`);
+    }
+    
+    return privateKey;
+  }
+
+  /**
+   * 获取所有环境变量
+   * @returns {Object} 所有环境变量的键值对
+   */
+  static getAllEnv() {
+    // 返回process.env的浅拷贝，避免直接返回引用
+    return { ...process.env };
+  }
+
+  /**
+   * 获取合约地址
+   * @param {string} contractName - 合约名称
+   * @returns {string} 合约地址
+   */
+  static getContractAddress(contractName) {
+    if (!contractName) {
+      throw new ConfigError('合约名称不能为空');
+    }
+
+    // 构造环境变量键名
+    const key = `${ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName}${ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
+    const address = this.getEnv(key);
+    
+    if (!address) {
+      throw new ConfigError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
+    }
+    
+    return address;
   }
 }
 

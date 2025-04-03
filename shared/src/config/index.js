@@ -5,7 +5,6 @@
 
 const EnvConfig = require('./env');
 const AbiConfig = require('./abi');
-const WalletConfig = require('./wallet');
 const ContractConfig = require('./contract');
 const NetworkConfig = require('./network');
 
@@ -19,9 +18,6 @@ module.exports = {
   
   // ABI配置
   AbiConfig,
-  
-  // 钱包配置
-  WalletConfig,
   
   // 合约配置
   ContractConfig,

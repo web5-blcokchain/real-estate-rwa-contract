@@ -7,6 +7,15 @@ const EnvConfig = require('./env');
  */
 class NetworkConfig {
   /**
+   * 网络类型常量
+   */
+  static NETWORK_TYPES = {
+    LOCALHOST: 'localhost',
+    TESTNET: 'testnet',
+    MAINNET: 'mainnet'
+  };
+
+  /**
    * 加载网络配置
    * @param {Object} envConfig - 环境变量配置
    * @returns {Object} 网络配置
@@ -66,8 +75,8 @@ class NetworkConfig {
    * @returns {string} 标准化后的网络类型
    */
   static _normalizeNetworkType(networkType) {
-    if (!networkType) return 'localhost';
-    return networkType.toLowerCase() === 'local' ? 'localhost' : networkType.toLowerCase();
+    if (!networkType) return this.NETWORK_TYPES.LOCALHOST;
+    return networkType.toLowerCase() === 'local' ? this.NETWORK_TYPES.LOCALHOST : networkType.toLowerCase();
   }
 
   /**
@@ -81,7 +90,7 @@ class NetworkConfig {
     const normalizedType = this._normalizeNetworkType(networkType);
     
     const configs = {
-      localhost: {
+      [this.NETWORK_TYPES.LOCALHOST]: {
         name: 'Localhost Network',
         explorer: 'http://localhost:4000',
         nativeCurrency: {
@@ -90,7 +99,7 @@ class NetworkConfig {
           decimals: 18
         }
       },
-      testnet: {
+      [this.NETWORK_TYPES.TESTNET]: {
         name: 'Test Network',
         explorer: 'https://testnet.etherscan.io',
         nativeCurrency: {
@@ -99,7 +108,7 @@ class NetworkConfig {
           decimals: 18
         }
       },
-      mainnet: {
+      [this.NETWORK_TYPES.MAINNET]: {
         name: 'Ethereum Mainnet',
         explorer: 'https://etherscan.io',
         nativeCurrency: {
@@ -110,7 +119,7 @@ class NetworkConfig {
       }
     };
 
-    return configs[normalizedType] || {};
+    return configs[normalizedType] || configs[this.NETWORK_TYPES.LOCALHOST];
   }
 
   /**
@@ -131,27 +140,32 @@ class NetworkConfig {
 
   /**
    * 检查是否本地网络
+   * @param {string} [networkType] - 网络类型，如果不提供则使用当前配置
    * @returns {boolean} 是否本地网络
    */
-  static isLocalNetwork() {
-    const networkType = this.getNetworkType().toLowerCase();
-    return networkType === 'localhost';
+  static isLocalNetwork(networkType) {
+    const type = networkType || EnvConfig.getNetworkType();
+    return this._normalizeNetworkType(type) === this.NETWORK_TYPES.LOCALHOST;
   }
 
   /**
    * 检查是否测试网络
+   * @param {string} [networkType] - 网络类型，如果不提供则使用当前配置
    * @returns {boolean} 是否测试网络
    */
-  static isTestNetwork() {
-    return this.getNetworkType().toLowerCase() === 'testnet';
+  static isTestNetwork(networkType) {
+    const type = networkType || EnvConfig.getNetworkType();
+    return this._normalizeNetworkType(type) === this.NETWORK_TYPES.TESTNET;
   }
 
   /**
    * 检查是否主网
+   * @param {string} [networkType] - 网络类型，如果不提供则使用当前配置
    * @returns {boolean} 是否主网
    */
-  static isMainNetwork() {
-    return this.getNetworkType().toLowerCase() === 'mainnet';
+  static isMainNetwork(networkType) {
+    const type = networkType || EnvConfig.getNetworkType();
+    return this._normalizeNetworkType(type) === this.NETWORK_TYPES.MAINNET;
   }
 
   /**
@@ -180,12 +194,17 @@ class NetworkConfig {
 
   /**
    * 获取区块浏览器URL
+   * @param {string} txHash - 交易哈希（可选）
    * @returns {string} 区块浏览器URL
    */
-  static getExplorerUrl() {
-    const network = this.getCurrentNetwork();
-    return network.explorer || (this.isLocalNetwork() ? 'http://localhost:4000' : 
-      this.isTestNetwork() ? 'https://testnet.etherscan.io' : 'https://etherscan.io');
+  static getExplorerUrl(txHash) {
+    const networkConfig = EnvConfig.getNetworkConfig();
+    let url = networkConfig.explorer || this._getNetworkSpecificConfig(networkConfig.type).explorer;
+    
+    if (txHash) {
+      return `${url}/tx/${txHash}`;
+    }
+    return url;
   }
 }
 
