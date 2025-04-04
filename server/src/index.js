@@ -122,7 +122,7 @@ const swaggerOptions = {
     info: {
       title: '日本房地产资产通证化API',
       version: '1.0.0',
-      description: '基于区块链的房地产资产通证化API文档',
+      description: '基于区块链的房地产资产通证化API文档\n\n**安全要求**: 所有API请求必须包含有效的API密钥，通过请求头`X-API-Key`或URL参数`api_key`提供。',
       contact: {
         name: '开发团队',
         email: 'dev@example.com'
@@ -143,7 +143,8 @@ const swaggerOptions = {
         ApiKeyAuth: {
           type: 'apiKey',
           in: 'header',
-          name: 'X-API-Key'
+          name: 'X-API-Key',
+          description: '所有API调用必须包含有效的API密钥'
         }
       }
     },
@@ -154,10 +155,16 @@ const swaggerOptions = {
     ]
   },
   apis: [
-    path.join(__dirname, './routes/*.js'),
-    path.join(__dirname, './controllers/*.js'),
-    path.join(__dirname, './models/*.js')
+    // 使用绝对路径确保文件正确加载
+    path.join(__dirname, 'routes', '*.js'),
+    path.join(__dirname, 'controllers', '*.js'),
+    path.join(__dirname, 'models', '*.js')
   ],
+  // 启用更详细的日志以便调试
+  swaggerDefinition: {
+    openapi: '3.0.0',
+    security: [{ApiKeyAuth: []}]
+  }
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -260,5 +267,6 @@ app.listen(PORT, () => {
   console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
   console.log(`区块链网络: ${process.env.BLOCKCHAIN_NETWORK || 'localhost'}`);
   console.log(`项目根目录: ${process.env.PROJECT_PATH}`);
+  console.log(`API文档: http://localhost:${PORT}/api-docs`);
   console.log('================================');
 }); 

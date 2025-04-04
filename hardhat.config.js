@@ -11,7 +11,15 @@ const envConfig = require("./shared/src/config/env").load();
 
 // 获取账户配置
 const getAccounts = () => {
-  const privateKey = envConfig.ADMIN_PRIVATE_KEY;
+  const privateKey = envConfig.DEPLOYER_PRIVATE_KEY;
+  
+  // 检查私钥是否存在
+  if (!privateKey) {
+    console.warn('警告: 未找到DEPLOYER_PRIVATE_KEY，使用默认开发私钥替代');
+    // 使用hardhat默认私钥
+    return ["ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"];
+  }
+  
   const formattedKey = privateKey.replace(/^0x/, '');
   if (formattedKey.length !== 64) {
     throw new Error(`Invalid private key length: ${formattedKey.length}, expected 64 characters`);
@@ -82,9 +90,10 @@ const getActiveNetworks = () => {
   };
 
   // 根据 BLOCKCHAIN_NETWORK 激活对应网络
-  const activeNetwork = envConfig.BLOCKCHAIN_NETWORK;
+  const activeNetwork = envConfig.BLOCKCHAIN_NETWORK || 'hardhat';
   if (!networks[activeNetwork]) {
-    throw new Error(`Invalid network type: ${activeNetwork}`);
+    console.warn(`警告: 无效的网络类型 ${activeNetwork}，默认使用hardhat网络`);
+    return networks;
   }
 
   return networks;

@@ -15,6 +15,7 @@ const roleManagerRoutes = require('./RoleManager.routes');
 const rewardManagerRoutes = require('./RewardManager.routes');
 const tradingManagerRoutes = require('./TradingManager.routes');
 const simpleERC20Routes = require('./SimpleERC20.routes');
+const testRoutes = require('./test.routes');
 
 const router = express.Router();
 
@@ -59,6 +60,9 @@ router.use(`${API_V1_PREFIX}/blockchain`, blockchainRoutes);
 // 合约通用路由
 router.use(`${API_PREFIX}/contract`, contractRoutes);
 router.use(`${API_V1_PREFIX}/contract`, contractRoutes);
+
+// 添加测试路由
+router.use(`${API_V1_PREFIX}/test`, apiKey, testRoutes);
 
 // v1版本的合约特定路由
 router.use(`${CONTRACTS_PREFIX}/RealEstateFacade`, apiKey, realEstateFacadeRoutes);
