@@ -252,9 +252,129 @@ async function registerPropertyAndCreateToken(req, res) {
   }
 }
 
+/**
+ * createProperty - 创建房产并铸造代币（RealEstateFacade合约的createProperty方法）
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ */
+async function createProperty(req, res) {
+  try {
+    Logger.info('API调用: createProperty', { 
+      interface: 'createProperty',
+      method: 'POST',
+      params: req.body
+    });
+    
+    const { 
+      propertyId, 
+      country, 
+      metadataURI,
+      tokenName,
+      tokenSymbol,
+      initialSupply,
+      tokenImplementation
+    } = req.body;
+    
+    // 验证参数
+    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply) {
+      Logger.warn('参数验证失败: createProperty', {
+        interface: 'createProperty',
+        method: 'POST',
+        params: req.body
+      });
+      return sendResponse(res, { error: '缺少必要参数' }, 400);
+    }
+    
+    // 处理代币实现地址
+    let tokenImplAddress = tokenImplementation;
+    if (!tokenImplAddress) {
+      // 如果没有提供，使用部署文件中的PropertyToken地址
+      tokenImplAddress = AddressConfig.getContractAddress('PropertyToken');
+    }
+    
+    // 验证地址
+    if (!Validation.isValidAddress(tokenImplAddress)) {
+      return sendResponse(res, { error: '无效的代币实现地址' }, 400);
+    }
+    
+    // 初始化区块链服务并获取合约实例
+    await blockchainService.initialize();
+    const contract = await initContract('ADMIN');
+    
+    // 发送交易
+    const receipt = await blockchainService.sendContractTransaction(
+      contract,
+      'registerPropertyAndCreateToken',
+      [
+        propertyId,
+        country,
+        metadataURI,
+        tokenName,
+        tokenSymbol,
+        ethers.parseUnits(initialSupply.toString(), 18),
+        tokenImplAddress
+      ]
+    );
+    
+    Logger.info('创建房产并铸造代币成功', {
+      interface: 'createProperty',
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      tokenName
+    });
+    
+    // 解析事件获取更多信息
+    let propertyIdHash, tokenAddress;
+    
+    // 尝试从事件中获取propertyIdHash和tokenAddress
+    if (receipt.logs && receipt.logs.length > 0) {
+      try {
+        const abiInfo = AbiConfig.getContractAbi(CONTRACT_NAME);
+        const iface = new ethers.Interface(abiInfo.abi);
+        
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog(log);
+            if (parsed && parsed.name === 'PropertyRegistered') {
+              propertyIdHash = parsed.args[0];
+              tokenAddress = parsed.args[4];
+              break;
+            }
+          } catch (e) {
+            // 静默处理解析错误，继续尝试下一个日志
+          }
+        }
+      } catch (e) {
+        Logger.warn('解析注册事件失败', { error: e.message });
+      }
+    }
+    
+    return sendResponse(res, { 
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      propertyIdHash: propertyIdHash || null,
+      tokenAddress: tokenAddress || null,
+      country,
+      metadataURI,
+      tokenName,
+      tokenSymbol
+    });
+  } catch (error) {
+    Logger.error('创建房产并铸造代币失败', { 
+      error: error.message,
+      interface: 'createProperty',
+      params: req.body
+    });
+    return sendResponse(res, { error: error.message }, 500);
+  }
+}
+
 // 导出所有方法
 module.exports = {
   getContractAddress,
   registerProperty,
-  registerPropertyAndCreateToken
+  registerPropertyAndCreateToken,
+  createProperty
 }; 

@@ -155,25 +155,12 @@ app.get('/', (req, res) => {
 
 // 尝试加载路由
 try {
-  // 按顺序加载必需的路由
-  const blockchainRoutes = require('./routes/blockchain.routes');
-  app.use('/api/blockchain', blockchainRoutes);
-  console.log('已加载blockchain路由');
-  
-  // 其他路由按需加载
-  try {
-    const contractRoutes = require('./routes/contract.routes');
-    app.use('/api/contract', contractRoutes);
-    console.log('已加载contract路由');
-  } catch (error) {
-    console.warn(`加载contract路由失败: ${error.message}`);
-  }
-  
-  // 可选路由不再尝试加载
-  console.log('跳过加载可选路由');
-  
+  // 加载统一的路由文件
+  const routes = require('./routes/index');
+  app.use('/', routes);
+  console.log('已加载所有路由');
 } catch (error) {
-  console.error(`加载路由失败: ${error.message}`);
+  console.error(`加载路由失败: ${error.message}`, error);
 }
 
 // 延迟初始化区块链服务，确保所有配置已加载

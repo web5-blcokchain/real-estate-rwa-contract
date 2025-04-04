@@ -1,43 +1,51 @@
 /**
- * ルーター入口ファイル
- * 路由入口文件
+ * 路由合集
+ * 统一管理所有路由
  */
 const express = require('express');
-const contractRoutes = require('./contract.routes');
-const blockchainRoutes = require('./blockchain.routes');
-const SimpleERC20Routes = require('./SimpleERC20.routes');
-const PropertyTokenRoutes = require('./PropertyToken.routes');
-const RewardManagerRoutes = require('./RewardManager.routes');
-const TradingManagerRoutes = require('./TradingManager.routes');
-const PropertyManagerRoutes = require('./PropertyManager.routes');
-const RoleManagerRoutes = require('./RoleManager.routes');
-const RealEstateFacadeRoutes = require('./RealEstateFacade.routes');
-const RealEstateSystemRoutes = require('./RealEstateSystem.routes');
+const { apiKey } = require('../middlewares');
 
-// 创建主路由器
+// 导入所有合约路由
+const blockchainRoutes = require('./blockchain.routes');
+const contractRoutes = require('./contract.routes');
+const realEstateFacadeRoutes = require('./RealEstateFacade.routes');
+const propertyManagerRoutes = require('./PropertyManager.routes');
+const propertyTokenRoutes = require('./PropertyToken.routes');
+const roleManagerRoutes = require('./RoleManager.routes');
+const rewardManagerRoutes = require('./RewardManager.routes');
+const tradingManagerRoutes = require('./TradingManager.routes');
+const simpleERC20Routes = require('./SimpleERC20.routes');
+
 const router = express.Router();
 
-// API根端点信息
-router.get('/', (req, res) => {
+// API版本路径前缀
+const API_PREFIX = '/api';
+const API_V1_PREFIX = '/api/v1';
+const CONTRACTS_PREFIX = '/contracts';
+
+// 健康检查路由 - 保持简单以便测试脚本使用
+router.get('/health', (req, res) => {
   res.json({
-    success: true,
-    message: 'JAPAN RWA Blockchain API',
-    serverTime: new Date().toISOString()
+    status: 'UP',
+    timestamp: new Date().toISOString()
   });
 });
 
-// 注册路由
-router.use('/contract', contractRoutes);
-router.use('/blockchain', blockchainRoutes);
+// 块链相关路由
+router.use(`${API_PREFIX}/blockchain`, blockchainRoutes);
+router.use(`${API_V1_PREFIX}/blockchain`, blockchainRoutes);
 
-// 注册合约路由
-router.use('/contracts/SimpleERC20', SimpleERC20Routes);
-router.use('/contracts/PropertyToken', PropertyTokenRoutes);
-router.use('/contracts/RewardManager', RewardManagerRoutes);
-router.use('/contracts/TradingManager', TradingManagerRoutes);
-router.use('/contracts/PropertyManager', PropertyManagerRoutes);
-router.use('/contracts/RoleManager', RoleManagerRoutes);
-router.use('/contracts/RealEstateFacade', RealEstateFacadeRoutes);
-router.use('/contracts/RealEstateSystem', RealEstateSystemRoutes);
+// 合约通用路由
+router.use(`${API_PREFIX}/contract`, contractRoutes);
+router.use(`${API_V1_PREFIX}/contract`, contractRoutes);
+
+// 合约特定路由
+router.use(`${CONTRACTS_PREFIX}/RealEstateFacade`, apiKey, realEstateFacadeRoutes);
+router.use(`${CONTRACTS_PREFIX}/PropertyManager`, apiKey, propertyManagerRoutes);
+router.use(`${CONTRACTS_PREFIX}/PropertyToken`, apiKey, propertyTokenRoutes);
+router.use(`${CONTRACTS_PREFIX}/RoleManager`, apiKey, roleManagerRoutes);
+router.use(`${CONTRACTS_PREFIX}/RewardManager`, apiKey, rewardManagerRoutes);
+router.use(`${CONTRACTS_PREFIX}/TradingManager`, apiKey, tradingManagerRoutes);
+router.use(`${CONTRACTS_PREFIX}/SimpleERC20`, apiKey, simpleERC20Routes);
 
 module.exports = router; 

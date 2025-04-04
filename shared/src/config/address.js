@@ -19,89 +19,108 @@ const DEFAULT_DEPLOYMENT_PATH = 'config/deployment.json';
  */
 class AddressConfig {
   /**
-   * 部署配置文件路径
+   * 部署文件路径
    * @private
    */
-  static _deploymentPath = path.resolve(process.cwd(), DEFAULT_DEPLOYMENT_PATH);
-
+  static _deploymentPath = null;
+  
   /**
-   * 缓存的部署配置
+   * 部署配置缓存
    * @private
    */
-  static _cachedDeployment = null;
+  static _deploymentConfig = null;
+  
+  /**
+   * 初始化标志
+   * @private
+   */
+  static _initialized = false;
 
   /**
-   * 是否已初始化（设置部署文件路径）
-   * @returns {boolean} 是否已初始化
+   * 检查是否已初始化
+   * @returns {boolean}
    */
   static isInitialized() {
-    return this._deploymentPath !== null && this._deploymentPath !== undefined;
+    return this._initialized;
   }
 
   /**
-   * 设置部署配置文件路径
-   * @param {string} filePath - 部署配置文件路径
+   * 设置部署文件路径并加载配置
+   * @param {string} deploymentPath - 部署文件路径
    */
-  static setDeploymentPath(filePath) {
-    console.log(`设置部署配置文件路径: ${filePath}`);
-    
-    // 检查文件是否存在
-    if (!fs.existsSync(filePath)) {
-      // 如果文件不存在，尝试使用PROJECT_PATH环境变量
-      if (process.env.PROJECT_PATH) {
-        const altPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
-        console.log(`尝试使用PROJECT_PATH查找部署文件: ${altPath}`);
-        
-        if (fs.existsSync(altPath)) {
-          console.log(`使用PROJECT_PATH找到部署文件: ${altPath}`);
-          this._deploymentPath = altPath;
-          return;
-        }
-      }
-      
-      throw new ConfigError(`部署配置文件不存在: ${filePath}`);
+  static setDeploymentPath(deploymentPath) {
+    if (!deploymentPath) {
+      throw new ConfigError('INVALID_DEPLOYMENT_PATH', '部署文件路径不能为空');
     }
     
-    this._deploymentPath = filePath;
+    console.log('设置部署配置文件路径:', deploymentPath);
+    this._deploymentPath = deploymentPath;
+    
+    // 重新加载部署配置
+    this.loadDeployment();
+    
+    // 设置初始化标志
+    this._initialized = true;
   }
 
   /**
-   * 加载部署配置文件
-   * @returns {Object} 部署配置
-   * @throws {ConfigError} 配置错误
+   * 加载部署配置
+   * @returns {Object} 部署配置对象
    */
   static loadDeployment() {
     // 如果已经加载过，则使用缓存
-    if (this._cachedDeployment) {
-      return this._cachedDeployment;
+    if (this._deploymentConfig) {
+      return this._deploymentConfig;
     }
-
+    
     try {
-      // 检查文件是否存在
-      if (!fs.existsSync(this._deploymentPath)) {
-        throw new ConfigError(
-          `部署配置文件不存在: ${this._deploymentPath}`,
-          ErrorCodes.CONFIG_FILE_NOT_FOUND
-        );
+      // 检查部署文件路径是否设置
+      if (!this._deploymentPath) {
+        Logger.warn('部署文件路径未设置，尝试使用默认路径');
+        
+        // 尝试使用默认路径
+        const defaultPath = path.resolve(process.cwd(), DEFAULT_DEPLOYMENT_PATH);
+        
+        // 检查默认路径是否存在
+        if (fs.existsSync(defaultPath)) {
+          Logger.info(`使用默认部署文件路径: ${defaultPath}`);
+          this._deploymentPath = defaultPath;
+        } else if (process.env.PROJECT_PATH) {
+          // 尝试使用PROJECT_PATH查找部署文件
+          const projectPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+          
+          if (fs.existsSync(projectPath)) {
+            Logger.info(`使用PROJECT_PATH找到部署文件: ${projectPath}`);
+            this._deploymentPath = projectPath;
+          } else {
+            throw new ConfigError('DEPLOYMENT_FILE_NOT_FOUND', '部署文件不存在');
+          }
+        } else {
+          throw new ConfigError('DEPLOYMENT_FILE_NOT_FOUND', '部署文件不存在');
+        }
       }
-
+      
+      // 确保文件存在
+      if (!fs.existsSync(this._deploymentPath)) {
+        throw new ConfigError('DEPLOYMENT_FILE_NOT_FOUND', `部署文件不存在: ${this._deploymentPath}`);
+      }
+      
       // 读取并解析配置文件
       const deploymentData = fs.readFileSync(this._deploymentPath, 'utf8');
-      this._cachedDeployment = JSON.parse(deploymentData);
+      this._deploymentConfig = JSON.parse(deploymentData);
       
       Logger.debug('部署配置文件加载成功', { path: this._deploymentPath });
       
-      return this._cachedDeployment;
+      // 设置初始化标志
+      this._initialized = true;
+      
+      return this._deploymentConfig;
     } catch (error) {
       // 处理解析错误
       if (error instanceof ConfigError) {
         throw error;
       }
-      
-      throw new ConfigError(
-        `加载部署配置文件失败: ${error.message}`,
-        ErrorCodes.CONFIG_PARSE_ERROR
-      );
+      throw new ConfigError('DEPLOYMENT_PARSE_ERROR', `部署配置解析失败: ${error.message}`);
     }
   }
 

@@ -123,4 +123,46 @@ router.get('/tx/:hash', apiKey, blockchainController.getTransaction);
  */
 router.get('/gas-price', apiKey, blockchainController.getGasPrice);
 
+/**
+ * @swagger
+ * /api/blockchain/status:
+ *   get:
+ *     summary: 获取区块链连接状态
+ *     description: 检查区块链连接状态及基本网络信息
+ *     tags: [Blockchain]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功返回区块链连接状态
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     connected:
+ *                       type: boolean
+ *                       example: true
+ *                     networkInfo:
+ *                       type: object
+ *                       properties:
+ *                         networkType:
+ *                           type: string
+ *                           example: "localhost"
+ *                         chainId:
+ *                           type: number
+ *                           example: 31337
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.get('/status', apiKey, blockchainController.getStatus);
+
 module.exports = router; 

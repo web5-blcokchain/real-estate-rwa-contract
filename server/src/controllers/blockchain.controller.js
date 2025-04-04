@@ -95,8 +95,36 @@ async function getGasPrice(req, res, next) {
   }
 }
 
+/**
+ * 获取区块链状态
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function getStatus(req, res, next) {
+  try {
+    const isConnected = await blockchainService.isConnected();
+    const networkInfo = isConnected ? await blockchainService.getNetworkInfo() : null;
+    
+    return success(res, {
+      connected: isConnected,
+      networkInfo: networkInfo
+    });
+  } catch (err) {
+    const handledError = ErrorHandler.handle(err, {
+      type: 'api',
+      context: {
+        method: 'getStatus'
+      }
+    });
+    Logger.error('获取区块链状态失败', { error: handledError });
+    return error(res, handledError);
+  }
+}
+
 module.exports = {
   getNetworkInfo,
   getTransaction,
-  getGasPrice
+  getGasPrice,
+  getStatus
 }; 

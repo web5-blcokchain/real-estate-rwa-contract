@@ -14,6 +14,12 @@ router.get('/address', apiKey, RealEstateFacadeController.getContractAddress);
 // 创建房产并铸造代币
 router.post('/createProperty', apiKey, RealEstateFacadeController.createProperty);
 
+// 注册房产
+router.post('/registerProperty', apiKey, RealEstateFacadeController.registerProperty);
+
+// 注册房产并创建代币
+router.post('/registerPropertyAndCreateToken', apiKey, RealEstateFacadeController.registerPropertyAndCreateToken);
+
 // 出售房产
 router.post('/sellProperty', apiKey, RealEstateFacadeController.sellProperty);
 

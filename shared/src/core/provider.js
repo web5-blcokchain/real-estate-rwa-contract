@@ -30,23 +30,37 @@ class Provider {
         // 从环境配置获取RPC URL
         const envNetworkConfig = EnvConfig.getNetworkConfig();
         Logger.debug('环境网络配置:', { networkConfig: envNetworkConfig });
-        rpcUrl = envNetworkConfig.rpcUrl;
+        rpcUrl = envNetworkConfig?.rpcUrl;
         
         if (!rpcUrl) {
           Logger.warn('环境配置中没有找到RPC URL');
           
           try {
             // 尝试从网络特定配置获取RPC URL的备用值
-            const networkSpecificConfig = NetworkConfig._getNetworkSpecificConfig(networkType);
-            Logger.debug('网络特定配置:', { networkConfig: networkSpecificConfig });
+            let networkSpecificConfig;
+            try {
+              networkSpecificConfig = NetworkConfig._getNetworkSpecificConfig(networkType);
+              Logger.debug('网络特定配置:', { networkConfig: networkSpecificConfig });
+            } catch (configError) {
+              Logger.warn(`获取网络特定配置失败: ${configError.message}，将使用默认RPC URL`);
+              // 如果无法获取网络特定配置，使用硬编码的本地RPC URL
+              networkSpecificConfig = { 
+                rpcUrl: 'http://localhost:8545' 
+              };
+            }
+            
             rpcUrl = networkSpecificConfig?.rpcUrl;
             
             if (!rpcUrl) {
-              throw new ConfigError(`无法创建Provider: 未找到网络${networkType}的RPC URL配置`);
+              // 最后的后备方案：使用硬编码的默认RPC URL
+              Logger.warn(`找不到网络${networkType}的RPC URL配置，将使用默认RPC URL`);
+              rpcUrl = 'http://localhost:8545';
             }
           } catch (configError) {
             Logger.error('获取网络特定配置失败:', { error: configError.message });
-            throw new ConfigError(`无法创建Provider: ${configError.message}`);
+            // 最后的后备方案：使用硬编码的默认RPC URL
+            Logger.warn('将使用默认RPC URL: http://localhost:8545');
+            rpcUrl = 'http://localhost:8545';
           }
         }
       }
