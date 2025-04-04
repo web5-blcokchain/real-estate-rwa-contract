@@ -144,21 +144,8 @@ async function getGasPrice() {
  */
 async function isConnected() {
   try {
-    // 尝试获取区块号来检查连接状态
-    if (!provider) {
-      await initialize();
-    }
-    
-    const blockNumber = await provider.getBlockNumber();
-    const network = await provider.getNetwork();
-    
-    Logger.info('区块链连接状态检查成功', {
-      blockNumber,
-      chainId: network.chainId,
-      name: network.name
-    });
-    
-    return true;
+    // 尝试通过blockchainService检查连接状态
+    return await blockchainService.isConnected();
   } catch (error) {
     Logger.error('区块链连接状态检查失败', { 
       error: error.message 

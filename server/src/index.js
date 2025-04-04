@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 
 // 确保项目路径设置正确
 const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../..');
@@ -113,12 +115,68 @@ if (fs.existsSync(abiDirPath)) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Swagger配置
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: '日本房地产资产通证化API',
+      version: '1.0.0',
+      description: '基于区块链的房地产资产通证化API文档',
+      contact: {
+        name: '开发团队',
+        email: 'dev@example.com'
+      }
+    },
+    servers: [
+      {
+        url: `http://localhost:${PORT}`,
+        description: '开发服务器'
+      },
+      {
+        url: `${process.env.API_URL || 'https://api.example.com'}`,
+        description: '生产服务器'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key'
+        }
+      }
+    },
+    security: [
+      {
+        ApiKeyAuth: []
+      }
+    ]
+  },
+  apis: [
+    path.join(__dirname, './routes/*.js'),
+    path.join(__dirname, './controllers/*.js'),
+    path.join(__dirname, './models/*.js')
+  ],
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
 // 中间件
 app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
+});
+
+// Swagger UI路由
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Swagger JSON端点
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // 健康检查端点
@@ -147,7 +205,8 @@ app.get('/', (req, res) => {
         <p>服务器状态: <strong>运行中</strong></p>
         <p>区块链网络: <strong>${process.env.BLOCKCHAIN_NETWORK || 'localhost'}</strong></p>
         <p>API健康检查: <a href="/health">/health</a></p>
-        <p>API根路径: <a href="/api/blockchain/status">/api/blockchain/status</a></p>
+        <p>API文档: <a href="/api-docs">Swagger文档</a></p>
+        <p>API版本: <a href="/api/v1/blockchain/status">v1</a></p>
       </body>
     </html>
   `);

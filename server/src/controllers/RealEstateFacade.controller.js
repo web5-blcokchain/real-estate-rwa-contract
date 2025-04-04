@@ -1,6 +1,11 @@
 /**
  * RealEstateFacade合约控制器
  * 直接代理RealEstateFacade.json ABI文件中的所有方法
+ * 
+ * @swagger
+ * tags:
+ *   name: RealEstateFacade
+ *   description: 房地产通证化核心接口，提供房产注册、代币化和管理功能
  */
 const { ethers } = require('ethers');
 const { Logger, Validation, Contract } = require('../../../shared/src');
@@ -53,6 +58,34 @@ async function initContract(keyType = 'ADMIN') {
 
 /**
  * 获取合约地址
+ * @swagger
+ * /api/v1/contracts/RealEstateFacade/address:
+ *   get:
+ *     summary: 获取RealEstateFacade合约地址
+ *     description: 返回部署在当前网络的RealEstateFacade合约地址
+ *     tags: [RealEstateFacade]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功返回合约地址
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     address:
+ *                       type: string
+ *                       example: "0x1234567890123456789012345678901234567890"
+ *       500:
+ *         description: 服务器内部错误
+ * 
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
  */
@@ -69,6 +102,71 @@ async function getContractAddress(req, res) {
 
 /**
  * registerProperty - 注册房产
+ * @swagger
+ * /api/v1/contracts/RealEstateFacade/registerProperty:
+ *   post:
+ *     summary: 注册房产
+ *     description: 在区块链上注册新的房地产资产
+ *     tags: [RealEstateFacade]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - country
+ *               - metadataURI
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *                 description: 房产唯一标识
+ *                 example: "PROP123456"
+ *               country:
+ *                 type: string
+ *                 description: 国家代码
+ *                 example: "JP"
+ *               metadataURI:
+ *                 type: string
+ *                 description: 元数据URI
+ *                 example: "ipfs://QmXyzAbCdEf"
+ *     responses:
+ *       200:
+ *         description: 注册成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     txHash:
+ *                       type: string
+ *                       description: 交易哈希
+ *                     blockNumber:
+ *                       type: integer
+ *                       description: 区块号
+ *                     propertyId:
+ *                       type: string
+ *                       description: 房产ID
+ *                     country:
+ *                       type: string
+ *                       description: 国家代码
+ *                     metadataURI:
+ *                       type: string
+ *                       description: 元数据URI
+ *       400:
+ *         description: 请求参数错误
+ *       500:
+ *         description: 服务器内部错误
+ * 
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
  */
@@ -134,6 +232,102 @@ async function registerProperty(req, res) {
 
 /**
  * registerPropertyAndCreateToken - 注册房产并创建代币
+ * @swagger
+ * /api/v1/contracts/RealEstateFacade/registerPropertyAndCreateToken:
+ *   post:
+ *     summary: 注册房产并创建代币
+ *     description: 在区块链上注册新的房地产资产并创建对应的ERC20代币
+ *     tags: [RealEstateFacade]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - country
+ *               - metadataURI
+ *               - tokenName
+ *               - tokenSymbol
+ *               - initialSupply
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *                 description: 房产唯一标识
+ *                 example: "PROP123456"
+ *               country:
+ *                 type: string
+ *                 description: 国家代码
+ *                 example: "JP"
+ *               metadataURI:
+ *                 type: string
+ *                 description: 元数据URI
+ *                 example: "ipfs://QmXyzAbCdEf"
+ *               tokenName:
+ *                 type: string
+ *                 description: 代币名称
+ *                 example: "Tokyo Property Token"
+ *               tokenSymbol:
+ *                 type: string
+ *                 description: 代币符号
+ *                 example: "TPT"
+ *               initialSupply:
+ *                 type: string
+ *                 description: 初始供应量
+ *                 example: "1000"
+ *               tokenImplementation:
+ *                 type: string
+ *                 description: 代币实现合约地址(可选)
+ *                 example: "0x1234567890123456789012345678901234567890"
+ *     responses:
+ *       200:
+ *         description: 注册成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     txHash:
+ *                       type: string
+ *                       description: 交易哈希
+ *                     blockNumber:
+ *                       type: integer
+ *                       description: 区块号
+ *                     propertyId:
+ *                       type: string
+ *                       description: 房产ID
+ *                     propertyIdHash:
+ *                       type: string
+ *                       description: 房产ID的哈希值
+ *                     tokenAddress:
+ *                       type: string
+ *                       description: 创建的代币合约地址
+ *                     country:
+ *                       type: string
+ *                       description: 国家代码
+ *                     metadataURI:
+ *                       type: string
+ *                       description: 元数据URI
+ *                     tokenName:
+ *                       type: string
+ *                       description: 代币名称
+ *                     tokenSymbol:
+ *                       type: string
+ *                       description: 代币符号
+ *       400:
+ *         description: 请求参数错误
+ *       500:
+ *         description: 服务器内部错误
+ * 
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
  */
@@ -254,6 +448,102 @@ async function registerPropertyAndCreateToken(req, res) {
 
 /**
  * createProperty - 创建房产并铸造代币（RealEstateFacade合约的createProperty方法）
+ * @swagger
+ * /api/v1/contracts/RealEstateFacade/createProperty:
+ *   post:
+ *     summary: 创建房产并铸造代币
+ *     description: 一站式创建房产资产并铸造对应的ERC20代币(等同于registerPropertyAndCreateToken)
+ *     tags: [RealEstateFacade]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - country
+ *               - metadataURI
+ *               - tokenName
+ *               - tokenSymbol
+ *               - initialSupply
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *                 description: 房产唯一标识
+ *                 example: "PROP123456"
+ *               country:
+ *                 type: string
+ *                 description: 国家代码
+ *                 example: "JP"
+ *               metadataURI:
+ *                 type: string
+ *                 description: 元数据URI
+ *                 example: "ipfs://QmXyzAbCdEf"
+ *               tokenName:
+ *                 type: string
+ *                 description: 代币名称
+ *                 example: "Tokyo Property Token"
+ *               tokenSymbol:
+ *                 type: string
+ *                 description: 代币符号
+ *                 example: "TPT"
+ *               initialSupply:
+ *                 type: string
+ *                 description: 初始供应量
+ *                 example: "1000"
+ *               tokenImplementation:
+ *                 type: string
+ *                 description: 代币实现合约地址(可选)
+ *                 example: "0x1234567890123456789012345678901234567890"
+ *     responses:
+ *       200:
+ *         description: 创建成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     txHash:
+ *                       type: string
+ *                       description: 交易哈希
+ *                     blockNumber:
+ *                       type: integer
+ *                       description: 区块号
+ *                     propertyId:
+ *                       type: string
+ *                       description: 房产ID
+ *                     propertyIdHash:
+ *                       type: string
+ *                       description: 房产ID的哈希值
+ *                     tokenAddress:
+ *                       type: string
+ *                       description: 创建的代币合约地址
+ *                     country:
+ *                       type: string
+ *                       description: 国家代码
+ *                     metadataURI:
+ *                       type: string
+ *                       description: 元数据URI
+ *                     tokenName:
+ *                       type: string
+ *                       description: 代币名称
+ *                     tokenSymbol:
+ *                       type: string
+ *                       description: 代币符号
+ *       400:
+ *         description: 请求参数错误
+ *       500:
+ *         description: 服务器内部错误
+ * 
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
  */

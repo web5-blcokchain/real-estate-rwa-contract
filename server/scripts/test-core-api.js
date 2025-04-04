@@ -24,7 +24,7 @@ if (fs.existsSync(envPath)) {
 
 // API配置
 const API_CONFIG = {
-  baseURL: process.env.API_BASE_URL || 'http://localhost:3000',
+  baseURL: (process.env.API_BASE_URL || 'http://localhost:3002').replace(/\/api\/v1$/, ''),
   apiKey: process.env.API_KEY || '123456',
   timeout: 15000 // 15秒超时
 };
@@ -38,6 +38,8 @@ const api = axios.create({
     'X-API-Key': API_CONFIG.apiKey
   }
 });
+
+console.log(`使用API端点: ${API_CONFIG.baseURL}`);
 
 // 测试数据
 const TEST_DATA = {
@@ -68,11 +70,15 @@ function delay(ms) {
 async function healthCheck() {
   try {
     console.log('===== 健康检查 =====');
-    const endpoints = ['/health', '/'];
+    
+    const endpoints = [
+      '/health',
+      '/'
+    ];
     
     for (const endpoint of endpoints) {
       try {
-        console.log(`尝试访问: ${endpoint}`);
+        console.log(`尝试访问健康检查端点: ${endpoint}`);
         const response = await api.get(endpoint);
         console.log('服务器响应:', response.status, response.statusText);
         if (response.status >= 200 && response.status < 300) {
@@ -80,7 +86,7 @@ async function healthCheck() {
           return true;
         }
       } catch (err) {
-        console.log(`端点 ${endpoint} 访问失败`);
+        console.log(`端点 ${endpoint} 访问失败: ${err.message}`);
       }
     }
     
@@ -135,11 +141,25 @@ async function checkBlockchainConnection() {
 async function getRealEstateFacadeAddress() {
   try {
     console.log('===== 获取RealEstateFacade合约地址 =====');
+    // 尝试使用新的API路径
+    try {
+      const response = await api.get('/api/v1/contracts/RealEstateFacade/address');
+      
+      if (response.data?.success && response.data?.data?.address) {
+        const address = response.data.data.address;
+        console.log('合约地址 (v1 API):', address);
+        return address;
+      }
+    } catch (error) {
+      console.log('使用v1 API获取合约地址失败，尝试旧版API路径');
+    }
+    
+    // 尝试旧版API路径
     const response = await api.get('/contracts/RealEstateFacade/address');
     
     if (response.data?.success && response.data?.data?.address) {
       const address = response.data.data.address;
-      console.log('合约地址:', address);
+      console.log('合约地址 (旧版API):', address);
       return address;
     } else {
       throw new Error('响应中缺少合约地址');
@@ -167,7 +187,17 @@ async function createProperty() {
     };
     
     console.log('请求数据:', payload);
-    const response = await api.post('/contracts/RealEstateFacade/createProperty', payload);
+    
+    // 尝试使用新的API路径
+    let response;
+    try {
+      response = await api.post('/api/v1/contracts/RealEstateFacade/createProperty', payload);
+      console.log('使用v1 API成功创建房产');
+    } catch (error) {
+      console.log('使用v1 API创建房产失败，尝试旧版API路径');
+      // 旧路径作为后备
+      response = await api.post('/contracts/RealEstateFacade/createProperty', payload);
+    }
     
     if (response.data?.success) {
       const result = response.data.data;
@@ -199,11 +229,18 @@ async function createProperty() {
 async function getAdminAddress() {
   try {
     console.log('===== 获取管理员地址 =====');
-    // 先尝试获取角色常量，以便获取ADMIN_ROLE
-    const roleResponse = await api.get('/contracts/RoleManager/roleConstants');
-    let adminRole = '';
+    // 尝试获取角色常量，以便获取ADMIN_ROLE (优先使用v1 API版本)
+    let roleResponse;
+    try {
+      roleResponse = await api.get('/api/v1/contracts/RoleManager/roleConstants');
+      console.log('使用v1 API成功获取角色常量');
+    } catch (error) {
+      console.log('使用v1 API获取角色常量失败，尝试旧版API路径');
+      roleResponse = await api.get('/contracts/RoleManager/roleConstants');
+    }
     
-    if (roleResponse.data?.success && roleResponse.data?.data) {
+    let adminRole = '';
+    if (roleResponse?.data?.success && roleResponse.data?.data) {
       adminRole = roleResponse.data.data.ADMIN_ROLE || '';
       console.log('管理员角色ID:', adminRole);
     }
@@ -211,16 +248,33 @@ async function getAdminAddress() {
     // 如果无法获取角色常量，尝试直接获取管理员列表
     let response;
     if (adminRole) {
-      response = await api.get(`/contracts/RoleManager/getRoleMembers/${adminRole}`);
+      // 尝试使用v1 API版本
+      try {
+        response = await api.get(`/api/v1/contracts/RoleManager/getRoleMembers/${adminRole}`);
+      } catch (error) {
+        console.log('使用v1 API获取角色成员失败，尝试旧版API路径');
+        response = await api.get(`/contracts/RoleManager/getRoleMembers/${adminRole}`);
+      }
     } else {
       // 假设有一个获取所有管理员的端点
       console.log('无法获取角色常量，尝试直接查询管理员');
       try {
-        response = await api.get('/contracts/RoleManager/getAdmins');
+        // 尝试使用v1 API版本
+        response = await api.get('/api/v1/contracts/RoleManager/getAdmins');
       } catch (error) {
-        console.log('获取管理员列表失败，尝试通过默认地址方式获取');
-        // 获取部署者地址作为默认管理员
-        response = await api.get('/contracts/RoleManager/getDefaultAdmin');
+        try {
+          console.log('使用v1 API获取管理员列表失败，尝试旧版API路径');
+          response = await api.get('/contracts/RoleManager/getAdmins');
+        } catch (innerError) {
+          console.log('获取管理员列表失败，尝试通过默认地址方式获取');
+          // 获取部署者地址作为默认管理员 (尝试v1版本)
+          try {
+            response = await api.get('/api/v1/contracts/RoleManager/getDefaultAdmin');
+          } catch (defaultAdminError) {
+            console.log('使用v1 API获取默认管理员失败，尝试旧版API路径');
+            response = await api.get('/contracts/RoleManager/getDefaultAdmin');
+          }
+        }
       }
     }
     
@@ -239,7 +293,15 @@ async function getAdminAddress() {
     console.error('获取管理员地址失败:', error.message);
     // 尝试获取合约部署者地址作为后备
     try {
-      const deployerResponse = await api.get('/contracts/RoleManager/getDeployer');
+      // 尝试使用v1 API版本
+      let deployerResponse;
+      try {
+        deployerResponse = await api.get('/api/v1/contracts/RoleManager/getDeployer');
+      } catch (error) {
+        console.log('使用v1 API获取部署者失败，尝试旧版API路径');
+        deployerResponse = await api.get('/contracts/RoleManager/getDeployer');
+      }
+      
       if (deployerResponse?.data?.success && deployerResponse.data.data) {
         const deployerAddress = deployerResponse.data.data.deployer || deployerResponse.data.data;
         console.log('使用部署者地址作为管理员:', deployerAddress);
@@ -261,11 +323,26 @@ async function getAdminAddress() {
 async function checkPropertyExists(propertyId) {
   try {
     console.log(`===== 检查房产是否存在: ${propertyId} =====`);
+    
+    // 尝试使用新的API路径
+    try {
+      const response = await api.get(`/api/v1/contracts/PropertyManager/existsByStringId/${propertyId}`);
+      
+      if (response.data?.success) {
+        const exists = response.data.data?.exists;
+        console.log('房产存在状态 (v1 API):', exists);
+        return exists;
+      }
+    } catch (error) {
+      console.log('使用v1 API检查房产失败，尝试旧版API路径');
+    }
+    
+    // 尝试旧版API路径
     const response = await api.get(`/contracts/PropertyManager/existsByStringId/${propertyId}`);
     
     if (response.data?.success) {
       const exists = response.data.data?.exists;
-      console.log('房产存在状态:', exists);
+      console.log('房产存在状态 (旧版API):', exists);
       return exists;
     } else {
       throw new Error(response.data?.error || '未知错误');

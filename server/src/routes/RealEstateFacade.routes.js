@@ -20,12 +20,6 @@ router.post('/registerProperty', apiKey, RealEstateFacadeController.registerProp
 // 注册房产并创建代币
 router.post('/registerPropertyAndCreateToken', apiKey, RealEstateFacadeController.registerPropertyAndCreateToken);
 
-// 出售房产
-router.post('/sellProperty', apiKey, RealEstateFacadeController.sellProperty);
-
-// 购买房产
-router.post('/buyProperty', apiKey, RealEstateFacadeController.buyProperty);
-
 // 其他RealEstateFacade方法的路由...
 
 module.exports = router; 
