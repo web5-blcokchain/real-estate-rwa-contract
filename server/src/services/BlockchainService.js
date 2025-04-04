@@ -41,10 +41,26 @@ class BlockchainService {
       }
 
       // 确保已设置deployment.json路径
-      const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
-      if (require('fs').existsSync(deploymentPath) && !AddressConfig.isInitialized()) {
-        AddressConfig.setDeploymentPath(deploymentPath);
-        Logger.info('区块链服务中重新设置deployment.json路径');
+      const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../../..');
+      const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
+      
+      if (require('fs').existsSync(deploymentPath)) {
+        try {
+          // 防止AddressConfig.isInitialized未定义
+          if (typeof AddressConfig.isInitialized !== 'function') {
+            // 先尝试直接设置部署路径
+            AddressConfig.setDeploymentPath(deploymentPath);
+            Logger.info(`区块链服务中设置deployment.json路径: ${deploymentPath}`);
+          } else if (!AddressConfig.isInitialized()) {
+            // 如果isInitialized存在并且返回false，再设置
+            AddressConfig.setDeploymentPath(deploymentPath);
+            Logger.info(`区块链服务中设置deployment.json路径: ${deploymentPath}`);
+          } else {
+            Logger.info('部署文件路径已设置，跳过重复设置');
+          }
+        } catch (error) {
+          Logger.warn(`设置部署文件路径失败: ${error.message}，将尝试继续初始化`);
+        }
       }
 
       // 验证网络类型

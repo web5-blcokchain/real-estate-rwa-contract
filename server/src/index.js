@@ -2,129 +2,217 @@
  * 日本房地产资产通证化HTTP服务器
  * 服务器入口文件
  */
-const dotenv = require('dotenv');
-const path = require('path');
+require('dotenv').config({ path: require('path').resolve(process.cwd(), '.env') });
 const fs = require('fs');
-const { Logger } = require('../../shared/src/utils');
-const { EnvConfig, AddressConfig, ABIConfig } = require('../../shared/src/config');
-const app = require('./app');
-const { blockchainService } = require('./services');
-const serverConfig = require('./config');
+const path = require('path');
+const express = require('express');
+const cors = require('cors');
 
-// 从项目根目录加载环境变量
-const rootEnvPath = path.resolve(__dirname, '../../.env');
-if (fs.existsSync(rootEnvPath)) {
-  console.log(`从项目根目录加载.env文件: ${rootEnvPath}`);
-  dotenv.config({ path: rootEnvPath });
-} else {
-  console.error(`错误: 项目根目录的.env文件不存在: ${rootEnvPath}`);
-  process.exit(1);
-}
-
-// 初始化Shared模块配置
-// 1. 加载环境变量配置
-EnvConfig.load();
-
-// 2. 设置部署文件路径 - 使用项目根目录中的config目录
+// 确保项目路径设置正确
 const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../..');
-const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
-if (fs.existsSync(deploymentPath)) {
-  AddressConfig.setDeploymentPath(deploymentPath);
-  Logger.info('已加载部署文件配置', { path: deploymentPath });
-} else {
-  Logger.warn('部署文件不存在，将使用环境变量中的合约地址', { path: deploymentPath });
+// 明确设置PROJECT_PATH环境变量
+process.env.PROJECT_PATH = projectRootPath;
+if (!process.env.PROJECT_PATH.endsWith('/')) {
+  process.env.PROJECT_PATH += '/';
 }
 
-// 3. 加载ABI目录 - 使用项目根目录中的config目录
-const abiDirPath = path.resolve(projectRootPath, 'config/abi');
+console.log(`===== 服务器启动 =====`);
+console.log(`项目根目录路径: ${process.env.PROJECT_PATH}`);
+console.log(`当前工作目录: ${process.cwd()}`);
+
+// 测试.env文件是否正确加载
+console.log("环境变量BLOCKCHAIN_NETWORK:", process.env.BLOCKCHAIN_NETWORK);
+console.log("环境变量NODE_ENV:", process.env.NODE_ENV);
+
+// 在全局作用域声明这些变量
+let EnvConfig, AddressConfig, AbiConfig, Logger, ErrorHandler, blockchainService;
+
+try {
+  // 手动加载配置类
+  console.log("开始导入配置模块...");
+  EnvConfig = require('../../shared/src/config/env');
+  console.log("EnvConfig导入成功:", typeof EnvConfig);
+  
+  AddressConfig = require('../../shared/src/config/address');
+  console.log("AddressConfig导入成功:", typeof AddressConfig);
+  
+  AbiConfig = require('../../shared/src/config/abi');
+  console.log("AbiConfig导入成功:", typeof AbiConfig);
+  
+  Logger = require('../../shared/src/utils/logger');
+  console.log("Logger导入成功:", typeof Logger);
+  
+  ErrorHandler = require('../../shared/src/utils/errors');
+  console.log("ErrorHandler导入成功:", typeof ErrorHandler);
+  
+  // 初始化配置
+  if (EnvConfig && typeof EnvConfig.load === 'function') {
+    console.log("调用EnvConfig.load()之前");
+    if (typeof EnvConfig.isInitialized === 'function') {
+      console.log("EnvConfig初始化状态:", EnvConfig.isInitialized());
+    }
+    
+    const result = EnvConfig.load();
+    console.log("EnvConfig.load()返回结果:", result);
+    console.log('环境配置加载完成');
+  } else {
+    console.error("错误: EnvConfig.load不是一个函数");
+  }
+  
+  // 确保Provider和其他依赖模块已加载
+  const Provider = require('../../shared/src/core/provider');
+  console.log("Provider导入成功:", typeof Provider);
+  
+  const Contract = require('../../shared/src/core/contract');
+  console.log("Contract导入成功:", typeof Contract);
+  
+  const Wallet = require('../../shared/src/core/wallet');
+  console.log("Wallet导入成功:", typeof Wallet);
+  
+  // 最后加载服务
+  const services = require('./services');
+  blockchainService = services.blockchainService;
+  console.log("blockchainService导入成功:", typeof blockchainService);
+  
+} catch (error) {
+  console.error("模块导入错误:", error);
+  process.exit(1); // 如果关键模块导入失败，直接退出
+}
+
+// 设置部署文件路径
+const deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+if (fs.existsSync(deploymentPath)) {
+  if (AddressConfig && typeof AddressConfig.setDeploymentPath === 'function') {
+    AddressConfig.setDeploymentPath(deploymentPath);
+    console.log(`部署文件路径设置完成: ${deploymentPath}`);
+  } else {
+    console.error('AddressConfig.setDeploymentPath 不是一个函数或AddressConfig未定义');
+  }
+} else {
+  console.warn(`部署文件不存在: ${deploymentPath}`);
+}
+
+// 设置ABI目录路径
+const abiDirPath = path.resolve(process.env.PROJECT_PATH, 'config/abi');
 if (fs.existsSync(abiDirPath)) {
   try {
-    const abis = ABIConfig.loadAllContractAbis(abiDirPath);
-    const abiCount = Object.keys(abis).length;
-    Logger.info(`已加载${abiCount}个合约ABI`, { path: abiDirPath });
+    if (AbiConfig && typeof AbiConfig.loadAllContractAbis === 'function') {
+      const abis = AbiConfig.loadAllContractAbis(abiDirPath);
+      console.log(`ABI文件加载成功，共${Object.keys(abis).length}个`);
+    } else {
+      console.error('AbiConfig.loadAllContractAbis 不是一个函数或AbiConfig未定义');
+    }
   } catch (error) {
-    Logger.warn(`加载ABI文件失败: ${error.message}`, { path: abiDirPath });
+    console.error(`ABI文件加载失败: ${error.message}`);
   }
 } else {
-  Logger.warn('ABI目录不存在，将在需要时尝试加载单个ABI文件', { path: abiDirPath });
+  console.warn(`ABI目录不存在: ${abiDirPath}`);
 }
 
-// 配置日志
-// 使用服务器特定的日志配置，而不是默认配置
-Logger.configure(serverConfig.getLoggerConfig());
-// 为了向后兼容仍然设置模块路径
-Logger.setPath('server');
-
-// 服务器配置
+// 初始化Express应用
+const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
 
-/**
- * 启动服务器
- */
-async function startServer() {
+// 中间件
+app.use(cors());
+app.use(express.json());
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+// 健康检查端点
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'UP',
+    timestamp: new Date().toISOString(),
+    blockchainService: blockchainService && blockchainService.initialized ? 'UP' : 'DOWN'
+  });
+});
+
+// 简单的欢迎页面
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>日本房地产资产通证化API服务器</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 50px; line-height: 1.6; }
+          h1 { color: #333; }
+          .endpoint { background: #f4f4f4; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        </style>
+      </head>
+      <body>
+        <h1>日本房地产资产通证化API服务器</h1>
+        <p>服务器状态: <strong>运行中</strong></p>
+        <p>区块链网络: <strong>${process.env.BLOCKCHAIN_NETWORK || 'localhost'}</strong></p>
+        <p>API健康检查: <a href="/health">/health</a></p>
+        <p>API根路径: <a href="/api/blockchain/status">/api/blockchain/status</a></p>
+      </body>
+    </html>
+  `);
+});
+
+// 尝试加载路由
+try {
+  // 按顺序加载必需的路由
+  const blockchainRoutes = require('./routes/blockchain.routes');
+  app.use('/api/blockchain', blockchainRoutes);
+  console.log('已加载blockchain路由');
+  
+  // 其他路由按需加载
   try {
-    // 验证环境变量
-    serverConfig.validateConfig();
-    
-    // 初始化区块链服务
-    await blockchainService.initialize();
-    
-    // 启动HTTP服务器
-    const server = app.listen(PORT, HOST, () => {
-      Logger.info(`服务器已启动: http://${HOST}:${PORT}`);
-      Logger.info(`API文档地址: http://${HOST}:${PORT}/api-docs`);
-      Logger.info(`区块链网络: ${blockchainService.getNetworkType()}`);
-    });
-    
-    // 处理进程退出
-    setupGracefulShutdown(server);
-    
+    const contractRoutes = require('./routes/contract.routes');
+    app.use('/api/contract', contractRoutes);
+    console.log('已加载contract路由');
   } catch (error) {
-    Logger.error(`服务器启动失败: ${error.message}`, { error });
-    process.exit(1);
+    console.warn(`加载contract路由失败: ${error.message}`);
   }
+  
+  // 可选路由不再尝试加载
+  console.log('跳过加载可选路由');
+  
+} catch (error) {
+  console.error(`加载路由失败: ${error.message}`);
 }
 
-/**
- * 设置优雅退出
- * @param {Object} server - HTTP服务器实例
- */
-function setupGracefulShutdown(server) {
-  // 处理进程退出信号
-  process.on('SIGTERM', () => gracefulShutdown(server, 'SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown(server, 'SIGINT'));
-  
-  // 处理未捕获的异常和拒绝的Promise
-  process.on('uncaughtException', (error) => {
-    Logger.error(`未捕获的异常: ${error.message}`, { error });
-    gracefulShutdown(server, 'uncaughtException');
-  });
-  
-  process.on('unhandledRejection', (reason, promise) => {
-    Logger.error(`未处理的Promise拒绝: ${reason}`, { reason, promise });
-  });
-}
+// 延迟初始化区块链服务，确保所有配置已加载
+setTimeout(() => {
+  // 初始化区块链服务
+  if (blockchainService && typeof blockchainService.initialize === 'function') {
+    console.log('开始初始化区块链服务...');
+    blockchainService.initialize().then(() => {
+      console.log('区块链服务初始化成功');
+    }).catch(error => {
+      console.warn(`区块链服务初始化失败: ${error.message}`);
+    });
+  } else {
+    console.error('blockchainService.initialize 不是一个函数或blockchainService未定义');
+  }
+}, 1000);
 
-/**
- * 优雅退出
- * @param {Object} server - HTTP服务器实例
- * @param {string} signal - 退出信号
- */
-function gracefulShutdown(server, signal) {
-  Logger.info(`收到${signal}信号，服务器正在关闭...`);
+// 全局错误处理
+app.use((err, req, res, next) => {
+  console.error(`API错误: ${err.message}`, { error: err, path: req.path });
   
-  server.close(() => {
-    Logger.info('服务器已关闭');
-    process.exit(0);
+  res.status(500).json({
+    success: false,
+    error: {
+      message: err.message || '服务器内部错误',
+      code: err.code || 'INTERNAL_SERVER_ERROR'
+    },
+    timestamp: new Date().toISOString()
   });
-  
-  // 超时强制退出
-  setTimeout(() => {
-    Logger.error('强制关闭服务器');
-    process.exit(1);
-  }, 10000);
-}
+});
 
 // 启动服务器
-startServer(); 
+app.listen(PORT, () => {
+  console.log(`服务器已启动，端口: ${PORT}`);
+  
+  // 打印服务器信息
+  console.log('======== 服务器配置信息 ========');
+  console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`区块链网络: ${process.env.BLOCKCHAIN_NETWORK || 'localhost'}`);
+  console.log(`项目根目录: ${process.env.PROJECT_PATH}`);
+  console.log('================================');
+}); 

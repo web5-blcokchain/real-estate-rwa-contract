@@ -7,26 +7,45 @@ const fs = require('fs');
 const path = require('path');
 const { Logger } = require('../../../shared/src');
 const { blockchainService } = require('../services');
+const { AbiConfig, AddressConfig } = require('../../../shared/src/config');
 const { processContractResult, sendResponse } = require('../utils/ContractUtils');
 
-// 读取ABI文件
-const abiPath = path.resolve(process.cwd(), 'config/abi/RewardManager.json');
-const abi = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+// 合约名称常量
+const CONTRACT_NAME = 'RewardManager';
 
-// 合约地址配置
-const addressConfigPath = path.resolve(process.cwd(), 'config/contract-addresses.json');
-let contractAddress;
-
-// 从配置文件获取合约地址
-if (fs.existsSync(addressConfigPath)) {
-  const addressConfig = JSON.parse(fs.readFileSync(addressConfigPath, 'utf8'));
-  const networkType = process.env.BLOCKCHAIN_NETWORK || 'localhost';
-  contractAddress = addressConfig[networkType]?.RewardManager;
+// 使用AbiConfig获取ABI
+let abi;
+try {
+  const abiInfo = AbiConfig.getContractAbi(CONTRACT_NAME);
+  abi = abiInfo.abi;
+  Logger.info(`成功加载${CONTRACT_NAME}的ABI`, { source: abiInfo.source });
+} catch (error) {
+  // 尝试使用项目根目录路径加载
+  const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../../..');
+  const abiPath = path.resolve(projectRootPath, `config/abi/${CONTRACT_NAME}.json`);
+  if (fs.existsSync(abiPath)) {
+    Logger.info(`使用项目根目录路径加载ABI: ${abiPath}`);
+    abi = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+  } else {
+    Logger.error(`无法找到${CONTRACT_NAME}的ABI文件: ${abiPath}`);
+    throw new Error(`无法找到${CONTRACT_NAME}的ABI文件: ${abiPath}`);
+  }
 }
 
-// 如果配置文件中没有，尝试从环境变量获取
-if (!contractAddress) {
-  contractAddress = process.env.CONTRACT_REWARDMANAGER_ADDRESS;
+// 使用AddressConfig获取合约地址
+let contractAddress;
+try {
+  contractAddress = AddressConfig.getContractAddress(CONTRACT_NAME);
+  Logger.info(`成功获取${CONTRACT_NAME}合约地址`, { address: contractAddress });
+} catch (error) {
+  // 如果通过AddressConfig获取失败，尝试从环境变量获取
+  const envKey = `CONTRACT_${CONTRACT_NAME.toUpperCase()}_ADDRESS`;
+  contractAddress = process.env[envKey];
+  if (!contractAddress) {
+    Logger.warn(`无法从AddressConfig或环境变量获取${CONTRACT_NAME}合约地址`);
+  } else {
+    Logger.info(`从环境变量获取${CONTRACT_NAME}合约地址`, { address: contractAddress });
+  }
 }
 
 // 合约实例
