@@ -4,31 +4,40 @@
  */
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 const { Logger } = require('../../shared/src/utils');
 const { EnvConfig, AddressConfig, ABIConfig } = require('../../shared/src/config');
 const app = require('./app');
 const { blockchainService } = require('./services');
 const serverConfig = require('./config');
 
-// 加载环境变量
-dotenv.config();
+// 从项目根目录加载环境变量
+const rootEnvPath = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnvPath)) {
+  console.log(`从项目根目录加载.env文件: ${rootEnvPath}`);
+  dotenv.config({ path: rootEnvPath });
+} else {
+  console.error(`错误: 项目根目录的.env文件不存在: ${rootEnvPath}`);
+  process.exit(1);
+}
 
 // 初始化Shared模块配置
 // 1. 加载环境变量配置
 EnvConfig.load();
 
-// 2. 设置部署文件路径
-const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
-if (require('fs').existsSync(deploymentPath)) {
+// 2. 设置部署文件路径 - 使用项目根目录中的config目录
+const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../..');
+const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
+if (fs.existsSync(deploymentPath)) {
   AddressConfig.setDeploymentPath(deploymentPath);
   Logger.info('已加载部署文件配置', { path: deploymentPath });
 } else {
   Logger.warn('部署文件不存在，将使用环境变量中的合约地址', { path: deploymentPath });
 }
 
-// 3. 加载ABI目录
-const abiDirPath = path.resolve(process.cwd(), 'config/abi');
-if (require('fs').existsSync(abiDirPath)) {
+// 3. 加载ABI目录 - 使用项目根目录中的config目录
+const abiDirPath = path.resolve(projectRootPath, 'config/abi');
+if (fs.existsSync(abiDirPath)) {
   try {
     const abis = ABIConfig.loadAllContractAbis(abiDirPath);
     const abiCount = Object.keys(abis).length;

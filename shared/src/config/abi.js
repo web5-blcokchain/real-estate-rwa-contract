@@ -131,91 +131,63 @@ class ABIConfig {
   }
 
   /**
-   * 加载指定目录下的所有ABI文件
-   * @param {string} [dirPath=DEFAULT_ABI_DIR] - ABI文件目录路径
-   * @returns {Object} 合约ABI映射表 {contractName: {abi, functions, events}}
+   * 加载所有合约ABI
+   * @param {string} dirPath - ABI文件所在目录
+   * @returns {Object} 合约名称到ABI的映射
    */
-  static loadAllContractAbis(dirPath = DEFAULT_ABI_DIR) {
+  static loadAllContractAbis(dirPath) {
     try {
-      const abiDir = path.resolve(process.cwd(), dirPath);
-      if (!fs.existsSync(abiDir)) {
-        console.warn(`ABI目录不存在: ${abiDir}`);
+      console.log(`加载所有合约ABI, 目录: ${dirPath}`);
+      
+      // 获取目录中的所有文件
+      const files = fs.readdirSync(dirPath);
+      const abiFiles = files.filter(file => file.endsWith('.json'));
+      
+      if (abiFiles.length === 0) {
+        console.warn(`目录 ${dirPath} 中未找到ABI文件`);
         return {};
       }
-
-      const contracts = {};
-      const files = fs.readdirSync(abiDir);
       
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-        
+      // 加载每个ABI文件
+      const abis = {};
+      abiFiles.forEach(file => {
         const contractName = path.basename(file, '.json');
-        const filePath = path.join(abiDir, file);
-        
         try {
-          const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          const contractInfo = this._parseContractAbi(abiJson, contractName);
-          contracts[contractName] = contractInfo;
+          const filePath = path.join(dirPath, file);
+          const abiContent = fs.readFileSync(filePath, 'utf8');
+          const abiData = JSON.parse(abiContent);
           
-          console.info(`已加载合约ABI: ${contractName}`);
+          // 处理不同格式的ABI文件
+          let abi;
+          if (abiData.abi) {
+            // Hardhat/Truffle 格式
+            abi = abiData.abi;
+          } else if (Array.isArray(abiData)) {
+            // 纯ABI数组格式
+            abi = abiData;
+          } else {
+            console.warn(`警告: ${contractName}的ABI文件格式不标准，将尝试直接使用`);
+            abi = abiData;
+          }
+          
+          // 缓存ABI
+          this._cachedAbis[contractName] = { 
+            abi,
+            source: filePath
+          };
+          
+          abis[contractName] = this._cachedAbis[contractName];
+          console.log(`已加载合约ABI: ${contractName}`);
         } catch (error) {
-          console.error(`加载合约ABI失败: ${contractName}`, error.message);
+          console.error(`加载${contractName}的ABI失败: ${error.message}`);
         }
-      }
+      });
       
-      // 设置初始化标志
-      this._initialized = true;
-      
-      return contracts;
+      console.log(`已加载${Object.keys(abis).length}个合约ABI，包括: ${Object.keys(abis).join(', ')}`);
+      return abis;
     } catch (error) {
-      console.error('加载所有合约ABI失败', error.message);
-      throw new AbiConfigError(`加载所有合约ABI失败: ${error.message}`);
+      throw new AbiConfigError(`加载合约ABI目录失败: ${error.message}`);
     }
-  }
-
-  /**
-   * 解析合约ABI获取函数和事件信息
-   * @private
-   * @param {Array} abi - 合约ABI
-   * @param {string} contractName - 合约名称
-   * @returns {Object} 解析后的合约信息
-   */
-  static _parseContractAbi(abi, contractName) {
-    const functions = {};
-    const events = {};
-    const readFunctions = {};
-    const writeFunctions = {};
-    
-    for (const item of abi) {
-      if (item.type === 'function') {
-        functions[item.name] = item;
-        
-        // 区分读写函数
-        const isReadOnly = ['view', 'pure'].includes(item.stateMutability);
-        if (isReadOnly) {
-          readFunctions[item.name] = {
-            ...item,
-            isReadOnly: true
-          };
-        } else {
-          writeFunctions[item.name] = {
-            ...item,
-            isReadOnly: false
-          };
-        }
-      } else if (item.type === 'event') {
-        events[item.name] = item;
-      }
-    }
-    
-    return {
-      name: contractName,
-      abi,
-      functions,
-      readFunctions,
-      writeFunctions,
-      events
-    };
   }
 
   /**
