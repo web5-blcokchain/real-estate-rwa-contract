@@ -219,34 +219,92 @@ class ABIConfig {
   }
 
   /**
-   * 获取指定合约的ABI信息
+   * 获取特定合约的ABI
    * @param {string} contractName - 合约名称
-   * @param {string} [dirPath=DEFAULT_ABI_DIR] - ABI文件目录路径
-   * @returns {Object} 合约ABI信息
+   * @returns {object} 合约ABI对象
+   * @throws {ConfigError} 如果找不到ABI
    */
-  static getContractAbi(contractName, dirPath = DEFAULT_ABI_DIR) {
+  static getContractAbi(contractName) {
+    console.log(`正在获取合约${contractName}的ABI...`);
+    
     try {
-      // 构建缓存键
-      const cacheKey = `${contractName}:${dirPath}`;
-      
-      // 检查缓存
-      if (this._cachedAbis[cacheKey]) {
-        return this._cachedAbis[cacheKey];
+      // 检查缓存中是否有ABI
+      if (this._cachedAbis[contractName]) {
+        console.log(`从缓存中获取${contractName}的ABI`);
+        return this._cachedAbis[contractName];
       }
       
-      const filePath = path.join(path.resolve(process.cwd(), dirPath), `${contractName}.json`);
+      // 标准化ABI名称，尝试Camel和Pascal大小写以提高兼容性
+      const normalizedName = contractName;
+      const pascalName = contractName.charAt(0).toUpperCase() + contractName.slice(1);
+      const camelName = contractName.charAt(0).toLowerCase() + contractName.slice(1);
       
-      if (!fs.existsSync(filePath)) {
-        throw new AbiConfigError(`合约ABI文件不存在: ${filePath}`);
+      console.log(`尝试使用以下名称查找ABI: ${normalizedName}, ${pascalName}, ${camelName}`);
+      
+      // 构建多个可能的文件路径，优先使用PROJECT_PATH环境变量
+      let possiblePaths = [];
+      
+      if (process.env.PROJECT_PATH) {
+        const projectPath = process.env.PROJECT_PATH;
+        console.log(`使用PROJECT_PATH查找ABI: ${projectPath}`);
+        
+        // 检查项目根目录下的config/abi目录
+        possiblePaths.push(
+          path.join(projectPath, 'config/abi', `${normalizedName}.json`),
+          path.join(projectPath, 'config/abi', `${pascalName}.json`),
+          path.join(projectPath, 'config/abi', `${camelName}.json`)
+        );
+        
+        // 检查artifacts目录
+        possiblePaths.push(
+          path.join(projectPath, 'artifacts/contracts', `${normalizedName}.sol/${pascalName}.json`),
+          path.join(projectPath, 'artifacts/contracts', `${camelName}.sol/${pascalName}.json`),
+          path.join(projectPath, 'artifacts/contracts', `${normalizedName}.sol/${normalizedName}.json`)
+        );
       }
       
-      const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      const result = this._parseContractAbi(abiJson, contractName);
+      // 添加相对路径的备选项
+      const defaultAbiPath = path.join(process.cwd(), 'config/abi');
+      possiblePaths.push(
+        path.join(defaultAbiPath, `${normalizedName}.json`),
+        path.join(defaultAbiPath, `${pascalName}.json`),
+        path.join(defaultAbiPath, `${camelName}.json`),
+        path.join(process.cwd(), '../config/abi', `${normalizedName}.json`),
+        path.join(process.cwd(), '../config/abi', `${pascalName}.json`),
+        path.join(process.cwd(), '../config/abi', `${camelName}.json`)
+      );
       
-      // 缓存结果
-      this._cachedAbis[cacheKey] = result;
+      // 尝试所有可能的路径
+      console.log(`正在尝试${possiblePaths.length}个可能的ABI文件路径...`);
       
-      return result;
+      for (const abiPath of possiblePaths) {
+        if (fs.existsSync(abiPath)) {
+          console.log(`找到ABI文件: ${abiPath}`);
+          const abiContent = fs.readFileSync(abiPath, 'utf8');
+          const abiData = JSON.parse(abiContent);
+          
+          // 处理不同格式的ABI文件
+          let abi;
+          if (abiData.abi) {
+            // Hardhat/Truffle 格式
+            abi = abiData.abi;
+          } else if (Array.isArray(abiData)) {
+            // 纯ABI数组格式
+            abi = abiData;
+          } else {
+            // 尝试解析其他格式
+            console.log(`警告: ABI文件格式不标准，将尝试直接使用`);
+            abi = abiData;
+          }
+          
+          // 缓存并返回ABI
+          this._cachedAbis[contractName] = { abi, source: abiPath };
+          return this._cachedAbis[contractName];
+        }
+      }
+      
+      // 如果所有路径都失败，抛出错误
+      throw new Error(`未找到${contractName}的ABI文件，尝试了${possiblePaths.length}个路径`);
     } catch (error) {
       throw new AbiConfigError(`获取合约ABI失败: ${error.message}`);
     }

@@ -40,11 +40,29 @@ class AddressConfig {
 
   /**
    * 设置部署配置文件路径
-   * @param {string} filePath - 配置文件路径
+   * @param {string} filePath - 部署配置文件路径
    */
   static setDeploymentPath(filePath) {
+    console.log(`设置部署配置文件路径: ${filePath}`);
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(filePath)) {
+      // 如果文件不存在，尝试使用PROJECT_PATH环境变量
+      if (process.env.PROJECT_PATH) {
+        const altPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+        console.log(`尝试使用PROJECT_PATH查找部署文件: ${altPath}`);
+        
+        if (fs.existsSync(altPath)) {
+          console.log(`使用PROJECT_PATH找到部署文件: ${altPath}`);
+          this._deploymentPath = altPath;
+          return;
+        }
+      }
+      
+      throw new ConfigError(`部署配置文件不存在: ${filePath}`);
+    }
+    
     this._deploymentPath = filePath;
-    this._cachedDeployment = null; // 清除缓存
   }
 
   /**

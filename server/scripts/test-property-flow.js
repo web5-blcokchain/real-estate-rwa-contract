@@ -44,17 +44,70 @@ const {
 } = shared.config;
 
 // 确保显式加载环境变量
-EnvConfig.load();
+console.log('当前工作目录:', process.cwd());
+console.log('尝试加载.env文件...');
+try {
+  // 确定项目根目录的.env文件路径
+  const projectEnvPath = path.resolve(process.cwd(), '../.env');
+  
+  if (fs.existsSync(projectEnvPath)) {
+    console.log('从项目根目录加载.env文件:', projectEnvPath);
+    // 显式加载.env文件
+    require('dotenv').config({ path: projectEnvPath });
+    
+    // 显示.env文件内容前几行
+    const envContent = fs.readFileSync(projectEnvPath, 'utf8');
+    const lines = envContent.split('\n').slice(0, 5).join('\n');
+    console.log('项目根目录.env文件内容预览:', lines + '...');
+  } else {
+    throw new Error(`未找到项目根目录的.env文件: ${projectEnvPath}`);
+  }
+  
+  // 加载EnvConfig
+  EnvConfig.load();
+  
+  // 打印关键环境变量
+  console.log('环境变量加载情况:');
+  console.log('- NODE_ENV:', process.env.NODE_ENV);
+  console.log('- BLOCKCHAIN_NETWORK:', process.env.BLOCKCHAIN_NETWORK);
+  console.log('- PROJECT_PATH:', process.env.PROJECT_PATH);
+  console.log('- ADMIN_PRIVATE_KEY存在:', !!process.env.ADMIN_PRIVATE_KEY);
+  console.log('- OPERATOR_PRIVATE_KEY存在:', !!process.env.OPERATOR_PRIVATE_KEY);
+  console.log('- RPC_URL:', process.env.RPC_URL || process.env.LOCALHOST_RPC_URL);
+} catch (error) {
+  console.error('加载环境变量时出错:', error);
+  throw new Error(`加载环境变量失败: ${error.message}`);
+}
 
-// 设置部署文件路径并初始化AddressConfig
-const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+// 使用PROJECT_PATH设置正确的部署文件路径
+let deploymentPath;
+if (process.env.PROJECT_PATH) {
+  // 使用项目根目录的PROJECT_PATH
+  deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+  console.log('使用PROJECT_PATH设置部署文件路径:', deploymentPath);
+} else {
+  // 回退到相对路径
+  deploymentPath = path.resolve(process.cwd(), '../config/deployment.json');
+  console.log('未找到PROJECT_PATH环境变量，使用相对路径:', deploymentPath);
+}
+
 if (!fs.existsSync(deploymentPath)) {
   throw new Error(`部署文件不存在: ${deploymentPath}，请先部署合约并生成deployment.json文件`);
 }
 AddressConfig.setDeploymentPath(deploymentPath);
 
-// 设置ABI目录路径并初始化AbiConfig
-const abiDirPath = path.resolve(process.cwd(), 'config/abi');
+// 使用PROJECT_PATH设置正确的ABI目录路径
+let abiDirPath;
+if (process.env.PROJECT_PATH) {
+  // 使用项目根目录的PROJECT_PATH
+  abiDirPath = path.resolve(process.env.PROJECT_PATH, 'config/abi');
+  console.log('使用PROJECT_PATH设置ABI目录路径:', abiDirPath);
+} else {
+  // 回退到相对路径
+  abiDirPath = path.resolve(process.cwd(), '../config/abi');
+  console.log('未找到PROJECT_PATH环境变量，使用相对路径:', abiDirPath);
+}
+
 if (!fs.existsSync(abiDirPath)) {
   throw new Error(`ABI目录不存在: ${abiDirPath}，请确保ABI文件已正确配置`);
 }
@@ -75,10 +128,21 @@ console.log('===== 开始测试房地产代币化流程 =====');
  */
 function getPrivateKey(keyType) {
   try {
-    return EnvConfig.getPrivateKey(keyType);
+    // 检查私钥环境变量是否存在
+    const privateKeyEnvName = `${keyType}_PRIVATE_KEY`;
+    if (!process.env[privateKeyEnvName]) {
+      throw new Error(`环境变量 ${privateKeyEnvName} 未设置，请检查.env文件`);
+    }
+    
+    const privateKey = EnvConfig.getPrivateKey(keyType);
+    if (!privateKey) {
+      throw new Error(`私钥 ${keyType} 检索失败，请检查.env文件和EnvConfig.getPrivateKey实现`);
+    }
+    
+    return privateKey;
   } catch (error) {
     Logger.error(`获取${keyType}私钥失败`, { error: error.message });
-    throw new Error(`无法获取${keyType}私钥，请确保在.env文件中配置了相应的私钥`);
+    throw new Error(`无法获取${keyType}私钥: ${error.message}`);
   }
 }
 
@@ -90,7 +154,17 @@ async function testPropertyFlow() {
     Logger.info('开始测试房产通证流程');
 
     // 加载部署信息 - 验证deployment.json是否存在并可读
-    const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+    let deploymentPath;
+    if (process.env.PROJECT_PATH) {
+      // 使用项目根目录的PROJECT_PATH
+      deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+      Logger.info(`使用PROJECT_PATH加载部署文件: ${deploymentPath}`);
+    } else {
+      // 回退到相对路径
+      deploymentPath = path.resolve(process.cwd(), '../config/deployment.json');
+      Logger.info(`未找到PROJECT_PATH环境变量，使用相对路径: ${deploymentPath}`);
+    }
+
     if (!fs.existsSync(deploymentPath)) {
       throw new Error(`部署文件不存在: ${deploymentPath}，请先部署合约并生成deployment.json文件`);
     }
@@ -115,10 +189,24 @@ async function testPropertyFlow() {
 
     // 1. 初始化区块链连接 - 使用shared模块的Provider
     Logger.info('正在创建Provider...');
-    const provider = await Provider.create({ networkType });
-    Logger.info('Provider创建成功', {
-      chainId: (await Provider.getNetwork(provider)).chainId,
-      blockNumber: await Provider.getBlockNumber(provider)
+    // 从配置中获取RPC URL，显式打印出来，确保连接到正确的网络
+    const rpcUrl = EnvConfig.getNetworkConfig().rpcUrl || 'http://localhost:8545';
+    Logger.info(`将使用RPC URL: ${rpcUrl}`, { rpcUrl, networkType });
+    
+    const provider = await Provider.create({ 
+      networkType,
+      rpcUrl 
+    });
+    
+    // 打印详细的网络信息
+    const networkInfo = await Provider.getNetwork(provider);
+    const blockNumber = await Provider.getBlockNumber(provider);
+    
+    Logger.info('Provider创建成功，网络连接详情', {
+      chainId: networkInfo.chainId,
+      networkName: networkInfo.name,
+      blockNumber: blockNumber,
+      nodeUrl: rpcUrl
     });
 
     // 2. 创建钱包 - 使用shared模块的Wallet
@@ -177,6 +265,15 @@ async function testPropertyFlow() {
         throw new Error('无法获取PropertyToken实现合约地址');
       }
       
+      Logger.info('准备调用合约方法: registerPropertyAndCreateToken', {
+        method: 'registerPropertyAndCreateToken',
+        contractAddress: facadeContractAddress,
+        signer: adminWallet.address,
+        propertyId: propertyData.propertyId,
+        tokenName: "房产代币" + propertyData.propertyId.substring(4),
+        tokenSymbol: "PROP" + propertyData.propertyId.substring(4)
+      });
+      
       const registerTx = await facadeContract.registerPropertyAndCreateToken(
         propertyData.propertyId,         // propertyId
         "JP",                            // country
@@ -186,6 +283,13 @@ async function testPropertyFlow() {
         ethers.parseEther("1000"),       // initialSupply
         tokenImplAddress                // propertyTokenImplementation
       );
+      
+      Logger.info('交易已发送到网络，等待确认...', {
+        txHash: registerTx.hash,
+        nonce: registerTx.nonce,
+        gasLimit: registerTx.gasLimit?.toString(),
+        gasPrice: registerTx.gasPrice?.toString()
+      });
       
       // 等待交易确认
       const registerReceipt = await registerTx.wait();
@@ -197,7 +301,10 @@ async function testPropertyFlow() {
         propertyId: propertyData.propertyId,
         txHash: registerReceipt.hash,
         blockNumber: registerReceipt.blockNumber,
-        calculatedHash: propertyIdHash
+        calculatedHash: propertyIdHash,
+        gasUsed: registerReceipt.gasUsed?.toString(),
+        status: registerReceipt.status,
+        events: registerReceipt.logs?.length || 0
       });
       
       Logger.info('房产注册流程测试成功');

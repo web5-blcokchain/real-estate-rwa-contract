@@ -295,80 +295,179 @@ const Logger = {
   },
   
   /**
-   * 记录API调用
-   * @param {Object} options - API调用选项
-   * @param {string} options.module - 模块名称
-   * @param {string} options.interface - 接口名称
-   * @param {string} options.method - HTTP方法
-   * @param {Object} options.params - 请求参数
-   * @param {Object} options.result - 返回结果
+   * 记录API调用信息
+   * @param {Object} logData - 日志数据
+   * @param {string} logData.module - 模块名称
+   * @param {string} logData.interface - 接口名称
+   * @param {string} logData.method - HTTP方法
+   * @param {Object} logData.params - 请求参数
+   * @param {Object} logData.result - 响应结果
+   * @param {string} logData.error - 错误信息(可选)
    */
-  logApiCall(options = {}) {
-    const { module = 'api', interface: api, method, params, result, error } = options;
-    
-    const logger = getLogger(module);
-    const logData = {
-      type: 'api_call',
-      api,
-      method,
-      params: this._sanitizeParams(params),
-      ...(!error ? { result: this._truncateResult(result) } : { error: this._formatError(error) }),
-      timestamp: new Date().toISOString()
-    };
-    
-    if (error) {
-      logger.error(`API调用失败: ${api}`, logData);
-    } else {
-      logger.info(`API调用: ${api}`, logData);
+  logApiCall(logData) {
+    try {
+      // 验证必填字段
+      if (!logData.module || !logData.interface) {
+        this.warn('API调用日志记录失败: 缺少必填字段');
+        return;
+      }
+      
+      // 处理敏感信息
+      const params = this._sanitizeParams(logData.params);
+      
+      // 处理结果数据，如果太大则截断
+      const result = this._truncateResult(logData.result);
+      
+      // 构建日志消息
+      const message = logData.error
+        ? `API调用失败: ${logData.module}.${logData.interface}`
+        : `API调用成功: ${logData.module}.${logData.interface}`;
+      
+      // 构建日志数据
+      const logObject = {
+        type: 'api_call',
+        module: logData.module,
+        interface: logData.interface,
+        method: logData.method || 'UNKNOWN',
+        params,
+        duration: logData.duration,
+        timestamp: new Date().toISOString(),
+        transactionDetails: logData.transactionDetails || {}
+      };
+      
+      // 添加结果或错误信息
+      if (logData.error) {
+        logObject.error = logData.error;
+        logObject.success = false;
+        this.error(message, logObject);
+      } else {
+        logObject.result = result;
+        logObject.success = true;
+        
+        // 如果有区块链信息，添加到日志中
+        if (logData.contractAddress) {
+          logObject.contractAddress = logData.contractAddress;
+        }
+        
+        if (logData.blockNumber) {
+          logObject.blockNumber = logData.blockNumber;
+        }
+        
+        if (logData.txHash) {
+          logObject.txHash = logData.txHash;
+        }
+        
+        this.info(message, logObject);
+      }
+    } catch (error) {
+      this.error(`记录API调用日志时出错: ${error.message}`, { error });
     }
   },
   
   /**
-   * 记录合约方法调用
-   * @param {Object} options - 合约调用选项
-   * @param {string} options.module - 模块名称
-   * @param {string} options.contractName - 合约名称
-   * @param {string} options.contractAddress - 合约地址
-   * @param {string} options.method - 方法名称
-   * @param {Array} options.args - 方法参数
-   * @param {string} options.abiPath - ABI文件路径
-   * @param {Object} options.result - 调用结果
-   * @param {boolean} options.isWrite - 是否是写操作
+   * 记录合约调用信息
+   * @param {Object} logData - 日志数据
+   * @param {string} logData.contractName - 合约名称
+   * @param {string} logData.contractAddress - 合约地址
+   * @param {string} logData.method - 方法名称
+   * @param {Array} logData.args - 方法参数
+   * @param {string} logData.abiPath - ABI路径
+   * @param {Object} logData.result - 调用结果
+   * @param {boolean} logData.isWrite - 是否是写入操作
+   * @param {string} logData.gasUsed - 使用的Gas(可选)
+   * @param {string} logData.txHash - 交易哈希(可选)
+   * @param {number} logData.blockNumber - 区块号(可选)
+   * @param {string} logData.error - 错误信息(可选)
    */
-  logContractCall(options = {}) {
-    const { 
-      module = 'contract', 
-      contractName, 
-      contractAddress, 
-      method, 
-      args = [], 
-      abiPath,
-      result, 
-      error,
-      isWrite = false,
-      gasUsed,
-      txHash
-    } = options;
-    
-    const logger = getLogger(module);
-    const logData = {
-      type: 'contract_call',
-      contractName,
-      contractAddress,
-      method,
-      args: this._sanitizeParams(args),
-      abiPath,
-      isWrite,
-      ...(!error ? { result: this._truncateResult(result) } : { error: this._formatError(error) }),
-      ...(gasUsed ? { gasUsed } : {}),
-      ...(txHash ? { txHash } : {}),
-      timestamp: new Date().toISOString()
-    };
-    
-    if (error) {
-      logger.error(`合约调用失败: ${contractName}.${method}`, logData);
-    } else {
-      logger.info(`合约调用: ${contractName}.${method}`, logData);
+  logContractCall(logData) {
+    try {
+      // 验证必填字段
+      if (!logData.contractName || !logData.method) {
+        this.warn('合约调用日志记录失败: 缺少必填字段');
+        return;
+      }
+      
+      // 处理参数
+      const args = this._sanitizeParams(logData.args);
+      
+      // 构建日志消息
+      const actionType = logData.isWrite ? '执行合约交易' : '调用合约方法';
+      const status = logData.error ? '失败' : '成功';
+      
+      const message = `${actionType} ${status}: ${logData.contractName}.${logData.method}`;
+      
+      // 构建日志数据
+      const logObject = {
+        type: 'contract_call',
+        contractName: logData.contractName,
+        contractAddress: logData.contractAddress,
+        method: logData.method,
+        args,
+        isWrite: !!logData.isWrite,
+        timestamp: new Date().toISOString(),
+        module: logData.module || 'contract'
+      };
+      
+      // 添加ABI路径(如果有)
+      if (logData.abiPath) {
+        logObject.abiPath = logData.abiPath;
+      }
+      
+      // 添加区块链相关信息
+      if (logData.isWrite) {
+        if (logData.txHash) {
+          logObject.txHash = logData.txHash;
+        }
+        
+        if (logData.blockNumber) {
+          logObject.blockNumber = logData.blockNumber;
+        }
+        
+        if (logData.gasUsed) {
+          logObject.gasUsed = logData.gasUsed;
+        }
+        
+        if (logData.status !== undefined) {
+          logObject.status = logData.status;
+        }
+        
+        // 如果有事件信息
+        if (logData.events) {
+          logObject.events = logData.events;
+        }
+        
+        // 如果有网络信息
+        if (logData.networkType) {
+          logObject.networkType = logData.networkType;
+        }
+        
+        if (logData.chainId) {
+          logObject.chainId = logData.chainId;
+        }
+      }
+      
+      // 添加结果或错误信息
+      if (logData.error) {
+        logObject.error = typeof logData.error === 'object' 
+          ? logData.error.message 
+          : logData.error;
+        logObject.success = false;
+        
+        if (logData.error.code) {
+          logObject.errorCode = logData.error.code;
+        }
+        
+        this.error(message, logObject);
+      } else {
+        // 处理结果，对于交易结果不做截断(用于调试)
+        logObject.result = logData.isWrite ? logData.result : this._truncateResult(logData.result);
+        logObject.success = true;
+        
+        const level = logData.isWrite ? 'info' : 'debug';
+        this[level](message, logObject);
+      }
+    } catch (error) {
+      this.error(`记录合约调用日志时出错: ${error.message}`, { error });
     }
   },
   

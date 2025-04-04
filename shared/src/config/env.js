@@ -1,7 +1,8 @@
 const dotenv = require('dotenv');
 const path = require('path');
-const { EnvError } = require('./errors');
+const { ConfigError } = require('../utils/errors');
 const validation = require('./validation');
+const Logger = require('../utils/logger');
 
 /**
  * 环境变量键名常量
@@ -83,7 +84,10 @@ const ENV_KEYS = {
   
   // 服务器配置
   SERVER_PORT: 'SERVER_PORT',
-  SERVER_HOST: 'SERVER_HOST'
+  SERVER_HOST: 'SERVER_HOST',
+  
+  // 路径配置
+  PROJECT_PATH: 'PROJECT_PATH'
 };
 
 /**
@@ -149,24 +153,42 @@ class EnvConfig {
    */
   static load() {
     try {
-      // 加载.env文件
-      dotenv.config();
+      console.log('加载环境配置...');
+      // 记录PROJECT_PATH的初始值
+      console.log('加载前PROJECT_PATH值:', process.env[ENV_KEYS.PROJECT_PATH]);
+            
+      // 确保网络类型配置存在
+      const networkType = process.env[ENV_KEYS.BLOCKCHAIN_NETWORK];
+      if (!networkType) {
+        console.warn('警告: 未设置BLOCKCHAIN_NETWORK环境变量，将使用默认网络类型(localhost)');
+        process.env[ENV_KEYS.BLOCKCHAIN_NETWORK] = 'localhost';
+      }
+            
+      // 确保日志目录配置存在
+      if (!process.env[ENV_KEYS.LOG_DIR]) {
+        console.warn('警告: 未设置LOG_DIR环境变量，将使用默认日志目录(logs)');
+        process.env[ENV_KEYS.LOG_DIR] = 'logs';
+      }
+            
+      // 检查PROJECT_PATH是否存在，确保以'/'结尾
+      if (process.env[ENV_KEYS.PROJECT_PATH]) {
+        // 确保PROJECT_PATH路径以'/'结尾
+        if (!process.env[ENV_KEYS.PROJECT_PATH].endsWith('/')) {
+          process.env[ENV_KEYS.PROJECT_PATH] += '/';
+          console.log('已修正PROJECT_PATH末尾添加斜杠:', process.env[ENV_KEYS.PROJECT_PATH]);
+        }
+      } else {
+        console.warn('警告: 未设置PROJECT_PATH环境变量，某些功能可能无法正常工作');
+      }
 
-      // 合并默认配置
-      const config = { ...this._defaultConfig, ...process.env };
-
-      // 验证必需的环境变量
-      this._validateRequiredEnv(config);
-
-      // 转换配置类型
-      const convertedConfig = this._convertConfigTypes(config);
+      // 打印最终的PROJECT_PATH
+      console.log('最终的PROJECT_PATH值:', process.env[ENV_KEYS.PROJECT_PATH]);
       
-      // 设置初始化标志
-      this._initialized = true;
-      
-      return convertedConfig;
+      console.log('环境配置加载成功');
+      return true;
     } catch (error) {
-      throw new EnvError(`加载环境变量失败: ${error.message}`);
+      console.error('加载环境配置失败:', error.message);
+      return false;
     }
   }
 
@@ -177,7 +199,7 @@ class EnvConfig {
    */
   static setEnv(key, value) {
     if (!key) {
-      throw new EnvError('环境变量名不能为空');
+      throw new ConfigError('环境变量名不能为空');
     }
     process.env[key] = value;
   }
@@ -197,25 +219,25 @@ class EnvConfig {
 
     for (const env of requiredEnv) {
       if (!config[env]) {
-        throw new EnvError(`缺少必需的环境变量: ${env}`);
+        throw new ConfigError(`缺少必需的环境变量: ${env}`);
       }
     }
 
     // 验证网络类型
     const validNetworks = ['localhost', 'testnet', 'mainnet'];
     if (!validNetworks.includes(config[ENV_KEYS.BLOCKCHAIN_NETWORK])) {
-      throw new EnvError(`无效的网络类型: ${config[ENV_KEYS.BLOCKCHAIN_NETWORK]}`);
+      throw new ConfigError(`无效的网络类型: ${config[ENV_KEYS.BLOCKCHAIN_NETWORK]}`);
     }
 
     // 验证私钥格式
     if (!validation.isValidPrivateKey(config[ENV_KEYS.ADMIN_PRIVATE_KEY])) {
-      throw new EnvError('无效的管理员私钥格式');
+      throw new ConfigError('无效的管理员私钥格式');
     }
     if (!validation.isValidPrivateKey(config[ENV_KEYS.MANAGER_PRIVATE_KEY])) {
-      throw new EnvError('无效的管理者私钥格式');
+      throw new ConfigError('无效的管理者私钥格式');
     }
     if (!validation.isValidPrivateKey(config[ENV_KEYS.OPERATOR_PRIVATE_KEY])) {
-      throw new EnvError('无效的操作者私钥格式');
+      throw new ConfigError('无效的操作者私钥格式');
     }
   }
 
@@ -304,7 +326,7 @@ class EnvConfig {
     }
 
     if (!config[networkType].rpcUrl || !config[networkType].chainId) {
-      throw new EnvError(`${networkType}网络配置不完整`);
+      throw new ConfigError(`${networkType}网络配置不完整`);
     }
 
     return config[networkType];
@@ -351,17 +373,17 @@ class EnvConfig {
    * 获取私钥
    * @param {string} keyType - 私钥类型
    * @returns {string} 私钥
-   * @throws {EnvError} 配置错误
+   * @throws {ConfigError} 配置错误
    */
   static getPrivateKey(keyType) {
     const envKey = KEY_TYPES[keyType.toUpperCase()];
     if (!envKey) {
-      throw new EnvError(`未知的私钥类型: ${keyType}`);
+      throw new ConfigError(`未知的私钥类型: ${keyType}`);
     }
     
     const privateKey = process.env[envKey];
     if (!privateKey) {
-      throw new EnvError(`未设置${keyType}私钥`);
+      throw new ConfigError(`未设置${keyType}私钥`);
     }
     
     return privateKey;
@@ -403,7 +425,7 @@ class EnvConfig {
    */
   static getContractAddress(contractName) {
     if (!contractName) {
-      throw new EnvError('合约名称不能为空');
+      throw new ConfigError('合约名称不能为空');
     }
 
     // 构造环境变量键名
@@ -411,7 +433,7 @@ class EnvConfig {
     const address = this.getEnv(key);
     
     if (!address) {
-      throw new EnvError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
+      throw new ConfigError(`合约 ${contractName} 的地址未配置，请检查环境变量: ${key}`);
     }
     
     return address;
