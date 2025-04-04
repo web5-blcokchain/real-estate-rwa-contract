@@ -4,13 +4,29 @@
  * @module shared
  */
 
-const utils = require('./utils');
-const config = require('./config');
-const core = require('./core');
+// 配置相关模块
+const EnvConfig = require('./config/env');
+const NetworkConfig = require('./config/network');
+const AbiConfig = require('./config/abi');
+const ContractConfig = require('./config/contract');
+const AddressConfig = require('./config/address');
+const ValidationConfig = require('./config/validation');
+const Constants = require('./config/constants');
 
-// 配置Logger
-// 让Logger的配置由EnvConfig负责，遵循职责边界
-utils.Logger.configure(config.EnvConfig.getLoggerConfig());
+// 工具模块
+const utils = require('./utils');
+const Wallet = require('./core/wallet');
+const Provider = require('./core/provider');
+const Contract = require('./core/contract');
+
+// 初始化Logger
+utils.Logger.configure({
+  level: process.env.LOG_LEVEL || 'info',
+  dir: process.env.LOG_DIR || './logs',
+  maxSize: Number(process.env.MAX_LOG_SIZE) || 10 * 1024 * 1024,  // 10MB
+  maxFiles: Number(process.env.MAX_LOG_FILES) || 5,
+  console: process.env.LOG_CONSOLE !== 'false'
+});
 
 /**
  * 模块层次结构:
@@ -38,17 +54,33 @@ module.exports = {
    * 配置模块
    * 包含环境变量、网络、ABI和合约配置
    */
-  ...config,
+  config: {
+    EnvConfig,
+    NetworkConfig,
+    AbiConfig,
+    ContractConfig,
+    AddressConfig,
+    ValidationConfig
+  },
   
   /**
    * 工具模块
    * 包含验证、日志、错误处理等通用工具
    */
-  ...utils,
+  Logger: utils.Logger,
+  ErrorHandler: utils.ErrorHandler,
+  Validation: utils.Validation,
   
   /**
    * 核心功能模块
    * 包含Provider、Wallet、Contract等核心类
    */
-  ...core
+  Wallet,
+  Provider,
+  Contract,
+  
+  /**
+   * 常量定义
+   */
+  Constants
 }; 

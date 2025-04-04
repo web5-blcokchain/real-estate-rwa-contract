@@ -3,207 +3,258 @@
  * 直接代理RealEstateFacade.json ABI文件中的所有方法
  */
 const { ethers } = require('ethers');
-const fs = require('fs');
-const path = require('path');
-const { Logger } = require('../../../shared/src');
+const { Logger, Validation, Contract } = require('../../../shared/src');
 const { blockchainService } = require('../services');
-const { processContractResult, sendResponse } = require('../utils/ContractUtils');
+const { sendResponse } = require('../utils/ContractUtils');
+const { AddressConfig, AbiConfig } = require('../../../shared/src/config');
 
-// 读取ABI文件
-const abiPath = path.resolve(process.cwd(), 'config/abi/RealEstateFacade.json');
-const abi = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+// 合约名称常量
+const CONTRACT_NAME = 'RealEstateFacade';
 
-// 合约地址配置
-const addressConfigPath = path.resolve(process.cwd(), 'config/contract-addresses.json');
-let contractAddress;
-
-// 从配置文件获取合约地址
-if (fs.existsSync(addressConfigPath)) {
-  const addressConfig = JSON.parse(fs.readFileSync(addressConfigPath, 'utf8'));
-  const networkType = process.env.BLOCKCHAIN_NETWORK || 'localhost';
-  contractAddress = addressConfig[networkType]?.RealEstateFacade;
-}
-
-// 如果配置文件中没有，尝试从环境变量获取
-if (!contractAddress) {
-  contractAddress = process.env.CONTRACT_REALESTATEFACADE_ADDRESS;
-}
-
-// 合约实例
-let contractInstance = null;
+// 合约实例缓存(按keyType分类)
+const contractInstances = {};
 
 /**
- * 初始化合约实例
+ * 初始化合约实例(单例模式)
+ * @param {string} keyType - 私钥类型(ADMIN/OPERATOR等)
+ * @returns {Promise<Object>} 合约实例
  */
-async function initContract() {
+async function initContract(keyType = 'ADMIN') {
   try {
-    if (!contractInstance) {
-      await blockchainService.initialize();
-      contractInstance = blockchainService.getContractInstance(abi, contractAddress);
-      Logger.info('RealEstateFacade合约初始化成功', { address: contractAddress });
+    const cacheKey = `${CONTRACT_NAME}_${keyType}`;
+    
+    // 判断是否已经初始化过
+    if (contractInstances[cacheKey]) {
+      Logger.debug(`复用${CONTRACT_NAME}合约缓存实例`, { keyType });
+      return contractInstances[cacheKey];
     }
-    return contractInstance;
+    
+    // 确保区块链服务已初始化
+    await blockchainService.initialize();
+    
+    // 使用getContractInstanceByName方法获取合约实例
+    const contract = await blockchainService.getContractInstanceByName(CONTRACT_NAME, keyType);
+    
+    // 缓存合约实例
+    contractInstances[cacheKey] = contract;
+    
+    Logger.info(`${CONTRACT_NAME}合约初始化成功`, { 
+      address: contract.address,
+      keyType,
+      cacheKey
+    });
+    
+    return contract;
   } catch (error) {
-    Logger.error(`RealEstateFacade合约初始化失败: ${error.message}`, { error });
+    Logger.error(`${CONTRACT_NAME}合约初始化失败: ${error.message}`, { error });
     throw error;
   }
 }
 
 /**
  * 获取合约地址
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
  */
 async function getContractAddress(req, res) {
   try {
-    return sendResponse(res, { address: contractAddress });
+    // 使用AddressConfig获取合约地址
+    const address = AddressConfig.getContractAddress(CONTRACT_NAME);
+    return sendResponse(res, { address });
   } catch (error) {
-    Logger.error(`获取RealEstateFacade合约地址失败: ${error.message}`, { error });
+    Logger.error(`获取${CONTRACT_NAME}合约地址失败: ${error.message}`, { error });
     return sendResponse(res, null, error.message, 500);
   }
 }
 
 /**
- * createProperty - 创建房产并铸造代币
+ * registerProperty - 注册房产
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
  */
-async function createProperty(req, res) {
+async function registerProperty(req, res) {
   try {
+    Logger.info('API调用: registerProperty', { 
+      interface: 'registerProperty',
+      method: 'POST',
+      params: req.body
+    });
+    
     const { 
-      name, 
-      location, 
-      price, 
-      area, 
-      description,
-      imageUrl,
-      tokenURI
+      propertyId, 
+      country, 
+      metadataURI
     } = req.body;
     
-    if (!name || !location || !price || !area || !tokenURI) {
+    // 验证参数
+    if (!propertyId || !country || !metadataURI) {
+      Logger.warn('参数验证失败: registerProperty', {
+        interface: 'registerProperty',
+        method: 'POST',
+        params: req.body
+      });
       return sendResponse(res, { error: '缺少必要参数' }, 400);
     }
     
-    // 获取私钥
-    const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
-    if (!privateKey) {
-      return sendResponse(res, { error: '未配置区块链私钥，无法发送交易' }, 400);
-    }
-    
-    // 初始化区块链服务
+    // 初始化区块链服务并获取合约实例
     await blockchainService.initialize();
-    
-    // 获取带签名者的合约实例
-    const signedContract = blockchainService.getSignedContractInstance(abi, contractAddress, privateKey);
+    const contract = await initContract('ADMIN');
     
     // 发送交易
-    const tx = await signedContract.createProperty(
-      name, 
-      location, 
-      price, 
-      area, 
-      description || '', 
-      imageUrl || '',
-      tokenURI
+    const receipt = await blockchainService.sendContractTransaction(
+      contract,
+      'registerProperty',
+      [propertyId, country, metadataURI]
     );
     
-    // 等待交易确认
-    Logger.info(`交易已提交: ${tx.hash}`, { method: 'createProperty' });
-    const receipt = await tx.wait();
+    Logger.info('注册房产成功', {
+      interface: 'registerProperty',
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      country
+    });
     
     return sendResponse(res, { 
-      txHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      country,
+      metadataURI
     });
   } catch (error) {
-    Logger.error('创建房产失败', { error });
+    Logger.error('注册房产失败', { 
+      error: error.message,
+      interface: 'registerProperty',
+      params: req.body
+    });
     return sendResponse(res, { error: error.message }, 500);
   }
 }
 
 /**
- * sellProperty - 出售房产
+ * registerPropertyAndCreateToken - 注册房产并创建代币
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
  */
-async function sellProperty(req, res) {
+async function registerPropertyAndCreateToken(req, res) {
   try {
-    const { propertyId, price } = req.body;
+    Logger.info('API调用: registerPropertyAndCreateToken', { 
+      interface: 'registerPropertyAndCreateToken',
+      method: 'POST',
+      params: req.body
+    });
     
-    if (!propertyId || !price) {
+    const { 
+      propertyId, 
+      country, 
+      metadataURI,
+      tokenName,
+      tokenSymbol,
+      initialSupply,
+      tokenImplementation
+    } = req.body;
+    
+    // 验证参数
+    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply) {
+      Logger.warn('参数验证失败: registerPropertyAndCreateToken', {
+        interface: 'registerPropertyAndCreateToken',
+        method: 'POST',
+        params: req.body
+      });
       return sendResponse(res, { error: '缺少必要参数' }, 400);
     }
     
-    // 获取私钥
-    const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
-    if (!privateKey) {
-      return sendResponse(res, { error: '未配置区块链私钥，无法发送交易' }, 400);
+    // 处理代币实现地址
+    let tokenImplAddress = tokenImplementation;
+    if (!tokenImplAddress) {
+      // 如果没有提供，使用部署文件中的PropertyToken地址
+      tokenImplAddress = AddressConfig.getContractAddress('PropertyToken');
     }
     
-    // 初始化区块链服务
-    await blockchainService.initialize();
+    // 验证地址
+    if (!Validation.isValidAddress(tokenImplAddress)) {
+      return sendResponse(res, { error: '无效的代币实现地址' }, 400);
+    }
     
-    // 获取带签名者的合约实例
-    const signedContract = blockchainService.getSignedContractInstance(abi, contractAddress, privateKey);
+    // 初始化区块链服务并获取合约实例
+    await blockchainService.initialize();
+    const contract = await initContract('ADMIN');
     
     // 发送交易
-    const tx = await signedContract.sellProperty(propertyId, price);
+    const receipt = await blockchainService.sendContractTransaction(
+      contract,
+      'registerPropertyAndCreateToken',
+      [
+        propertyId,
+        country,
+        metadataURI,
+        tokenName,
+        tokenSymbol,
+        ethers.parseUnits(initialSupply.toString(), 18),
+        tokenImplAddress
+      ]
+    );
     
-    // 等待交易确认
-    Logger.info(`交易已提交: ${tx.hash}`, { method: 'sellProperty' });
-    const receipt = await tx.wait();
+    Logger.info('注册房产并创建代币成功', {
+      interface: 'registerPropertyAndCreateToken',
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      tokenName
+    });
+    
+    // 解析事件获取更多信息
+    let propertyIdHash, tokenAddress;
+    
+    // 合约函数返回值是元组[bytes32, address]
+    // 尝试从事件中获取propertyIdHash和tokenAddress
+    if (receipt.logs && receipt.logs.length > 0) {
+      try {
+        const abiInfo = AbiConfig.getContractAbi(CONTRACT_NAME);
+        const iface = new ethers.Interface(abiInfo.abi);
+        
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog(log);
+            if (parsed && parsed.name === 'PropertyRegistered') {
+              propertyIdHash = parsed.args[0];
+              tokenAddress = parsed.args[4];
+              break;
+            }
+          } catch (e) {
+            // 静默处理解析错误，继续尝试下一个日志
+          }
+        }
+      } catch (e) {
+        Logger.warn('解析注册事件失败', { error: e.message });
+      }
+    }
     
     return sendResponse(res, { 
-      txHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      propertyId,
+      propertyIdHash: propertyIdHash || null,
+      tokenAddress: tokenAddress || null,
+      country,
+      metadataURI,
+      tokenName,
+      tokenSymbol
     });
   } catch (error) {
-    Logger.error('出售房产失败', { error });
+    Logger.error('注册房产并创建代币失败', { 
+      error: error.message,
+      interface: 'registerPropertyAndCreateToken',
+      params: req.body
+    });
     return sendResponse(res, { error: error.message }, 500);
   }
 }
-
-/**
- * buyProperty - 购买房产
- */
-async function buyProperty(req, res) {
-  try {
-    const { marketItemId, value } = req.body;
-    
-    if (!marketItemId || !value) {
-      return sendResponse(res, { error: '缺少必要参数' }, 400);
-    }
-    
-    // 获取私钥
-    const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
-    if (!privateKey) {
-      return sendResponse(res, { error: '未配置区块链私钥，无法发送交易' }, 400);
-    }
-    
-    // 初始化区块链服务
-    await blockchainService.initialize();
-    
-    // 获取带签名者的合约实例
-    const signedContract = blockchainService.getSignedContractInstance(abi, contractAddress, privateKey);
-    
-    // 发送交易，带上ETH
-    const tx = await signedContract.buyProperty(marketItemId, { value: value });
-    
-    // 等待交易确认
-    Logger.info(`交易已提交: ${tx.hash}`, { method: 'buyProperty' });
-    const receipt = await tx.wait();
-    
-    return sendResponse(res, { 
-      txHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber
-    });
-  } catch (error) {
-    Logger.error('购买房产失败', { error });
-    return sendResponse(res, { error: error.message }, 500);
-  }
-}
-
-// RealEstateFacade特有的其他方法...
 
 // 导出所有方法
 module.exports = {
   getContractAddress,
-  createProperty,
-  sellProperty,
-  buyProperty,
-  // 其他方法...
+  registerProperty,
+  registerPropertyAndCreateToken
 }; 

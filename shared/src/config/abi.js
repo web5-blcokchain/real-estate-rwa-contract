@@ -15,6 +15,26 @@ const DEFAULT_ABI_DIR = 'config/abi';
  */
 class ABIConfig {
   /**
+   * 缓存的合约ABI信息
+   * @private
+   */
+  static _cachedAbis = {};
+  
+  /**
+   * 是否已初始化标志
+   * @private
+   */
+  static _initialized = false;
+  
+  /**
+   * 检查是否已初始化
+   * @returns {boolean} 是否已初始化
+   */
+  static isInitialized() {
+    return this._initialized;
+  }
+
+  /**
    * 加载ABI配置
    * @param {string} [abiPath] - ABI文件路径
    * @returns {Object} ABI配置
@@ -31,11 +51,14 @@ class ABIConfig {
       
       // 如果是目录，加载所有ABI文件
       if (fs.statSync(absolutePath).isDirectory()) {
-        return this.loadAllContractAbis(resolvedPath);
+        const result = this.loadAllContractAbis(resolvedPath);
+        this._initialized = true;
+        return result;
       }
       
       // 否则加载单个ABI文件
       const abi = this._loadABI(resolvedPath);
+      this._initialized = true;
       return {
         path: resolvedPath,
         abi
@@ -140,6 +163,9 @@ class ABIConfig {
         }
       }
       
+      // 设置初始化标志
+      this._initialized = true;
+      
       return contracts;
     } catch (error) {
       console.error('加载所有合约ABI失败', error.message);
@@ -200,6 +226,14 @@ class ABIConfig {
    */
   static getContractAbi(contractName, dirPath = DEFAULT_ABI_DIR) {
     try {
+      // 构建缓存键
+      const cacheKey = `${contractName}:${dirPath}`;
+      
+      // 检查缓存
+      if (this._cachedAbis[cacheKey]) {
+        return this._cachedAbis[cacheKey];
+      }
+      
       const filePath = path.join(path.resolve(process.cwd(), dirPath), `${contractName}.json`);
       
       if (!fs.existsSync(filePath)) {
@@ -207,10 +241,22 @@ class ABIConfig {
       }
       
       const abiJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      return this._parseContractAbi(abiJson, contractName);
+      const result = this._parseContractAbi(abiJson, contractName);
+      
+      // 缓存结果
+      this._cachedAbis[cacheKey] = result;
+      
+      return result;
     } catch (error) {
       throw new AbiConfigError(`获取合约ABI失败: ${error.message}`);
     }
+  }
+  
+  /**
+   * 清除ABI缓存
+   */
+  static clearCache() {
+    this._cachedAbis = {};
   }
 }
 

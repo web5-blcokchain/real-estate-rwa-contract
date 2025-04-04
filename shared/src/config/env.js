@@ -56,7 +56,45 @@ const ENV_KEYS = {
   
   // 服务器配置
   PORT: 'PORT',
-  HOST: 'HOST'
+  HOST: 'HOST',
+  
+  // 模拟区块链配置
+  MOCK_BLOCKCHAIN: 'MOCK_BLOCKCHAIN',
+  
+  // 日志配置
+  LOG_CONSOLE: 'LOG_CONSOLE',
+  MAX_LOG_SIZE: 'MAX_LOG_SIZE',
+  MAX_LOG_FILES: 'MAX_LOG_FILES',
+  
+  // 合约地址前缀和后缀
+  CONTRACT_ADDRESS_PREFIX: 'CONTRACT_',
+  CONTRACT_ADDRESS_SUFFIX: '_ADDRESS',
+  
+  // 私钥类型映射
+  ADMIN_PRIVATE_KEY: 'ADMIN_PRIVATE_KEY',
+  DEPLOYER_PRIVATE_KEY: 'DEPLOYER_PRIVATE_KEY',
+  BLOCKCHAIN_PRIVATE_KEY: 'BLOCKCHAIN_PRIVATE_KEY',
+  SERVICE_ACCOUNT_PRIVATE_KEY: 'SERVICE_ACCOUNT_PRIVATE_KEY',
+  OPERATOR_PRIVATE_KEY: 'OPERATOR_PRIVATE_KEY',
+  
+  // API配置
+  API_PORT: 'API_PORT',
+  API_HOST: 'API_HOST',
+  
+  // 服务器配置
+  SERVER_PORT: 'SERVER_PORT',
+  SERVER_HOST: 'SERVER_HOST'
+};
+
+/**
+ * 私钥类型映射
+ */
+const KEY_TYPES = {
+  ADMIN: ENV_KEYS.ADMIN_PRIVATE_KEY,
+  DEPLOYER: ENV_KEYS.DEPLOYER_PRIVATE_KEY,
+  SERVICE: ENV_KEYS.SERVICE_ACCOUNT_PRIVATE_KEY,
+  OPERATOR: ENV_KEYS.OPERATOR_PRIVATE_KEY,
+  DEFAULT: ENV_KEYS.BLOCKCHAIN_PRIVATE_KEY
 };
 
 /**
@@ -92,6 +130,20 @@ class EnvConfig {
   };
 
   /**
+   * 是否已初始化标志
+   * @private
+   */
+  static _initialized = false;
+
+  /**
+   * 检查是否已初始化
+   * @returns {boolean} 是否已初始化
+   */
+  static isInitialized() {
+    return this._initialized;
+  }
+
+  /**
    * 加载环境变量
    * @returns {Object} 环境变量配置
    */
@@ -107,10 +159,27 @@ class EnvConfig {
       this._validateRequiredEnv(config);
 
       // 转换配置类型
-      return this._convertConfigTypes(config);
+      const convertedConfig = this._convertConfigTypes(config);
+      
+      // 设置初始化标志
+      this._initialized = true;
+      
+      return convertedConfig;
     } catch (error) {
       throw new EnvError(`加载环境变量失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 设置环境变量
+   * @param {string} key - 环境变量名
+   * @param {string} value - 环境变量值
+   */
+  static setEnv(key, value) {
+    if (!key) {
+      throw new EnvError('环境变量名不能为空');
+    }
+    process.env[key] = value;
   }
 
   /**
@@ -242,84 +311,6 @@ class EnvConfig {
   }
 
   /**
-   * 获取管理员私钥
-   * @returns {string} 管理员私钥
-   */
-  static getAdminPrivateKey() {
-    const privateKey = process.env[ENV_KEYS.ADMIN_PRIVATE_KEY];
-    if (!privateKey) {
-      throw new EnvError('管理员私钥未配置');
-    }
-    return privateKey;
-  }
-
-  /**
-   * 获取合约管理员私钥
-   * @returns {string} 合约管理员私钥
-   */
-  static getContractManagerPrivateKey() {
-    const privateKey = process.env[ENV_KEYS.CONTRACT_MANAGER_PRIVATE_KEY];
-    if (!privateKey) {
-      throw new EnvError('合约管理员私钥未配置');
-    }
-    return privateKey;
-  }
-
-  /**
-   * 获取合约配置
-   * @param {string} [contractName] - 合约名称
-   * @returns {Object} 合约配置
-   */
-  static getContractConfig(contractName) {
-    try {
-      // 如果没有指定合约名称，抛出错误
-      if (!contractName) {
-        throw new EnvError('合约名称不能为空');
-      }
-
-      // 获取指定合约的配置
-      const prefix = ENV_KEYS.CONTRACT_ADDRESS_PREFIX;
-      const suffix = ENV_KEYS.CONTRACT_ADDRESS_SUFFIX;
-      const addressKey = `${prefix}${contractName.toUpperCase()}${suffix}`;
-      const abiKey = `${addressKey}_ABI`;
-      
-      const address = process.env[addressKey];
-      const abi = process.env[abiKey];
-
-      if (!address) {
-        throw new EnvError(`合约 ${contractName} 地址未配置`);
-      }
-
-      if (!abi) {
-        throw new EnvError(`合约 ${contractName} ABI未配置`);
-      }
-
-      try {
-        return {
-          address,
-          abi: JSON.parse(abi)
-        };
-      } catch (e) {
-        throw new EnvError(`合约 ${contractName} ABI格式无效: ${e.message}`);
-      }
-    } catch (error) {
-      throw new EnvError(`获取合约配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 获取物业管理员私钥
-   * @returns {string} 物业管理员私钥
-   */
-  static getPropertyManagerPrivateKey() {
-    const privateKey = process.env[ENV_KEYS.PROPERTY_MANAGER_PRIVATE_KEY];
-    if (!privateKey) {
-      throw new EnvError('物业管理员私钥未配置');
-    }
-    return privateKey;
-  }
-
-  /**
    * 获取环境变量值
    * @param {string} keyName - 环境变量名称
    * @param {*} [defaultValue=null] - 默认值（当环境变量不存在时返回）
@@ -358,28 +349,47 @@ class EnvConfig {
 
   /**
    * 获取私钥
-   * @param {string} keyType - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
+   * @param {string} keyType - 私钥类型
    * @returns {string} 私钥
+   * @throws {EnvError} 配置错误
    */
   static getPrivateKey(keyType) {
-    if (!keyType) {
-      throw new EnvError('私钥类型不能为空');
+    const envKey = KEY_TYPES[keyType.toUpperCase()];
+    if (!envKey) {
+      throw new EnvError(`未知的私钥类型: ${keyType}`);
     }
     
-    // 构造环境变量键名
-    const envKey = `${keyType.toUpperCase()}_PRIVATE_KEY`;
     const privateKey = process.env[envKey];
-    
     if (!privateKey) {
-      throw new EnvError(`${keyType}私钥未配置`);
+      throw new EnvError(`未设置${keyType}私钥`);
     }
     
     return privateKey;
   }
 
   /**
+   * 获取所有可用的私钥
+   * @returns {Object} 私钥映射表 {keyType: privateKey}
+   */
+  static getAllPrivateKeys() {
+    const privateKeys = {};
+    
+    Object.keys(KEY_TYPES).forEach(keyType => {
+      try {
+        const privateKey = this.getPrivateKey(keyType);
+        privateKeys[keyType] = privateKey;
+      } catch (error) {
+        // 忽略不存在的私钥
+        console.debug(`私钥${keyType}不存在: ${error.message}`);
+      }
+    });
+    
+    return privateKeys;
+  }
+
+  /**
    * 获取所有环境变量
-   * @returns {Object} 所有环境变量的键值对
+   * @returns {Object} 环境变量
    */
   static getAllEnv() {
     // 返回process.env的浅拷贝，避免直接返回引用
@@ -410,4 +420,5 @@ class EnvConfig {
 
 // 导出常量和类
 module.exports = EnvConfig;
-module.exports.ENV_KEYS = ENV_KEYS; 
+module.exports.ENV_KEYS = ENV_KEYS;
+module.exports.KEY_TYPES = KEY_TYPES; 

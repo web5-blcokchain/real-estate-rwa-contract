@@ -29,6 +29,7 @@ class Contract {
       let address = options.address;
       let abi = options.abi;
       const networkType = options.networkType;
+      let abiPath = options.abiPath || '';
       
       // 如果提供了合约名称，使用ContractConfig获取地址和ABI
       if (options.contractName) {
@@ -50,6 +51,9 @@ class Contract {
             // 获取合约ABI
             const contractConfig = ContractConfig.getContractConfig(options.contractName);
             abi = contractConfig.abi;
+            
+            // 记录ABI路径
+            abiPath = contractConfig.abiPath || `contracts/${options.contractName}.json`;
           }
         } catch (error) {
           throw new ContractError(`获取合约${options.contractName}配置失败: ${error.message}`);
@@ -98,11 +102,21 @@ class Contract {
       // 创建合约实例
       const contract = new ethers.Contract(address, abi, signer || provider);
       
+      // 存储合约元数据
+      contract._metadata = {
+        contractName: options.contractName || '未命名合约',
+        address,
+        networkType: networkType || '默认网络',
+        abiPath,
+        createdAt: new Date().toISOString()
+      };
+      
       // 记录日志
       Logger.info('合约实例创建成功', { 
         contractName: options.contractName || '未命名合约',
         address,
-        networkType: networkType || '默认网络'
+        networkType: networkType || '默认网络',
+        abiPath
       });
       
       return contract;
@@ -139,23 +153,45 @@ class Contract {
         throw new ContractError('无效的方法名');
       }
 
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
+        address: contract.address
+      };
+      
       // 调用合约方法
       const result = await contract[method](...args);
       
-      // 记录日志
-      Logger.debug('合约方法调用成功', {
+      // 记录合约调用详细日志
+      Logger.logContractCall({
+        contractName: metadata.contractName,
+        contractAddress: contract.address,
         method,
-        args: JSON.stringify(args),
-        address: contract.address
+        args,
+        abiPath: metadata.abiPath,
+        result,
+        isWrite: false,
+        module: options.logModule || 'contract'
       });
       
       return result;
     } catch (error) {
-      Logger.error('调用合约方法失败', {
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
+        address: contract.address
+      };
+      
+      // 记录错误日志
+      Logger.logContractCall({
+        contractName: metadata.contractName,
+        contractAddress: contract.address,
         method,
-        args: JSON.stringify(args),
-        error: error.message,
-        stack: error.stack
+        args,
+        abiPath: metadata.abiPath,
+        error,
+        isWrite: false,
+        module: options.logModule || 'contract'
       });
       
       throw new ContractError(`调用合约方法 ${method} 失败: ${error.message}`);
@@ -191,27 +227,67 @@ class Contract {
         throw new ContractError(`合约不存在方法: ${method}`);
       }
 
-      // 发送交易
-      const tx = await contract[method](...args, options);
-      
-      // 记录日志
-      Logger.info('合约交易已发送', {
-        method,
-        args: JSON.stringify(args),
-        hash: tx.hash,
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
         address: contract.address
-      });
+      };
       
-      return tx;
-    } catch (error) {
-      Logger.error('发送合约交易失败', {
+      // 发送交易
+      const txOptions = { ...options };
+      delete txOptions.logModule; // 移除非交易选项
+      
+      const tx = await contract[method](...args, txOptions);
+      
+      // 记录交易发送日志
+      Logger.info('合约交易已发送', {
+        contractName: metadata.contractName,
         method,
         args: JSON.stringify(args),
-        error: error.message,
-        stack: error.stack
+        address: contract.address,
+        txHash: tx.hash,
+        networkType: metadata.networkType
       });
       
-      throw new ContractError(`发送合约交易 ${method} 失败: ${error.message}`);
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      // 记录详细合约调用日志
+      Logger.logContractCall({
+        contractName: metadata.contractName,
+        contractAddress: contract.address,
+        method,
+        args,
+        abiPath: metadata.abiPath,
+        result: receipt,
+        isWrite: true,
+        gasUsed: receipt.gasUsed?.toString(),
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        module: options.logModule || 'contract'
+      });
+      
+      return receipt;
+    } catch (error) {
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
+        address: contract.address
+      };
+      
+      // 记录错误日志
+      Logger.logContractCall({
+        contractName: metadata.contractName,
+        contractAddress: contract.address,
+        method,
+        args,
+        abiPath: metadata.abiPath,
+        error,
+        isWrite: true,
+        module: options.logModule || 'contract'
+      });
+      
+      throw new ContractError(`调用合约方法 ${method} 失败: ${error.message}`);
     }
   }
 
@@ -221,7 +297,7 @@ class Contract {
    * @param {string} event - 事件名
    * @param {Function} callback - 回调函数
    * @param {Object} [options] - 选项
-   * @returns {ethers.EventFilter} 事件过滤器
+   * @returns {Object} 事件过滤器
    */
   static listen(contract, event, callback, options = {}) {
     try {
@@ -235,52 +311,65 @@ class Contract {
       }
 
       if (typeof callback !== 'function') {
-        throw new ContractError('无效的回调函数');
+        throw new ContractError('回调必须是函数');
       }
 
-      // 验证事件是否存在
-      if (!contract.interface.events[event]) {
-        throw new ContractError(`合约不存在事件: ${event}`);
-      }
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
+        address: contract.address
+      };
 
-      // 创建事件监听器
-      const filter = contract.filters[event](...(options.filters || []));
-      contract.on(filter, (...args) => {
-        const eventData = args[args.length - 1];
-        const eventArgs = {};
-        
-        // 解析事件参数
-        if (eventData && eventData.args) {
-          for (const [key, value] of Object.entries(eventData.args)) {
-            if (isNaN(parseInt(key))) {
-              eventArgs[key] = value;
-            }
-          }
+      // 创建过滤器参数
+      const filterParams = [];
+      if (options.filter) {
+        for (const key in options.filter) {
+          filterParams.push(options.filter[key]);
         }
+      }
+
+      // 创建事件过滤器
+      const filter = contract.filters[event](...filterParams);
+      
+      // 添加日志修饰的回调函数
+      const wrappedCallback = (...eventArgs) => {
+        const eventObj = eventArgs[eventArgs.length - 1];
         
-        // 调用回调函数
-        callback({
+        // 记录事件日志
+        Logger.info(`合约事件触发: ${event}`, {
+          contractName: metadata.contractName,
+          address: contract.address,
           event,
-          args: eventArgs,
-          transactionHash: eventData.transactionHash,
-          blockNumber: eventData.blockNumber,
-          timestamp: Date.now()
+          blockNumber: eventObj.blockNumber,
+          txHash: eventObj.transactionHash,
+          args: eventArgs.slice(0, -1)
         });
-      });
+        
+        // 调用原始回调
+        callback(...eventArgs);
+      };
+
+      // 监听事件
+      contract.on(filter, wrappedCallback);
       
       // 记录日志
-      Logger.info('开始监听合约事件', {
-        event,
+      Logger.info(`开始监听合约事件: ${event}`, {
+        contractName: metadata.contractName,
         address: contract.address,
-        filters: options.filters ? JSON.stringify(options.filters) : '无'
+        event,
+        filter: options.filter
       });
       
-      return filter;
+      // 返回带有引用的过滤器，以便后续可以停止监听
+      return {
+        filter,
+        callback: wrappedCallback
+      };
     } catch (error) {
-      Logger.error('监听合约事件失败', {
-        event,
+      Logger.error(`监听合约事件失败: ${event}`, {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
+        address: contract.address
       });
       
       throw new ContractError(`监听合约事件 ${event} 失败: ${error.message}`);
@@ -290,7 +379,7 @@ class Contract {
   /**
    * 停止监听合约事件
    * @param {ethers.Contract} contract - 合约实例
-   * @param {string|ethers.EventFilter} eventOrFilter - 事件名称或事件过滤器
+   * @param {Object} eventOrFilter - 事件过滤器或事件名
    */
   static stopListening(contract, eventOrFilter) {
     try {
@@ -299,18 +388,44 @@ class Contract {
         throw new ContractError('无效的合约实例');
       }
 
-      // 停止监听
-      contract.removeAllListeners(eventOrFilter);
-      
-      // 记录日志
-      Logger.info('停止监听合约事件', {
-        event: typeof eventOrFilter === 'string' ? eventOrFilter : '(使用过滤器)',
+      // 获取合约元数据
+      const metadata = contract._metadata || {
+        contractName: '未命名合约',
         address: contract.address
-      });
+      };
+
+      // 根据传入参数类型决定如何移除监听器
+      if (typeof eventOrFilter === 'string') {
+        // 如果是事件名称，移除该事件的所有监听器
+        contract.removeAllListeners(eventOrFilter);
+        
+        Logger.info(`已停止监听合约事件: ${eventOrFilter}`, {
+          contractName: metadata.contractName,
+          address: contract.address
+        });
+      } else if (eventOrFilter && eventOrFilter.filter) {
+        // 如果是由listen方法返回的对象，使用存储的回调
+        contract.off(eventOrFilter.filter, eventOrFilter.callback);
+        
+        Logger.info('已停止监听合约事件', {
+          contractName: metadata.contractName,
+          address: contract.address,
+          filter: JSON.stringify(eventOrFilter.filter)
+        });
+      } else {
+        // 否则移除所有监听器
+        contract.removeAllListeners();
+        
+        Logger.info('已停止监听所有合约事件', {
+          contractName: metadata.contractName,
+          address: contract.address
+        });
+      }
     } catch (error) {
       Logger.error('停止监听合约事件失败', {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
+        address: contract.address
       });
       
       throw new ContractError(`停止监听合约事件失败: ${error.message}`);
@@ -320,56 +435,14 @@ class Contract {
   /**
    * 获取合约接口
    * @param {ethers.Contract} contract - 合约实例
-   * @returns {Object} 合约接口
+   * @returns {ethers.utils.Interface} 合约接口
    */
   static getInterface(contract) {
-    try {
-      // 验证参数
-      if (!Validation.isValidContract(contract)) {
-        throw new ContractError('无效的合约实例');
-      }
-
-      // 获取接口信息
-      const functions = {};
-      const events = {};
-      
-      // 获取所有函数
-      for (const fnFragment of Object.values(contract.interface.functions)) {
-        functions[fnFragment.name] = {
-          name: fnFragment.name,
-          type: fnFragment.type,
-          inputs: fnFragment.inputs,
-          outputs: fnFragment.outputs,
-          stateMutability: fnFragment.stateMutability
-        };
-      }
-      
-      // 获取所有事件
-      for (const eventFragment of Object.values(contract.interface.events)) {
-        events[eventFragment.name] = {
-          name: eventFragment.name,
-          inputs: eventFragment.inputs
-        };
-      }
-      
-      const result = {
-        address: contract.address,
-        functions,
-        events
-      };
-      
-      // 记录日志
-      Logger.debug('获取合约接口成功', { address: contract.address });
-      
-      return result;
-    } catch (error) {
-      Logger.error('获取合约接口失败', {
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new ContractError(`获取合约接口失败: ${error.message}`);
+    if (!Validation.isValidContract(contract)) {
+      throw new ContractError('无效的合约实例');
     }
+    
+    return contract.interface;
   }
 }
 

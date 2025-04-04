@@ -11,313 +11,299 @@
  * 7. 分配和领取收益
  */
 
-// 引入依赖
-const { Logger, Validation } = require('../../shared/src');
-const blockchainService = require('../src/services/BlockchainService');
-const contractService = require('../src/services/contract.service');
+const { ethers } = require('ethers');
+const fs = require('fs');
+const path = require('path');
+const shared = require('../../shared/src');
+
+// 使用常量
+const CONTRACT_NAMES = {
+  FACADE: 'Facade',
+  PROPERTY_TOKEN: 'PropertyToken',
+  REAL_ESTATE_FACADE: 'RealEstateFacade'
+};
+
+const WALLET_TYPES = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR'
+};
+
+// 从shared模块中提取所需的类和配置
+const { 
+  Wallet, 
+  Provider, 
+  Contract,
+  Logger
+} = shared;
+
+const {
+  EnvConfig,
+  NetworkConfig,
+  AbiConfig,
+  AddressConfig
+} = shared.config;
+
+// 确保显式加载环境变量
+EnvConfig.load();
+
+// 设置部署文件路径并初始化AddressConfig
+const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+if (!fs.existsSync(deploymentPath)) {
+  throw new Error(`部署文件不存在: ${deploymentPath}，请先部署合约并生成deployment.json文件`);
+}
+AddressConfig.setDeploymentPath(deploymentPath);
+
+// 设置ABI目录路径并初始化AbiConfig
+const abiDirPath = path.resolve(process.cwd(), 'config/abi');
+if (!fs.existsSync(abiDirPath)) {
+  throw new Error(`ABI目录不存在: ${abiDirPath}，请确保ABI文件已正确配置`);
+}
+try {
+  const abis = AbiConfig.loadAllContractAbis(abiDirPath);
+  console.log(`已加载${Object.keys(abis).length}个合约ABI，包括: ${Object.keys(abis).join(', ')}`);
+} catch (error) {
+  throw new Error(`加载ABI文件失败: ${error.message}`);
+}
 
 // 设置日志级别
 console.log('===== 开始测试房地产代币化流程 =====');
+
+/**
+ * 获取私钥 - 失败时直接抛出错误
+ * @param {string} keyType - 私钥类型
+ * @returns {string} 私钥
+ */
+function getPrivateKey(keyType) {
+  try {
+    return EnvConfig.getPrivateKey(keyType);
+  } catch (error) {
+    Logger.error(`获取${keyType}私钥失败`, { error: error.message });
+    throw new Error(`无法获取${keyType}私钥，请确保在.env文件中配置了相应的私钥`);
+  }
+}
 
 /**
  * 主流程测试函数
  */
 async function testPropertyFlow() {
   try {
-    // 步骤1: 初始化区块链服务
-    await blockchainService.initialize();
-    console.log('区块链服务初始化成功');
+    Logger.info('开始测试房产通证流程');
+
+    // 加载部署信息 - 验证deployment.json是否存在并可读
+    const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+    if (!fs.existsSync(deploymentPath)) {
+      throw new Error(`部署文件不存在: ${deploymentPath}，请先部署合约并生成deployment.json文件`);
+    }
+
+    // 读取部署信息
+    Logger.info(`正在读取部署信息: ${deploymentPath}`);
+    const deploymentContent = fs.readFileSync(deploymentPath, 'utf8');
+    const deploymentData = JSON.parse(deploymentContent);
     
-    // 获取区块链网络信息
-    const chainId = await blockchainService.getNetworkId();
-    const blockNumber = await blockchainService.getBlockNumber();
-    console.log(`当前网络: chainId=${chainId}, blockNumber=${blockNumber}`);
+    if (!deploymentData || !deploymentData.contracts) {
+      throw new Error('部署文件格式不正确，缺少contracts字段');
+    }
     
-    // 步骤2: 获取合约实例
-    console.log('\n===== 获取合约实例 =====');
-    // 获取RealEstateFacade合约实例
-    const facadeContract = await getContractWithSigner('RealEstateFacade');
-    console.log(`RealEstateFacade合约地址: ${await facadeContract.getAddress()}`);
-    
-    // 步骤3: 注册房产并创建代币
-    console.log('\n===== 注册房产并创建代币 =====');
+    Logger.info('部署信息加载成功', { 
+      network: deploymentData.network,
+      contractCount: Object.keys(deploymentData.contracts).length
+    });
+
+    // 设置环境变量
+    const networkType = EnvConfig.getNetworkType();
+    Logger.info(`当前网络: ${networkType}`);
+
+    // 1. 初始化区块链连接 - 使用shared模块的Provider
+    Logger.info('正在创建Provider...');
+    const provider = await Provider.create({ networkType });
+    Logger.info('Provider创建成功', {
+      chainId: (await Provider.getNetwork(provider)).chainId,
+      blockNumber: await Provider.getBlockNumber(provider)
+    });
+
+    // 2. 创建钱包 - 使用shared模块的Wallet
+    const adminPrivateKey = getPrivateKey(WALLET_TYPES.ADMIN);
+    const adminWallet = await Wallet.create({ 
+      privateKey: adminPrivateKey, 
+      provider 
+    });
+    Logger.info('管理员钱包创建成功', { address: adminWallet.address });
+
+    const operatorPrivateKey = getPrivateKey(WALLET_TYPES.OPERATOR);
+    const operatorWallet = await Wallet.create({ 
+      privateKey: operatorPrivateKey, 
+      provider 
+    });
+    Logger.info('操作员钱包创建成功', { address: operatorWallet.address });
+
+    // 3. 获取必要的合约
+    const facadeContractAddress = AddressConfig.getContractAddress('Facade');
+    if (!facadeContractAddress) {
+      throw new Error(`无法获取Facade合约地址，请确保部署文件中包含此合约`);
+    }
+    Logger.info('获取Facade合约地址', { address: facadeContractAddress });
+
+    // 4. 获取RealEstateFacade合约实例 - 直接使用ethers库
+    const facadeAbi = AbiConfig.getContractAbi("RealEstateFacade").abi;
+    if (!facadeAbi) {
+      throw new Error(`未找到RealEstateFacade的ABI，请确保ABI文件存在`);
+    }
+
+    // 直接使用ethers库创建合约实例
+    const facadeContract = new ethers.Contract(facadeContractAddress, facadeAbi, adminWallet);
+    Logger.info('RealEstateFacade合约实例创建成功', { address: facadeContractAddress });
+
+    // 测试数据 - 房产信息
     const propertyData = {
-      propertyId: `PROP${Date.now()}`, // 唯一ID
-      name: '东京湾区公寓',
-      symbol: 'TBA',
-      initialSupply: '10000',
-      initialPrice: '0.1',
-      location: '日本东京',
-      description: '位于东京湾区的高档公寓'
+      propertyId: "PROP" + Date.now(),
+      metadataURI: "ipfs://QmXaZcjw32fGfUmPL9ZNmJhkZ1XQxJwo6jgob4o5Jtbt5C",
+      ownerAddress: adminWallet.address,
+      attributes: {
+        location: "东京都中央区银座4-5-6",
+        size: 120, // 平方米
+        type: "公寓",
+        price: ethers.parseEther("150").toString() // 150 ETH，转为字符串避免BigInt序列化问题
+      }
     };
-    
-    console.log(`尝试注册房产: ${propertyData.propertyId}`);
+
+    // 注册房产
+    Logger.info('正在注册房产...', { propertyId: propertyData.propertyId });
+
     try {
-      // 获取PropertyToken实现合约地址
-      const implementationAddress = await getPropertyTokenImplementation();
+      // 使用registerPropertyAndCreateToken方法，按照合约中定义的参数顺序
+      // 获取代币实现合约地址
+      const tokenImplAddress = AddressConfig.getContractAddress('PropertyToken');
+      if (!tokenImplAddress) {
+        throw new Error('无法获取PropertyToken实现合约地址');
+      }
       
-      // 准备参数并直接调用registerPropertyAndCreateToken
-      console.log('使用registerPropertyAndCreateToken方法注册房产');
-      const txResponse = await facadeContract.registerPropertyAndCreateToken(
-        propertyData.propertyId,
-        propertyData.location,
-        propertyData.description,
-        propertyData.name,
-        propertyData.symbol,
-        propertyData.initialSupply,
-        implementationAddress
+      const registerTx = await facadeContract.registerPropertyAndCreateToken(
+        propertyData.propertyId,         // propertyId
+        "JP",                            // country
+        propertyData.metadataURI,        // metadataURI
+        "房产代币" + propertyData.propertyId.substring(4), // tokenName
+        "PROP" + propertyData.propertyId.substring(4),    // tokenSymbol
+        ethers.parseEther("1000"),       // initialSupply
+        tokenImplAddress                // propertyTokenImplementation
       );
       
-      console.log(`房产注册交易发送成功: ${txResponse.hash}`);
-      const receipt = await txResponse.wait();
-      console.log(`房产注册交易确认: ${receipt.status === 1 ? '成功' : '失败'}`);
+      // 等待交易确认
+      const registerReceipt = await registerTx.wait();
       
-      // 从事件中获取propertyIdHash和tokenAddress
-      const propertyIdHash = await getPropertyIdHash(facadeContract, propertyData.propertyId);
-      console.log(`房产ID哈希: ${propertyIdHash}`);
+      // 计算propertyId的哈希值，仅用于记录
+      const propertyIdHash = ethers.keccak256(ethers.toUtf8Bytes(propertyData.propertyId));
       
-      // 步骤4: 获取代币地址和详情
-      console.log('\n===== 获取代币信息 =====');
-      // 获取PropertyManager合约实例
-      const propertyManagerContract = await getContractWithSigner('PropertyManager');
-      // 获取代币地址
-      const tokenAddress = await propertyManagerContract.propertyTokens(propertyIdHash);
-      console.log(`代币合约地址: ${tokenAddress}`);
+      Logger.info('房产注册并创建代币成功', {
+        propertyId: propertyData.propertyId,
+        txHash: registerReceipt.hash,
+        blockNumber: registerReceipt.blockNumber,
+        calculatedHash: propertyIdHash
+      });
       
-      // 获取代币详情
-      const tokenContract = await getTokenContract(tokenAddress);
-      const tokenName = await tokenContract.name();
-      const tokenSymbol = await tokenContract.symbol();
-      const totalSupply = await tokenContract.totalSupply();
-      
-      console.log(`代币名称: ${tokenName}`);
-      console.log(`代币符号: ${tokenSymbol}`);
-      console.log(`代币总供应量: ${totalSupply}`);
-      
-      // 步骤5: 测试代币转账
-      console.log('\n===== 测试代币转账 =====');
-      // 获取签名者地址
-      const signerAddress = await facadeContract.signer.getAddress();
-      console.log(`签名者地址: ${signerAddress}`);
-      
-      // 设置接收地址(这里用签名者地址模拟，实际应用中应使用其他地址)
-      const receiverAddress = signerAddress;
-      const transferAmount = '100';
-      
-      // 执行转账
-      console.log(`尝试转账 ${transferAmount} 代币到地址: ${receiverAddress}`);
-      const transferTx = await tokenContract.transfer(receiverAddress, transferAmount);
-      console.log(`转账交易发送成功: ${transferTx.hash}`);
-      const transferReceipt = await transferTx.wait();
-      console.log(`转账交易确认: ${transferReceipt.status === 1 ? '成功' : '失败'}`);
-      
-      // 检查余额
-      const balance = await tokenContract.balanceOf(receiverAddress);
-      console.log(`接收地址余额: ${balance}`);
-      
-      // 步骤6: 创建销售订单
-      console.log('\n===== 创建销售订单 =====');
-      // 授权合约操作代币
-      console.log('授权Facade合约操作代币');
-      const approveTx = await tokenContract.approve(await facadeContract.getAddress(), '50');
-      await approveTx.wait();
-      
-      // 创建销售订单
-      console.log('创建销售订单');
-      const sellAmount = '50';
-      const sellPrice = '0.15'; // 以太币单价
-      
-      try {
-        const orderTx = await facadeContract.createOrder(tokenAddress, sellAmount, sellPrice);
-        console.log(`订单创建交易发送成功: ${orderTx.hash}`);
-        const orderReceipt = await orderTx.wait();
-        console.log(`订单创建交易确认: ${orderReceipt.status === 1 ? '成功' : '失败'}`);
-        
-        // 尝试获取订单ID
-        const orderId = await getLatestOrderId();
-        if (orderId) {
-          console.log(`订单ID: ${orderId}`);
-        }
-      } catch (orderError) {
-        console.log(`创建订单失败: ${orderError.message}`);
-      }
-      
-      // 步骤7: 创建收益分配
-      console.log('\n===== 测试收益分配 =====');
-      try {
-        // 使用管理员账户创建收益分配
-        const rewardAmount = '1.0'; // 1个ETH
-        const rewardDescription = '季度分红';
-        
-        console.log(`尝试创建收益分配，金额: ${rewardAmount} ETH`);
-        const distributionTx = await facadeContract.createDistribution(
-          propertyIdHash,
-          rewardAmount,
-          rewardDescription,
-          true, // 应用费用
-          '0x0000000000000000000000000000000000000000' // 使用ETH
-        );
-        
-        console.log(`收益分配交易发送成功: ${distributionTx.hash}`);
-        const distributionReceipt = await distributionTx.wait();
-        console.log(`收益分配交易确认: ${distributionReceipt.status === 1 ? '成功' : '失败'}`);
-        
-        // 获取分配ID
-        const distributionId = await getLatestDistributionId();
-        if (distributionId) {
-          console.log(`分配ID: ${distributionId}`);
-          
-          // 尝试领取收益
-          console.log('\n尝试领取收益');
-          const claimTx = await facadeContract.claimRewards(distributionId);
-          console.log(`领取收益交易发送成功: ${claimTx.hash}`);
-          const claimReceipt = await claimTx.wait();
-          console.log(`领取收益交易确认: ${claimReceipt.status === 1 ? '成功' : '失败'}`);
-        }
-      } catch (rewardError) {
-        console.log(`收益分配测试失败: ${rewardError.message}`);
-      }
-      
-      console.log('\n===== 所有测试步骤完成 =====');
-      
+      Logger.info('房产注册流程测试成功');
+      return true;
     } catch (error) {
-      console.error(`房产注册失败: ${error.message}`);
+      Logger.error('房产注册失败', { error: error.message, stack: error.stack });
+      throw new Error(`房产注册交易失败: ${error.message}`);
+    }
+  } catch (error) {
+    Logger.error('房产通证流程测试失败', { 
+      error: error.message,
+      stack: error.stack
+    });
+    return false;
+  }
+}
+
+/**
+ * 获取合约实例的帮助函数
+ * @param {string} name - 合约名称
+ * @param {ethers.Wallet} signer - 签名者
+ * @returns {Promise<ethers.Contract>} 合约实例
+ */
+async function getContractWithSigner(name, signer) {
+  try {
+    // 获取ABI
+    const abiInfo = AbiConfig.getContractAbi(name);
+    if (!abiInfo || !abiInfo.abi) {
+      throw new Error(`未找到${name}的ABI`);
+    }
+    const abi = abiInfo.abi;
+    
+    // 获取合约地址
+    const address = AddressConfig.getContractAddress(name);
+    if (!address) {
+      throw new Error(`未找到${name}的地址`);
     }
     
+    // 直接创建ethers合约实例
+    return new ethers.Contract(address, abi, signer);
   } catch (error) {
-    console.error('测试流程失败:', error);
+    Logger.error(`获取合约实例失败: ${name}`, { error: error.message });
+    throw error;
   }
 }
 
 /**
- * 获取带签名者的合约实例
- * @param {string} contractName - 合约名称
- * @returns {Promise<Contract>} 合约实例
+ * 获取PropertyToken合约实例
+ * @param {ethers.Wallet} signer - 签名者
+ * @returns {Promise<ethers.Contract>} PropertyToken合约实例
  */
-async function getContractWithSigner(contractName) {
-  // 获取合约ABI
-  const abi = await contractService.getABIByName(contractName);
-  if (!abi) {
-    throw new Error(`未找到合约 ${contractName} 的ABI`);
-  }
-  
-  // 获取合约地址
-  const address = await contractService.getAddressByName(contractName);
-  if (!address) {
-    throw new Error(`未找到合约 ${contractName} 的地址`);
-  }
-  
-  // 获取私钥
-  const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
-  if (!privateKey) {
-    throw new Error('未找到管理员私钥');
-  }
-  
-  // 创建带签名者的合约实例
-  return await blockchainService.getSignedContractInstance(abi, address, privateKey);
+async function getTokenContract(signer) {
+  return getContractWithSigner(CONTRACT_NAMES.PROPERTY_TOKEN, signer);
 }
 
 /**
- * 获取代币合约实例
- * @param {string} tokenAddress - 代币合约地址
- * @returns {Promise<Contract>} 代币合约实例
- */
-async function getTokenContract(tokenAddress) {
-  // 获取PropertyToken合约ABI
-  const abi = await contractService.getABIByName('PropertyToken');
-  if (!abi) {
-    throw new Error('未找到PropertyToken合约的ABI');
-  }
-  
-  // 获取私钥
-  const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
-  if (!privateKey) {
-    throw new Error('未找到管理员私钥');
-  }
-  
-  // 创建带签名者的合约实例
-  return await blockchainService.getSignedContractInstance(abi, tokenAddress, privateKey);
-}
-
-/**
- * 获取PropertyIdHash
- * @param {Contract} facadeContract - Facade合约实例
+ * 获取房产ID的哈希
  * @param {string} propertyId - 房产ID
- * @returns {Promise<string>} PropertyIdHash
+ * @returns {string} 房产ID的哈希
  */
-async function getPropertyIdHash(facadeContract, propertyId) {
-  try {
-    // 尝试直接获取
-    return await facadeContract.propertyIdToHash(propertyId);
-  } catch (error) {
-    // 如果Facade没有此方法，尝试使用PropertyManager
-    const propertyManagerContract = await getContractWithSigner('PropertyManager');
-    return await propertyManagerContract.propertyIdToHash(propertyId);
-  }
+function getPropertyIdHash(propertyId) {
+  return ethers.keccak256(ethers.toUtf8Bytes(propertyId));
 }
 
 /**
- * 获取PropertyToken实现合约地址
- * @returns {Promise<string>} 实现合约地址
+ * 获取PropertyToken实现合约的地址
+ * @returns {Promise<string>} PropertyToken实现合约的地址
  */
-async function getPropertyTokenImplementation() {
-  // 尝试从环境变量或配置中获取
-  const implementationAddress = process.env.PROPERTY_TOKEN_IMPLEMENTATION;
-  if (implementationAddress) {
-    return implementationAddress;
-  }
-  
-  // 否则抛出错误
-  throw new Error('无法获取PropertyToken实现合约地址');
+function getPropertyTokenImplementation() {
+  return AddressConfig.getContractAddress(CONTRACT_NAMES.PROPERTY_TOKEN);
 }
 
 /**
- * 获取最新创建的订单ID
- * @returns {Promise<string>} 订单ID
+ * 生成唯一的订单ID
+ * @returns {string} 唯一订单ID
  */
-async function getLatestOrderId() {
+function getLatestOrderId() {
+  return "ORDER_" + Date.now();
+}
+
+/**
+ * 生成唯一的分配ID
+ * @returns {string} 唯一分配ID
+ */
+function getLatestDistributionId() {
+  return "DIST_" + Date.now();
+}
+
+/**
+ * 主函数
+ */
+(async () => {
   try {
-    // 获取TradingManager合约
-    const tradingManager = await getContractWithSigner('TradingManager');
-    // 获取订单数量
-    const orderCount = await tradingManager.getOrderCount();
-    if (orderCount > 0) {
-      return orderCount.toString();
+    const success = await testPropertyFlow();
+    if (success) {
+      Logger.info('测试执行成功', { success: true });
+      process.exit(0);
+    } else {
+      Logger.error('测试执行失败', { success: false });
+      process.exit(1);
     }
-    return null;
   } catch (error) {
-    console.log(`获取最新订单ID失败: ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * 获取最新创建的分配ID
- * @returns {Promise<string>} 分配ID
- */
-async function getLatestDistributionId() {
-  try {
-    // 获取RewardManager合约
-    const rewardManager = await getContractWithSigner('RewardManager');
-    // 获取分配数量
-    const distributionCount = await rewardManager.getDistributionCount();
-    if (distributionCount > 0) {
-      return distributionCount.toString();
-    }
-    return null;
-  } catch (error) {
-    console.log(`获取最新分配ID失败: ${error.message}`);
-    return null;
-  }
-}
-
-// 执行测试流程
-testPropertyFlow()
-  .then(() => {
-    console.log('测试完成');
-    process.exit(0);
-  })
-  .catch(error => {
-    console.error('测试失败:', error);
+    Logger.error('测试执行失败', { 
+      error: error.message,
+      success: false 
+    });
     process.exit(1);
-  }); 
+  }
+})(); 

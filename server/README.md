@@ -284,3 +284,43 @@ node server/scripts/test-property-flow-mock.js
 - 无需区块链网络连接
 - 适合演示和开发测试
 - 完整模拟交易交互流程和等待时间
+
+## 日志配置
+
+服务器使用共享模块中的Logger进行日志记录。日志配置通过以下方式设置：
+
+```javascript
+// server/src/index.js
+const { Logger } = require('../../shared/src/utils');
+const serverConfig = require('./config');
+
+// 配置Logger
+Logger.configure(serverConfig.getLoggerConfig());
+// 设置默认模块名称
+Logger.setPath('server');
+```
+
+日志配置参数在`server/src/config/index.js`中定义：
+
+```javascript
+// server/src/config/index.js
+getLoggerConfig() {
+  return {
+    level: process.env.LOG_LEVEL || 'info',
+    dir: process.env.LOG_DIR || 'logs',
+    maxSize: parseInt(process.env.MAX_LOG_SIZE || (10 * 1024 * 1024).toString()),
+    maxFiles: parseInt(process.env.MAX_LOG_FILES || '5'),
+    console: (process.env.LOG_CONSOLE || 'true') === 'true',
+    httpLog: process.env.HTTP_LOG !== 'false'
+  };
+}
+```
+
+可以通过环境变量来控制日志行为：
+
+- `LOG_LEVEL`: 日志级别（'error', 'warn', 'info', 'debug'）
+- `LOG_DIR`: 日志文件目录
+- `MAX_LOG_SIZE`: 日志文件最大大小（字节）
+- `MAX_LOG_FILES`: 保留的最大日志文件数
+- `LOG_CONSOLE`: 是否将日志输出到控制台（'true'或'false'）
+- `HTTP_LOG`: 是否记录HTTP请求日志（'true'或'false'）

@@ -3,7 +3,7 @@ const { GasError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const { Validation } = require('../utils/validation');
 const EnvConfig = require('../config/env');
-const Provider = require('./Provider');
+const Provider = require('./provider');
 
 /**
  * GasManager 管理器类

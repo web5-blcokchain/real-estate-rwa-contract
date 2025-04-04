@@ -77,10 +77,11 @@ const serverConfig = {
     // 不提供默认值，完全依赖环境变量
     return {
       networkType: process.env.BLOCKCHAIN_NETWORK,
-      rpcUrl: process.env.BLOCKCHAIN_RPC_URL,
+      rpcUrl: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL,
       gasLimit: process.env.GAS_LIMIT,
       gasPrice: process.env.GAS_PRICE,
-      confirmations: process.env.CONFIRMATIONS ? parseInt(process.env.CONFIRMATIONS, 10) : undefined
+      confirmations: process.env.CONFIRMATIONS ? parseInt(process.env.CONFIRMATIONS, 10) : undefined,
+      mockMode: process.env.MOCK_BLOCKCHAIN || 'false' // 默认不使用模拟模式
     };
   },
 
@@ -94,6 +95,21 @@ const serverConfig = {
       directory: process.env.LOG_DIR || 'logs',
       maxSize: process.env.LOG_MAX_SIZE || '20m',
       maxFiles: process.env.LOG_MAX_FILES || '14d'
+    };
+  },
+
+  /**
+   * 获取日志配置
+   * @returns {Object} 符合Logger.configure所需的配置格式
+   */
+  getLoggerConfig() {
+    return {
+      level: process.env.LOG_LEVEL || 'info',
+      dir: process.env.LOG_DIR || 'logs',
+      maxSize: parseInt(process.env.MAX_LOG_SIZE || (10 * 1024 * 1024).toString()),
+      maxFiles: parseInt(process.env.MAX_LOG_FILES || '5'),
+      console: (process.env.LOG_CONSOLE || 'true') === 'true',
+      httpLog: process.env.HTTP_LOG !== 'false'
     };
   },
 

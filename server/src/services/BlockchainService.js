@@ -3,7 +3,9 @@
  * 提供与区块链交互的相关功能
  */
 const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../../../shared/src');
+const { AbiConfig, AddressConfig, EnvConfig } = require('../../../shared/src/config');
 const serverConfig = require('../config');
+const path = require('path');
 
 /**
  * 区块链服务类
@@ -32,15 +34,31 @@ class BlockchainService {
       const blockchainConfig = serverConfig.getBlockchainConfig();
       this.networkType = blockchainConfig.networkType;
 
+      // 确保EnvConfig已初始化(虽然在入口文件已经调用，这里做双重保证)
+      if (!EnvConfig.isInitialized()) {
+        EnvConfig.load();
+        Logger.info('区块链服务中重新初始化EnvConfig');
+      }
+
+      // 确保已设置deployment.json路径
+      const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+      if (require('fs').existsSync(deploymentPath) && !AddressConfig.isInitialized()) {
+        AddressConfig.setDeploymentPath(deploymentPath);
+        Logger.info('区块链服务中重新设置deployment.json路径');
+      }
+
       // 验证网络类型
       Validation.validate(
         Validation.isNotEmpty(this.networkType),
         '网络类型不能为空'
       );
-
-      // 使用共享模块创建Provider，不传入任何参数
-      // 让Provider自己从环境变量中读取配置
-      this.provider = await Provider.create();
+      
+      // 使用共享模块创建Provider
+      Logger.info('初始化区块链服务');
+      this.provider = await Provider.create({
+        networkType: this.networkType,
+        rpcUrl: blockchainConfig.rpcUrl
+      });
 
       // 验证连接
       const network = await Provider.getNetwork(this.provider);
@@ -193,7 +211,7 @@ class BlockchainService {
 
   /**
    * 获取当前Gas价格
-   * @returns {Promise<BigNumber>} Gas价格
+   * @returns {Promise<string>} Gas价格（以wei为单位）
    */
   async getGasPrice() {
     try {
@@ -201,10 +219,11 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      return await Provider.getGasPrice(this.provider);
+      const gasPrice = await Provider.getGasPrice(this.provider);
+      return gasPrice.toString();
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
-        type: 'gas',
+        type: 'network',
         context: { method: 'getGasPrice' }
       });
       Logger.error(`获取Gas价格失败: ${handledError.message}`, { error: handledError });
@@ -213,81 +232,164 @@ class BlockchainService {
   }
 
   /**
-   * 创建合约实例
-   * @param {Array} abi - 合约ABI
-   * @param {string} address - 合约地址
-   * @returns {Contract} 合约实例
+   * 使用合约名称获取合约实例（已签名）
+   * @param {string} contractName - 合约名称
+   * @param {string} keyType - 私钥类型(ADMIN/OPERATOR等)
+   * @returns {Promise<Object>} 合约实例
    */
-  async getContractInstance(abi, address) {
+  async getContractInstanceByName(contractName, keyType = 'ADMIN') {
     try {
       if (!this.initialized) {
         throw new Error('区块链服务尚未初始化');
       }
       
-      // 验证合约地址
-      Validation.validate(
-        Validation.isValidAddress(address),
-        '无效的合约地址'
-      );
-      
-      return await Contract.create({
-        address,
-        abi,
+      // 使用Contract类的静态create方法创建合约实例
+      const wallet = await Wallet.create({
+        keyType,
         provider: this.provider
       });
+      
+      const contract = await Contract.create({
+        contractName,
+        provider: wallet
+      });
+      
+      Logger.info(`成功获取合约实例: ${contractName}`, {
+        address: contract.address,
+        keyType,
+        signerAddress: wallet.address
+      });
+      
+      return contract;
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
         type: 'contract',
-        context: { method: 'getContractInstance', address }
+        context: { method: 'getContractInstanceByName', contractName, keyType }
       });
-      Logger.error(`创建合约实例失败: ${handledError.message}`, { error: handledError, address });
+      Logger.error(`获取合约实例失败: ${handledError.message}`, { 
+        error: handledError, 
+        contractName, 
+        keyType 
+      });
       throw handledError;
     }
   }
 
   /**
-   * 创建带签名者的合约实例
-   * @param {Array} abi - 合约ABI
-   * @param {string} address - 合约地址
-   * @param {string} privateKey - 私钥
-   * @returns {Contract} 带签名者的合约实例
+   * 调用合约只读方法
+   * @param {Object} contract - 合约实例
+   * @param {string} method - 方法名
+   * @param {Array} params - 参数数组
+   * @returns {Promise<any>} 调用结果
    */
-  async getSignedContractInstance(abi, address, privateKey) {
+  async callContractMethod(contract, method, params = []) {
     try {
       if (!this.initialized) {
         throw new Error('区块链服务尚未初始化');
       }
       
-      // 验证参数
-      Validation.validate(
-        Validation.isValidAddress(address),
-        '无效的合约地址'
-      );
+      // 使用Contract类的静态call方法调用合约只读方法
+      const result = await Contract.call(contract, method, params);
       
-      Validation.validate(
-        Validation.isNotEmpty(privateKey),
-        '未提供私钥，无法创建带签名者的合约实例'
-      );
-      
-      // 创建钱包
-      const wallet = await Wallet.create({
-        privateKey,
-        provider: this.provider
+      // 记录API调用日志
+      Logger.logApiCall({
+        module: 'blockchain',
+        interface: method,
+        method: 'CALL',
+        params,
+        result,
+        contractAddress: contract.address
       });
       
-      // 创建合约实例
-      return await Contract.create({
-        address,
-        abi,
-        provider: this.provider,
-        signer: wallet
-      });
+      return result;
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
         type: 'contract',
-        context: { method: 'getSignedContractInstance', address }
+        context: { method: 'callContractMethod', contractMethod: method, params }
       });
-      Logger.error(`创建带签名者的合约实例失败: ${handledError.message}`, { error: handledError, address });
+      
+      // 记录错误日志
+      Logger.logApiCall({
+        module: 'blockchain',
+        interface: method,
+        method: 'CALL',
+        params,
+        error: handledError.message,
+        contractAddress: contract?.address
+      });
+      
+      Logger.error(`调用合约方法失败: ${handledError.message}`, { 
+        error: handledError, 
+        method, 
+        params,
+        contractAddress: contract?.address
+      });
+      
+      throw handledError;
+    }
+  }
+
+  /**
+   * 发送合约交易
+   * @param {Object} contract - 合约实例
+   * @param {string} method - 方法名
+   * @param {Array} params - 参数数组
+   * @param {Object} options - 交易选项
+   * @returns {Promise<Object>} 交易收据
+   */
+  async sendContractTransaction(contract, method, params = [], options = {}) {
+    try {
+      if (!this.initialized) {
+        throw new Error('区块链服务尚未初始化');
+      }
+      
+      // 使用Contract类的静态send方法发送合约交易
+      const receipt = await Contract.send(contract, method, params, options);
+      
+      // 记录API调用日志
+      Logger.logApiCall({
+        module: 'blockchain',
+        interface: method,
+        method: 'SEND',
+        params,
+        result: {
+          txHash: receipt.hash,
+          blockNumber: receipt.blockNumber,
+          gasUsed: receipt.gasUsed?.toString()
+        },
+        contractAddress: contract.address
+      });
+      
+      return receipt;
+    } catch (error) {
+      const handledError = ErrorHandler.handle(error, {
+        type: 'transaction',
+        context: { 
+          method: 'sendContractTransaction', 
+          contractMethod: method, 
+          params,
+          options 
+        }
+      });
+      
+      // 记录错误日志
+      Logger.logApiCall({
+        module: 'blockchain',
+        interface: method,
+        method: 'SEND',
+        params,
+        error: handledError.message,
+        contractAddress: contract?.address
+      });
+      
+      Logger.error(`发送合约交易失败: ${handledError.message}`, { 
+        error: handledError, 
+        method, 
+        params,
+        options,
+        contractAddress: contract?.address
+      });
+      
       throw handledError;
     }
   }

@@ -3,7 +3,9 @@
  * 服务器入口文件
  */
 const dotenv = require('dotenv');
+const path = require('path');
 const { Logger } = require('../../shared/src/utils');
+const { EnvConfig, AddressConfig, ABIConfig } = require('../../shared/src/config');
 const app = require('./app');
 const { blockchainService } = require('./services');
 const serverConfig = require('./config');
@@ -11,7 +13,37 @@ const serverConfig = require('./config');
 // 加载环境变量
 dotenv.config();
 
+// 初始化Shared模块配置
+// 1. 加载环境变量配置
+EnvConfig.load();
+
+// 2. 设置部署文件路径
+const deploymentPath = path.resolve(process.cwd(), 'config/deployment.json');
+if (require('fs').existsSync(deploymentPath)) {
+  AddressConfig.setDeploymentPath(deploymentPath);
+  Logger.info('已加载部署文件配置', { path: deploymentPath });
+} else {
+  Logger.warn('部署文件不存在，将使用环境变量中的合约地址', { path: deploymentPath });
+}
+
+// 3. 加载ABI目录
+const abiDirPath = path.resolve(process.cwd(), 'config/abi');
+if (require('fs').existsSync(abiDirPath)) {
+  try {
+    const abis = ABIConfig.loadAllContractAbis(abiDirPath);
+    const abiCount = Object.keys(abis).length;
+    Logger.info(`已加载${abiCount}个合约ABI`, { path: abiDirPath });
+  } catch (error) {
+    Logger.warn(`加载ABI文件失败: ${error.message}`, { path: abiDirPath });
+  }
+} else {
+  Logger.warn('ABI目录不存在，将在需要时尝试加载单个ABI文件', { path: abiDirPath });
+}
+
 // 配置日志
+// 使用服务器特定的日志配置，而不是默认配置
+Logger.configure(serverConfig.getLoggerConfig());
+// 为了向后兼容仍然设置模块路径
 Logger.setPath('server');
 
 // 服务器配置

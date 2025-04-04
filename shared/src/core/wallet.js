@@ -1,78 +1,53 @@
 const { ethers } = require('ethers');
-const { WalletError } = require('../utils');
+const { WalletError } = require('../utils/errors');
 const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Logger = require('../utils/logger');
-const EnvConfig = require('../config/env');
+const { EnvConfig } = require('../config');
 
 /**
- * Wallet 管理器类
+ * 钱包模块
+ * 提供区块链钱包相关功能
  */
 class Wallet {
   /**
    * 创建钱包实例
-   * @param {Object} [options={}] - 选项
+   * @param {Object} options - 创建选项
    * @param {string} [options.privateKey] - 私钥
-   * @param {string} [options.mnemonic] - 助记词
-   * @param {string} [options.keyType] - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
-   * @param {Object} [options.provider] - Provider实例
+   * @param {string} [options.keyType] - 私钥类型，如 'ADMIN', 'DEPLOYER', 'SERVICE', 'DEFAULT'
+   * @param {Object} [options.provider] - Provider 实例
    * @returns {Promise<ethers.Wallet>} 钱包实例
+   * @throws {WalletError} 钱包错误
    */
   static async create(options = {}) {
     try {
-      let privateKey = options.privateKey;
-      const mnemonic = options.mnemonic;
-      const keyType = options.keyType;
-      
-      // 如果没有提供privateKey，但提供了keyType，则从环境变量获取
-      if (!privateKey && keyType) {
-        try {
-          privateKey = EnvConfig.getPrivateKey(keyType);
-        } catch (error) {
-          throw new WalletError(`从环境变量获取${keyType}私钥失败: ${error.message}`);
-        }
-      }
-      
-      // 验证参数
-      if (!privateKey && !mnemonic) {
-        throw new WalletError('创建钱包失败: 需要提供私钥、助记词或有效的私钥类型');
-      }
-
-      // 验证私钥格式
-      if (privateKey) {
-        Validation.validate(Validation.isValidPrivateKey(privateKey), '创建钱包失败: 无效的私钥');
-      }
-
-      // 验证助记词格式
-      if (mnemonic) {
-        Validation.validate(Validation.isValidMnemonic(mnemonic), '创建钱包失败: 无效的助记词');
-      }
-
-      // 获取Provider
-      let provider = options.provider;
-      if (!provider) {
-        provider = await Provider.create();
-      } else {
-        // 验证提供的Provider
-        const isValid = await this.validateProvider(provider);
-        if (!isValid) {
-          Logger.warn('提供的Provider无效，将创建新的Provider实例');
-          provider = await Provider.create();
-        }
-      }
-      
-      // 创建钱包实例
       let wallet;
+      let privateKey = options.privateKey;
+      
+      // 如果没有提供私钥，但提供了 keyType，从环境变量获取
+      if (!privateKey && options.keyType) {
+        try {
+          privateKey = EnvConfig.getPrivateKey(options.keyType);
+        } catch (error) {
+          throw new WalletError(`获取${options.keyType}私钥失败: ${error.message}`);
+        }
+      }
+      
+      // 根据私钥创建钱包
       if (privateKey) {
-        wallet = new ethers.Wallet(privateKey, provider);
-      } else if (mnemonic) {
-        wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
+        const provider = options.provider;
+        wallet = provider 
+          ? new ethers.Wallet(privateKey, provider)
+          : new ethers.Wallet(privateKey);
+      } else {
+        // 如果没有提供私钥和密钥类型，创建随机钱包
+        wallet = ethers.Wallet.createRandom();
       }
 
-      Logger.info('钱包创建成功', { address: await wallet.getAddress() });
+      Logger.info('钱包创建成功', { address: wallet.address });
       return wallet;
     } catch (error) {
-      Logger.error('创建钱包失败', { error: error.message, stack: error.stack });
+      // 处理可能的错误
       if (error instanceof WalletError) {
         throw error;
       }
@@ -81,44 +56,80 @@ class Wallet {
   }
 
   /**
-   * 获取账户余额
-   * @param {ethers.Wallet} wallet - 钱包实例
-   * @returns {Promise<string>} 账户余额（以 wei 为单位）
+   * 根据私钥类型创建钱包
+   * @param {string} keyType - 私钥类型
+   * @param {Object} [provider] - Provider 实例
+   * @returns {Promise<ethers.Wallet>} 钱包实例
+   * @throws {WalletError} 钱包错误
    */
-  static async getBalance(wallet) {
+  static async createFromKeyType(keyType, provider) {
+    return this.create({ keyType, provider });
+  }
+
+  /**
+   * 从私钥创建钱包
+   * @param {string} privateKey - 私钥
+   * @param {Object} [provider] - Provider 实例
+   * @returns {Promise<ethers.Wallet>} 钱包实例
+   * @throws {WalletError} 钱包错误
+   */
+  static async createFromPrivateKey(privateKey, provider) {
+    return this.create({ privateKey, provider });
+  }
+
+  /**
+   * 获取钱包地址
+   * @param {ethers.Wallet} wallet - 钱包实例
+   * @returns {Promise<string>} 地址
+   * @throws {WalletError} 钱包错误
+   */
+  static async getAddress(wallet) {
     try {
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('获取账户余额失败: 无效的钱包实例');
-      }
-      const balance = await wallet.getBalance();
-      Logger.info('获取余额成功', { balance: balance.toString() });
-      return balance;
+      return await wallet.getAddress();
     } catch (error) {
-      throw new WalletError(`获取账户余额失败: ${error.message}`);
+      throw new WalletError(`获取钱包地址失败: ${error.message}`);
     }
   }
 
   /**
-   * 发送交易
+   * 获取钱包余额
    * @param {ethers.Wallet} wallet - 钱包实例
-   * @param {Object} transaction - 交易参数
-   * @param {string} transaction.to - 接收地址
-   * @param {string} transaction.value - 发送金额（以 wei 为单位）
-   * @param {string} [transaction.data] - 交易数据
-   * @param {Object} [transaction.gas] - Gas 参数
-   * @returns {Promise<Object>} 交易结果
+   * @returns {Promise<BigNumber>} 余额
+   * @throws {WalletError} 钱包错误
    */
-  static async sendTransaction(wallet, transaction) {
+  static async getBalance(wallet) {
     try {
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('发送交易失败: 无效的钱包实例');
-      }
-      if (!Validation.isValidTransaction(transaction)) {
-        throw new WalletError('发送交易失败: 无效的交易参数');
-      }
-      const tx = await wallet.sendTransaction(transaction);
-      Logger.info('交易发送成功', { hash: tx.hash });
-      return tx;
+      return await wallet.getBalance();
+    } catch (error) {
+      throw new WalletError(`获取钱包余额失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 转账
+   * @param {ethers.Wallet} wallet - 钱包实例
+   * @param {string} to - 接收地址
+   * @param {string|BigNumber} amount - 转账金额
+   * @param {Object} [options] - 交易选项
+   * @returns {Promise<Object>} 交易凭证
+   * @throws {WalletError} 钱包错误
+   */
+  static async sendTransaction(wallet, to, amount, options = {}) {
+    try {
+      const tx = await wallet.sendTransaction({
+        to,
+        value: amount,
+        ...options
+      });
+
+      Logger.info('交易已发送', {
+        from: wallet.address,
+        to,
+        value: amount.toString(),
+        hash: tx.hash
+      });
+
+      return await tx.wait();
     } catch (error) {
       throw new WalletError(`发送交易失败: ${error.message}`);
     }
@@ -127,106 +138,28 @@ class Wallet {
   /**
    * 签名消息
    * @param {ethers.Wallet} wallet - 钱包实例
-   * @param {string} message - 要签名的消息
-   * @returns {Promise<string>} 签名结果
+   * @param {string} message - 消息
+   * @returns {Promise<string>} 签名
+   * @throws {WalletError} 钱包错误
    */
   static async signMessage(wallet, message) {
     try {
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('签名消息失败: 无效的钱包实例');
-      }
-      if (!Validation.isValidString(message)) {
-        throw new WalletError('签名消息失败: 无效的消息');
-      }
-      const signature = await wallet.signMessage(message);
-      Logger.info('消息签名成功', { signature });
-      return signature;
+      return await wallet.signMessage(message);
     } catch (error) {
       throw new WalletError(`签名消息失败: ${error.message}`);
     }
   }
 
   /**
-   * 验证签名
-   * @param {ethers.Wallet} wallet - 钱包实例
-   * @param {string} message - 消息
-   * @param {string} signature - 签名
-   * @returns {Promise<boolean>} 验证结果
+   * 获取所有可用的账户私钥
+   * @returns {Object} 账户私钥映射
    */
-  static async verifyMessage(wallet, message, signature) {
+  static getAllAccounts() {
     try {
-      // 验证钱包实例
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('验证签名失败: 无效的钱包实例');
-      }
-
-      // 验证消息
-      if (!message) {
-        throw new WalletError('验证签名失败: 无效的消息');
-      }
-
-      // 验证签名格式
-      if (!signature || typeof signature !== 'string' || !signature.startsWith('0x') || signature.length !== 132) {
-        throw new WalletError('验证签名失败: 无效的签名格式');
-      }
-
-      // 获取钱包地址
-      const address = await wallet.getAddress();
-
-      // 验证签名
-      const recoveredAddress = await ethers.verifyMessage(message, signature);
-      const isValid = address.toLowerCase() === recoveredAddress.toLowerCase();
-      
-      if (isValid) {
-        Logger.info('签名验证成功', { address });
-      }
-      return isValid;
+      return EnvConfig.getAllPrivateKeys();
     } catch (error) {
-      // 如果是我们的自定义错误，直接抛出
-      if (error instanceof WalletError) {
-        throw error;
-      }
-      // 其他错误统一处理
-      throw new WalletError(`验证签名失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 导出私钥
-   * @param {ethers.Wallet} wallet - 钱包实例
-   * @returns {Promise<string>} 私钥
-   */
-  static async exportPrivateKey(wallet) {
-    try {
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('导出私钥失败: 无效的钱包实例');
-      }
-      const privateKey = wallet.privateKey;
-      Logger.info('导出私钥成功');
-      return privateKey;
-    } catch (error) {
-      throw new WalletError(`导出私钥失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 导出助记词
-   * @param {ethers.Wallet} wallet - 钱包实例
-   * @returns {Promise<string>} 助记词
-   */
-  static async exportMnemonic(wallet) {
-    try {
-      if (!Validation.isValidWallet(wallet)) {
-        throw new WalletError('导出助记词失败: 无效的钱包实例');
-      }
-      if (!wallet.mnemonic) {
-        throw new WalletError('导出助记词失败: 该钱包不是由助记词创建的');
-      }
-      const mnemonic = wallet.mnemonic.phrase;
-      Logger.info('导出助记词成功');
-      return mnemonic;
-    } catch (error) {
-      throw new WalletError(`导出助记词失败: ${error.message}`);
+      Logger.warn('获取账户私钥失败', { error: error.message });
+      return {};
     }
   }
 

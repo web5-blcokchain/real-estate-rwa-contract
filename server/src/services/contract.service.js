@@ -2,8 +2,10 @@
  * 合约服务模块
  * 处理智能合约相关的业务逻辑
  */
-const { Logger, AbiConfig, EnvConfig, ErrorHandler, Validation } = require('../../../shared/src');
+const { Logger, config, ErrorHandler, Validation } = require('../../../shared/src');
 const blockchainService = require('./BlockchainService');
+
+const { AbiConfig, EnvConfig, AddressConfig } = config;
 
 /**
  * 根据合约名称获取地址
@@ -18,16 +20,22 @@ async function getAddressByName(contractName) {
       '合约名称不能为空'
     );
     
-    // 构造环境变量名
-    const envKey = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName.toUpperCase()}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
-    const address = EnvConfig.getEnv(envKey);
+    // 首先尝试从deployment.json获取地址
+    const address = AddressConfig.getContractAddress(contractName);
+    if (address) {
+      return address;
+    }
     
-    if (!address) {
+    // 如果deployment.json中没有，则尝试从环境变量获取
+    const envKey = `${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX}${contractName.toUpperCase()}${EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX}`;
+    const envAddress = EnvConfig.getEnv(envKey);
+    
+    if (!envAddress) {
       Logger.warn(`未找到合约 ${contractName} 的地址`);
       return null;
     }
 
-    return address;
+    return envAddress;
   } catch (error) {
     const handledError = ErrorHandler.handle(error, {
       type: 'contract',
@@ -44,7 +52,11 @@ async function getAddressByName(contractName) {
  */
 async function getAllAddresses() {
   try {
-    const addresses = {};
+    // 首先从deployment.json获取所有地址
+    const deploymentAddresses = AddressConfig.getAllContractAddresses();
+    
+    // 然后合并环境变量中的地址
+    const envAddresses = {};
     const prefix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_PREFIX;
     const suffix = EnvConfig.ENV_KEYS.CONTRACT_ADDRESS_SUFFIX;
     
@@ -56,18 +68,74 @@ async function getAllAddresses() {
         const contractName = match[1];
         const address = EnvConfig.getEnv(key);
         if (address) {
-          addresses[contractName] = address;
+          envAddresses[contractName] = address;
         }
       }
     }
     
-    return addresses;
+    // 合并地址（优先使用deployment.json中的地址）
+    return { ...envAddresses, ...deploymentAddresses };
   } catch (error) {
     const handledError = ErrorHandler.handle(error, {
       type: 'contract',
       context: { method: 'getAllAddresses' }
     });
     Logger.error(`获取所有合约地址失败: ${handledError.message}`, { error: handledError });
+    throw handledError;
+  }
+}
+
+/**
+ * 根据合约名称获取ABI
+ * @param {string} contractName - 合约名称
+ * @returns {Promise<Array>} 合约ABI
+ */
+async function getABIByName(contractName) {
+  try {
+    // 验证合约名称
+    Validation.validate(
+      Validation.isNotEmpty(contractName),
+      '合约名称不能为空'
+    );
+    
+    // 获取合约ABI信息
+    let contractAbi = null;
+    
+    try {
+      const contractInfo = AbiConfig.getContractAbi(contractName);
+      if (contractInfo && contractInfo.abi) {
+        contractAbi = contractInfo.abi;
+      }
+    } catch (error) {
+      Logger.warn(`通过AbiConfig获取合约 ${contractName} 的ABI失败: ${error.message}`);
+    }
+    
+    if (!contractAbi) {
+      // 尝试查找Facade（如果要查找的是RealEstateFacade）
+      if (contractName === 'RealEstateFacade') {
+        try {
+          const facadeInfo = AbiConfig.getContractAbi('Facade');
+          if (facadeInfo && facadeInfo.abi) {
+            contractAbi = facadeInfo.abi;
+          }
+        } catch (error) {
+          Logger.warn(`通过AbiConfig获取合约 Facade 的ABI失败: ${error.message}`);
+        }
+      }
+    }
+    
+    if (!contractAbi) {
+      Logger.warn(`未找到合约 ${contractName} 的ABI`);
+      return null;
+    }
+    
+    return contractAbi;
+  } catch (error) {
+    const handledError = ErrorHandler.handle(error, {
+      type: 'contract',
+      context: { method: 'getABIByName', contractName }
+    });
+    Logger.error(`获取合约 ${contractName} 的ABI失败: ${handledError.message}`, { error: handledError });
     throw handledError;
   }
 }
@@ -86,8 +154,8 @@ async function getContractInstance(contractName) {
     );
     
     // 获取合约的ABI
-    const contractInfo = AbiConfig.getContractAbi(contractName);
-    if (!contractInfo || !contractInfo.abi) {
+    const abi = await getABIByName(contractName);
+    if (!abi) {
       throw new Error(`未找到合约 ${contractName} 的ABI`);
     }
     
@@ -98,7 +166,7 @@ async function getContractInstance(contractName) {
     }
     
     // 创建合约实例
-    return await blockchainService.getContractInstance(contractInfo.abi, address);
+    return await blockchainService.getContractInstance(abi, address);
   } catch (error) {
     const handledError = ErrorHandler.handle(error, {
       type: 'contract',
@@ -112,5 +180,6 @@ async function getContractInstance(contractName) {
 module.exports = {
   getAddressByName,
   getAllAddresses,
-  getContractInstance
+  getContractInstance,
+  getABIByName
 }; 

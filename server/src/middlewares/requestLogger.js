@@ -6,6 +6,26 @@ const { Logger, PerformanceMonitor } = require('../../../shared/src');
 const serverConfig = require('../config');
 
 /**
+ * 屏蔽敏感数据
+ * @param {Object} data - 要屏蔽的数据
+ * @returns {Object} 屏蔽后的数据
+ */
+function maskSensitiveData(data) {
+  if (!data) return data;
+  
+  const masked = { ...data };
+  const sensitiveFields = ['password', 'token', 'apiKey', 'secret', 'privateKey'];
+  
+  for (const field of sensitiveFields) {
+    if (masked[field]) {
+      masked[field] = '******';
+    }
+  }
+  
+  return masked;
+}
+
+/**
  * 请求日志记录
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
@@ -20,7 +40,7 @@ function requestLogger(req, res, next) {
   res.setHeader('X-Request-ID', req.requestId);
   
   // 如果禁用了HTTP日志，直接跳过
-  if (!loggerConfig.httpLog) {
+  if (loggerConfig.httpLog === false) {
     return next();
   }
   
@@ -133,37 +153,6 @@ function requestLogger(req, res, next) {
   });
   
   next();
-}
-
-/**
- * 屏蔽敏感数据
- * @param {Object} data - 原始数据
- * @returns {Object} 屏蔽后的数据
- */
-function maskSensitiveData(data) {
-  // 如果没有数据，直接返回
-  if (!data) return data;
-  
-  // 复制数据，避免修改原始对象
-  const masked = { ...data };
-  
-  // 敏感字段列表
-  const sensitiveFields = [
-    'password', 'privateKey', 'secret', 'token', 'apiKey', 'api_key',
-    'authorization', 'mnemonic', 'seed', 'passphrase', 'pin', 'credential'
-  ];
-  
-  // 遍历对象，屏蔽敏感字段
-  Object.keys(masked).forEach(key => {
-    if (sensitiveFields.some(field => key.toLowerCase().includes(field))) {
-      masked[key] = '******';
-    } else if (typeof masked[key] === 'object' && masked[key] !== null) {
-      // 递归处理嵌套对象
-      masked[key] = maskSensitiveData(masked[key]);
-    }
-  });
-  
-  return masked;
 }
 
 /**
