@@ -2,12 +2,33 @@ const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 const { ethers, upgrades } = require("hardhat");
-const envConfig = require("../shared/src/config/env");
+require('dotenv').config();
 
 const logger = {
   info: (message, ...args) => console.log(`INFO: ${message}`, ...args),
   warn: (message, ...args) => console.warn(`WARN: ${message}`, ...args),
   error: (message, ...args) => console.error(`ERROR: ${message}`, ...args)
+};
+
+// 获取合约初始化参数
+const getContractInitParams = () => {
+  return {
+    trading: {
+      tradingFeeRate: parseInt(process.env.TRADING_FEE_RATE || "100"), // 默认1%
+      tradingFeeReceiver: process.env.TRADING_FEE_RECEIVER || ethers.ZeroAddress,
+    },
+    reward: {
+      platformFeeRate: parseInt(process.env.PLATFORM_FEE_RATE || "500"), // 默认5%
+      maintenanceFeeRate: parseInt(process.env.MAINTENANCE_FEE_RATE || "200"), // 默认2%
+      rewardFeeReceiver: process.env.REWARD_FEE_RECEIVER || ethers.ZeroAddress,
+      minDistributionThreshold: process.env.MIN_DISTRIBUTION_THRESHOLD || "0.01"
+    },
+    tokenFactory: {
+      name: process.env.TOKEN_FACTORY_NAME || "Token Factory",
+      symbol: process.env.TOKEN_FACTORY_SYMBOL || "TF",
+      initialSupply: process.env.TOKEN_FACTORY_INITIAL_SUPPLY || "0"
+    }
+  };
 };
 
 async function verifyContract(contractAddress, contractName, constructorArguments = []) {
@@ -63,7 +84,7 @@ async function deployTestToken(signer) {
  */
 async function deploySystemStep(signer) {
   // 获取合约初始化参数
-  const initParams = envConfig.getContractInitParams();
+  const initParams = getContractInitParams();
   
   // 部署 RoleManager
   logger.info("Deploying RoleManager...");
@@ -229,6 +250,81 @@ async function exportContractABIs(contractNames) {
   }
 }
 
+/**
+ * 将合约地址更新到.env文件中
+ * @param {Object} deploymentInfo - 部署信息
+ * @param {Object} implementations - 实现合约地址
+ */
+function updateEnvFile(deploymentInfo, implementations) {
+  logger.info("正在更新.env文件...");
+  
+  // 读取当前.env文件内容
+  const envPath = path.join(__dirname, '../.env');
+  let envContent = '';
+  
+  try {
+    envContent = fs.readFileSync(envPath, 'utf8');
+  } catch (error) {
+    logger.error(`读取.env文件失败: ${error.message}`);
+    return false;
+  }
+  
+  // 创建一个临时文件，用于存储更新后的内容
+  const tempEnvPath = path.join(__dirname, '../.env.temp');
+  
+  // 移除已有的合约地址部分（如果存在）
+  let updatedContent = envContent;
+  const contractSectionMarker = '# 以下是合约部署后自动生成的地址信息';
+  
+  if (updatedContent.includes(contractSectionMarker)) {
+    updatedContent = updatedContent.split(contractSectionMarker)[0].trim();
+  }
+  
+  // 添加新的合约地址部分
+  updatedContent += `\n\n# 以下是合约部署后自动生成的地址信息（由scripts/deploy-step.js于${new Date().toISOString()}更新）
+# 这些地址是部署期间自动写入的，无需手动修改
+
+# 代币合约地址
+CONTRACT_SIMPLEERC20_ADDRESS=${deploymentInfo.contracts.SimpleERC20}
+
+# 系统核心合约地址
+CONTRACT_ROLEMANAGER_ADDRESS=${deploymentInfo.contracts.RoleManager}
+CONTRACT_PROPERTYMANAGER_ADDRESS=${deploymentInfo.contracts.PropertyManager}
+CONTRACT_TRADINGMANAGER_ADDRESS=${deploymentInfo.contracts.TradingManager}
+CONTRACT_REWARDMANAGER_ADDRESS=${deploymentInfo.contracts.RewardManager}
+CONTRACT_PROPERTYTOKEN_ADDRESS=${deploymentInfo.contracts.PropertyToken}
+CONTRACT_SYSTEM_ADDRESS=${deploymentInfo.contracts.System}
+CONTRACT_FACADE_ADDRESS=${deploymentInfo.contracts.Facade}
+
+# 代理合约实现地址（仅供参考，通常不需要直接使用）
+`;
+
+  // 添加实现合约地址
+  for (const [name, address] of Object.entries(implementations)) {
+    updatedContent += `CONTRACT_${name.toUpperCase()}_IMPLEMENTATION=${address}\n`;
+  }
+  
+  // 写入临时文件
+  try {
+    fs.writeFileSync(tempEnvPath, updatedContent, 'utf8');
+    logger.info(`环境变量临时文件已生成: ${tempEnvPath}`);
+    
+    // 备份原始.env文件
+    const backupPath = path.join(__dirname, `../.env.backup.${Date.now()}`);
+    fs.copyFileSync(envPath, backupPath);
+    logger.info(`原始.env文件已备份到: ${backupPath}`);
+    
+    // 用临时文件替换原始.env文件
+    fs.renameSync(tempEnvPath, envPath);
+    logger.info(`环境变量文件已更新: ${envPath}`);
+    
+    return true;
+  } catch (error) {
+    logger.error(`更新.env文件失败: ${error.message}`);
+    return false;
+  }
+}
+
 async function main() {
   try {
     // 获取部署者账户
@@ -241,7 +337,7 @@ async function main() {
     // 部署系统合约
     const contracts = await deploySystemStep(deployer);
 
-    // 先创建部署信息对象，带有正确的合约地址字符串
+    // 创建部署信息对象，带有正确的合约地址字符串
     const deploymentInfo = {
       network: hre.network.name,
       timestamp: new Date().toISOString(),
@@ -266,10 +362,8 @@ async function main() {
     // 更新部署信息，添加实现地址
     deploymentInfo.implementations = implementations;
 
-    // 保存部署信息
-    const deploymentPath = path.join(__dirname, '../config/deployment.json');
-    fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
-    logger.info('部署信息已保存到:', deploymentPath);
+    // 保存部署信息到.env文件
+    updateEnvFile(deploymentInfo, implementations);
     
     // 导出合约 ABI
     const contractNames = [
@@ -327,14 +421,6 @@ async function getImplementationAddresses(deploymentInfo) {
       logger.error(`获取 ${name} 的实现地址失败: ${error.message}`);
     }
   }
-  
-  // 保存实现地址到配置文件
-  const implementationsPath = path.join(__dirname, "../config/implementations.json");
-  fs.writeFileSync(
-    implementationsPath,
-    JSON.stringify(implementations, null, 2)
-  );
-  logger.info(`实现地址已保存到 ${implementationsPath}`);
   
   return implementations;
 }

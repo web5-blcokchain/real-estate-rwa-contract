@@ -7,17 +7,16 @@ require("solidity-coverage");
 require("@openzeppelin/hardhat-upgrades");
 
 // 加载环境配置
-const envConfig = require("./shared/src/config/env").load();
+require('dotenv').config();
 
 // 获取账户配置
 const getAccounts = () => {
-  const privateKey = envConfig.DEPLOYER_PRIVATE_KEY;
+  const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   
   // 检查私钥是否存在
   if (!privateKey) {
     console.warn('警告: 未找到DEPLOYER_PRIVATE_KEY，使用默认开发私钥替代');
-    // 使用hardhat默认私钥
-    return ["ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"];
+    return [""];
   }
   
   const formattedKey = privateKey.replace(/^0x/, '');
@@ -41,7 +40,7 @@ const getNetworkConfig = (network) => {
   switch (network) {
     case 'hardhat':
       return {
-        chainId: envConfig.HARDHAT_CHAIN_ID,
+        chainId: parseInt(process.env.HARDHAT_CHAIN_ID || '31337'),
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -57,23 +56,33 @@ const getNetworkConfig = (network) => {
     case 'localhost':
       return {
         ...baseConfig,
-        url: envConfig.LOCALHOST_RPC_URL,
-        chainId: envConfig.LOCALHOST_CHAIN_ID,
+        url: process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545',
+        chainId: parseInt(process.env.LOCALHOST_CHAIN_ID || '31337'),
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
       };
     case 'testnet':
+      // 当未定义testnet URL时，返回localhost配置以避免配置错误
+      if (!process.env.TESTNET_RPC_URL) {
+        console.warn('警告: 未设置TESTNET_RPC_URL，testnet网络配置不完整');
+        return getNetworkConfig('localhost');
+      }
       return {
         ...baseConfig,
-        url: envConfig.TESTNET_RPC_URL,
-        chainId: envConfig.TESTNET_CHAIN_ID
+        url: process.env.TESTNET_RPC_URL,
+        chainId: parseInt(process.env.TESTNET_CHAIN_ID || '11155111')
       };
     case 'mainnet':
+      // 当未定义mainnet URL时，返回localhost配置以避免配置错误
+      if (!process.env.MAINNET_RPC_URL) {
+        console.warn('警告: 未设置MAINNET_RPC_URL，mainnet网络配置不完整');
+        return getNetworkConfig('localhost');
+      }
       return {
         ...baseConfig,
-        url: envConfig.MAINNET_RPC_URL,
-        chainId: envConfig.MAINNET_CHAIN_ID
+        url: process.env.MAINNET_RPC_URL,
+        chainId: parseInt(process.env.MAINNET_CHAIN_ID || '1')
       };
     default:
       throw new Error(`Unsupported network: ${network}`);
@@ -90,7 +99,7 @@ const getActiveNetworks = () => {
   };
 
   // 根据 BLOCKCHAIN_NETWORK 激活对应网络
-  const activeNetwork = envConfig.BLOCKCHAIN_NETWORK || 'hardhat';
+  const activeNetwork = process.env.BLOCKCHAIN_NETWORK || 'hardhat';
   if (!networks[activeNetwork]) {
     console.warn(`警告: 无效的网络类型 ${activeNetwork}，默认使用hardhat网络`);
     return networks;
@@ -123,7 +132,7 @@ module.exports = {
 
   // Gas 报告配置
   gasReporter: {
-    enabled: envConfig.REPORT_GAS,
+    enabled: process.env.REPORT_GAS === 'true',
     currency: "USD",
   },
 

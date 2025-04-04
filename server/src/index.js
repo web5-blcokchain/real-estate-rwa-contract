@@ -27,13 +27,11 @@ console.log("环境变量BLOCKCHAIN_NETWORK:", process.env.BLOCKCHAIN_NETWORK);
 console.log("环境变量NODE_ENV:", process.env.NODE_ENV);
 
 // 在全局作用域声明这些变量
-let EnvConfig, AddressConfig, AbiConfig, Logger, ErrorHandler, blockchainService;
+let AddressConfig, AbiConfig, Logger, ErrorHandler, blockchainService;
 
 try {
   // 手动加载配置类
   console.log("开始导入配置模块...");
-  EnvConfig = require('../../shared/src/config/env');
-  console.log("EnvConfig导入成功:", typeof EnvConfig);
   
   AddressConfig = require('../../shared/src/config/address');
   console.log("AddressConfig导入成功:", typeof AddressConfig);
@@ -47,19 +45,7 @@ try {
   ErrorHandler = require('../../shared/src/utils/errors');
   console.log("ErrorHandler导入成功:", typeof ErrorHandler);
   
-  // 初始化配置
-  if (EnvConfig && typeof EnvConfig.load === 'function') {
-    console.log("调用EnvConfig.load()之前");
-    if (typeof EnvConfig.isInitialized === 'function') {
-      console.log("EnvConfig初始化状态:", EnvConfig.isInitialized());
-    }
-    
-    const result = EnvConfig.load();
-    console.log("EnvConfig.load()返回结果:", result);
-    console.log('环境配置加载完成');
-  } else {
-    console.error("错误: EnvConfig.load不是一个函数");
-  }
+  console.log('环境配置加载完成');
   
   // 确保Provider和其他依赖模块已加载
   const Provider = require('../../shared/src/core/provider');
