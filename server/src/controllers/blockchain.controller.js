@@ -5,7 +5,7 @@
  *   name: Blockchain
  *   description: 区块链相关API
  */
-const { Logger, ErrorHandler } = require('../../../shared/src');
+const { Logger, ErrorHandler } = require('../lib/shared');
 const { validateParams } = require('../utils');
 const { success, error } = require('../utils/apiResponse');
 const { HTTP_STATUS, ERROR_CODES } = require('../constants');

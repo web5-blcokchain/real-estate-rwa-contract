@@ -1,7 +1,8 @@
 /**
- * 错误处理中间件
+ * 全局错误处理中间件
  */
-const { Logger, ErrorHandler } = require('../../../shared/src');
+const { Logger, ErrorHandler } = require('../lib/shared');
+const { HTTP_STATUS, ERROR_CODES, ERROR_MESSAGES } = require('../constants');
 
 /**
  * 错误处理

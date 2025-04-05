@@ -1,7 +1,8 @@
 /**
- * API响应处理工具
+ * API响应工具
  */
-const { ErrorHandler } = require('../../../shared/src');
+const { ErrorHandler } = require('../lib/shared');
+const { HTTP_STATUS } = require('../constants');
 
 /**
  * 处理API响应

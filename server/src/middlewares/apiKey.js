@@ -11,7 +11,10 @@
  * security:
  *   - ApiKeyAuth: []
  */
-const { Logger } = require('../../../shared/src');
+const crypto = require('crypto');
+const { HTTP_STATUS, ERROR_CODES, ERROR_MESSAGES } = require('../constants');
+const config = require('../config');
+const { Logger } = require('../lib/shared');
 
 /**
  * API密钥验证

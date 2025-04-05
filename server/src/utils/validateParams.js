@@ -1,7 +1,7 @@
 /**
  * 参数验证工具
  */
-const { Validation, ValidationError } = require('../../../shared/src');
+const { Validation, ValidationError } = require('../lib/shared');
 
 /**
  * 验证请求参数

@@ -1,137 +1,118 @@
 /**
  * 服务器配置模块
+ * 统一管理所有配置选项
  */
-const fs = require('fs');
 const path = require('path');
-const { Logger } = require('../../../shared/src');
-
-// 配置缓存
-let configCache = null;
+const fs = require('fs');
+const envConfig = require('./env');
 
 /**
  * 服务器配置
  */
 const serverConfig = {
+  // 环境变量配置
+  env: envConfig,
+
+  /**
+   * 初始化配置
+   */
+  initialize() {
+    // 确保环境变量已加载
+    envConfig.initialize();
+    
+    // 验证配置
+    this.validateConfig();
+    
+    return this;
+  },
+
   /**
    * 验证配置
    */
   validateConfig() {
     try {
-      // 验证环境变量
-      if (!process.env.PORT) {
-        Logger.warn('未设置PORT环境变量，使用默认值3000');
+      // 验证项目路径设置
+      if (!process.env.PROJECT_PATH) {
+        throw new Error('PROJECT_PATH未设置');
       }
-
-      if (!process.env.HOST) {
-        Logger.warn('未设置HOST环境变量，使用默认值localhost');
+      
+      // 验证区块链网络设置
+      if (!process.env.BLOCKCHAIN_NETWORK) {
+        throw new Error('BLOCKCHAIN_NETWORK未设置');
       }
-
-      if (!process.env.API_KEY) {
-        Logger.warn('未设置API_KEY环境变量，API将不受保护');
+      
+      // 验证ABI目录
+      const abiDirPath = path.resolve(process.env.PROJECT_PATH, 'config/abi');
+      if (!fs.existsSync(abiDirPath)) {
+        console.warn(`ABI目录不存在: ${abiDirPath}`);
       }
-
-      // 验证当前工作目录中的HTTPS证书文件（如果启用HTTPS）
-      if (process.env.USE_HTTPS === 'true') {
-        if (!process.env.SSL_CERT_PATH || !process.env.SSL_KEY_PATH) {
-          throw new Error('启用HTTPS但未设置SSL_CERT_PATH或SSL_KEY_PATH');
-        }
-
-        if (!fs.existsSync(process.env.SSL_CERT_PATH)) {
-          throw new Error(`SSL证书文件不存在: ${process.env.SSL_CERT_PATH}`);
-        }
-
-        if (!fs.existsSync(process.env.SSL_KEY_PATH)) {
-          throw new Error(`SSL密钥文件不存在: ${process.env.SSL_KEY_PATH}`);
-        }
+      
+      // 验证部署文件
+      const deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+      if (!fs.existsSync(deploymentPath)) {
+        console.warn(`部署文件不存在: ${deploymentPath}`);
       }
-
+      
       return true;
     } catch (error) {
-      Logger.error(`配置验证失败: ${error.message}`);
+      console.error(`配置验证失败: ${error.message}`);
       throw error;
     }
   },
 
   /**
+   * 获取服务器配置
+   */
+  getServerConfig() {
+    return envConfig.getServerConfig();
+  },
+
+  /**
    * 获取API配置
-   * @returns {Object} API配置
    */
   getApiConfig() {
-    return {
-      port: process.env.PORT || 3000,
-      host: process.env.HOST || 'localhost',
-      basePath: process.env.API_BASE_PATH || '/api/v1',
-      swaggerPath: process.env.SWAGGER_PATH || '/api-docs',
-      corsOrigin: process.env.CORS_ORIGIN || '*',
-      useHttps: process.env.USE_HTTPS === 'true',
-      apiKey: process.env.API_KEY,
-      requiresAuth: process.env.REQUIRES_AUTH !== 'false'
-    };
+    return envConfig.getApiConfig();
   },
 
   /**
    * 获取区块链配置
-   * @returns {Object} 区块链配置
    */
   getBlockchainConfig() {
-    // 不提供默认值，完全依赖环境变量
-    return {
-      networkType: process.env.BLOCKCHAIN_NETWORK,
-      rpcUrl: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL,
-      gasLimit: process.env.GAS_LIMIT,
-      gasPrice: process.env.GAS_PRICE,
-      confirmations: process.env.CONFIRMATIONS ? parseInt(process.env.CONFIRMATIONS, 10) : undefined,
-      mockMode: process.env.MOCK_BLOCKCHAIN || 'false' // 默认不使用模拟模式
-    };
+    return envConfig.getBlockchainConfig();
   },
 
   /**
    * 获取日志配置
-   * @returns {Object} 日志配置
    */
   getLogConfig() {
-    return {
-      level: process.env.LOG_LEVEL || 'info',
-      directory: process.env.LOG_DIR || 'logs',
-      maxSize: process.env.LOG_MAX_SIZE || '20m',
-      maxFiles: process.env.LOG_MAX_FILES || '14d'
-    };
-  },
-
-  /**
-   * 获取日志配置
-   * @returns {Object} 符合Logger.configure所需的配置格式
-   */
-  getLoggerConfig() {
-    return {
-      level: process.env.LOG_LEVEL || 'info',
-      dir: process.env.LOG_DIR || 'logs',
-      maxSize: parseInt(process.env.MAX_LOG_SIZE || (10 * 1024 * 1024).toString()),
-      maxFiles: parseInt(process.env.MAX_LOG_FILES || '5'),
-      console: (process.env.LOG_CONSOLE || 'true') === 'true',
-      httpLog: process.env.HTTP_LOG !== 'false'
-    };
-  },
-
-  /**
-   * 获取认证配置
-   * @returns {Object} 认证配置
-   */
-  getAuthConfig() {
-    return {
-      apiKey: process.env.API_KEY || 'default-api-key',
-      requireAuth: process.env.API_REQUIRE_AUTH !== 'false' // 默认启用认证
-    };
+    return envConfig.getLogConfig();
   },
 
   /**
    * 获取合约地址
-   * @returns {Object} 合约地址映射
    */
   getContractAddresses() {
     const addresses = {};
     
-    // 遍历环境变量，查找合约地址
+    // 尝试从deployment.json加载合约地址
+    try {
+      const deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
+      if (fs.existsSync(deploymentPath)) {
+        const deployment = require(deploymentPath);
+        if (deployment && deployment.contracts) {
+          // 从部署文件中提取合约地址
+          for (const [name, data] of Object.entries(deployment.contracts)) {
+            if (data && data.address) {
+              addresses[name] = data.address;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`无法从deployment.json加载合约地址: ${error.message}`);
+    }
+    
+    // 从环境变量中提取合约地址（优先级更高，会覆盖部署文件中的设置）
     for (const [key, value] of Object.entries(process.env)) {
       const match = key.match(/^CONTRACT_([A-Z0-9_]+)_ADDRESS$/);
       if (match) {
@@ -141,7 +122,31 @@ const serverConfig = {
     }
     
     return addresses;
+  },
+
+  /**
+   * 获取合约ABI
+   * @param {string} contractName 合约名称
+   * @returns {Object|null} 合约ABI对象
+   */
+  getContractABI(contractName) {
+    try {
+      // 尝试从ABI目录加载合约ABI
+      const abiPath = path.resolve(process.env.PROJECT_PATH, `config/abi/${contractName}.json`);
+      if (fs.existsSync(abiPath)) {
+        return require(abiPath);
+      }
+      
+      console.warn(`找不到合约ABI文件: ${abiPath}`);
+      return null;
+    } catch (error) {
+      console.error(`加载合约ABI失败: ${error.message}`);
+      return null;
+    }
   }
 };
+
+// 初始化配置
+serverConfig.initialize();
 
 module.exports = serverConfig; 

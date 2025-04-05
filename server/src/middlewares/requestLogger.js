@@ -1,8 +1,9 @@
 /**
  * 请求日志中间件
  */
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { Logger, PerformanceMonitor } = require('../../../shared/src');
+const { Logger, PerformanceMonitor } = require('../lib/shared');
 const serverConfig = require('../config');
 
 /**

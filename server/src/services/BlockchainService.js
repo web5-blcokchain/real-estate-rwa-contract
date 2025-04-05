@@ -2,8 +2,8 @@
  * 区块链服务类
  * 提供与区块链交互的相关功能
  */
-const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../../../shared/src');
-const serverConfig = require('../config');
+const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../lib/shared');
+const config = require('../config');
 const path = require('path');
 const fs = require('fs');
 
@@ -31,7 +31,7 @@ class BlockchainService {
       }
 
       // 获取区块链配置
-      const blockchainConfig = serverConfig.getBlockchainConfig();
+      const blockchainConfig = config.getBlockchainConfig();
       this.networkType = blockchainConfig.networkType;
 
       // 验证网络类型
