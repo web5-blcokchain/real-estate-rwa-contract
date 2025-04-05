@@ -19,7 +19,9 @@
     "verify:mainnet": "hardhat run scripts/verify-deployment.js --network mainnet",
     "dev:http": "cd http-server && yarn dev",
     "start:node": "hardhat node",
-    "test:env": "node test-env.js"
+    "test:env": "node test-env.js",
+    "server:dev": "nodemon http-server/src/server.js",
+    "server:start": "node http-server/src/server.js"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.3",
