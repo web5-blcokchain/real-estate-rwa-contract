@@ -236,3 +236,137 @@ node server/scripts/analyze-logs.js logs/server.log --api-docs
 4. 关注慢请求和错误请求，进行性能优化
 
 更多详细信息请参阅 [server/README.md](./server/README.md#日志管理工具)。
+
+# 区块链项目核心模块
+
+本项目提供了一套完整的区块链交互工具，用于简化与以太坊兼容区块链的接口交互。
+
+## 核心模块结构
+
+项目的核心模块包含以下组件：
+
+- `Provider`: 管理区块链网络连接
+- `Wallet`: 管理区块链钱包和账户
+- `Contract`: 管理智能合约交互（新版模块化设计）
+
+## 新版合约模块设计
+
+新版合约模块采用了模块化设计，将不同功能分解到专门的子模块中：
+
+### 合约模块结构
+
+```
+shared/src/core/contract/
+├── index.js      # 统一导出入口
+├── factory.js    # 合约工厂，负责创建合约实例
+├── caller.js     # 合约调用者，负责只读方法调用
+├── sender.js     # 合约发送者，负责发送交易
+├── transaction.js # 交易管理，提供高级交易处理
+└── event.js      # 事件管理，处理事件监听和查询
+```
+
+### 功能说明
+
+1. **合约工厂 (ContractFactory)**
+   - 创建合约实例
+   - 加载合约ABI
+   - 根据合约名称创建实例
+
+2. **合约调用者 (ContractCaller)**
+   - 调用合约只读方法
+   - 批量调用多个方法
+   - 参数验证和错误处理
+
+3. **合约发送者 (ContractSender)**
+   - 发送合约交易
+   - 自动gas估算
+   - 支持EIP-1559交易
+   - 等待交易确认
+
+4. **交易管理 (ContractTransaction)**
+   - 执行合约交易并监控状态
+   - 批量执行多个交易
+   - 交易事件解析
+   - 超时处理
+
+5. **事件管理 (ContractEvent)**
+   - 监听合约事件
+   - 查询历史事件
+   - 暂停/恢复事件监听
+   - 事件参数解析
+
+## 使用示例
+
+### 创建合约实例
+
+```javascript
+const { Contract } = require('../shared/src/core');
+
+// 创建合约实例
+const contract = await Contract.createFromName('MyToken', 'testnet', {
+  readOnly: false,
+  keyType: 'admin'
+});
+```
+
+### 调用合约只读方法
+
+```javascript
+// 调用单个方法
+const balance = await Contract.call(contract, 'balanceOf', ['0x123...']);
+
+// 批量调用
+const results = await Contract.multiCall(contract, [
+  { method: 'name' },
+  { method: 'symbol' },
+  { method: 'totalSupply' }
+]);
+```
+
+### 发送合约交易
+
+```javascript
+// 简单发送交易
+const tx = await Contract.send(contract, 'transfer', ['0x123...', '1000000000000000000']);
+const receipt = await Contract.waitForTransaction(tx);
+
+// 高级交易执行
+const result = await Contract.execute(contract, 'transfer', ['0x123...', '1000000000000000000'], {
+  confirmations: 2,
+  timeout: 60000,
+  onStatus: (status) => console.log(`交易状态: ${status.status}`)
+});
+```
+
+### 监听合约事件
+
+```javascript
+// 监听事件
+const listener = await Contract.listenToEvent(contract, 'Transfer', (eventData) => {
+  console.log(`检测到转账: ${eventData.params.from} -> ${eventData.params.to}, 金额: ${eventData.params.value}`);
+});
+
+// 暂停监听
+await Contract.pauseEventListener(listener.listenerId);
+
+// 恢复监听
+await Contract.resumeEventListener(listener.listenerId);
+
+// 停止监听
+await Contract.removeEventListener(listener.listenerId);
+```
+
+### 查询历史事件
+
+```javascript
+// 查询过去的Transfer事件
+const events = await Contract.queryEvents(contract, 'Transfer', {
+  fromBlock: 1000000,
+  toBlock: 'latest',
+  filter: { from: '0x123...' }
+});
+```
+
+## 向后兼容性
+
+为了保持向后兼容，旧版合约模块仍然可以通过 `OldContract` 访问，但建议使用新版模块化合约工具。

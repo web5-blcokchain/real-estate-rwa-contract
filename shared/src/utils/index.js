@@ -8,14 +8,7 @@ const Validation = require('./validation');
 const Logger = require('./logger');
 const PerformanceMonitor = require('./performance');
 const SecurityAuditor = require('./security');
-const { 
-  callContractMethod,
-  sendContractTransaction,
-  createContractInstance,
-  processContractResult,
-  parseTokenAmount,
-  formatTokenAmount
-} = require('./contract');
+const AddressManager = require('./address');
 const { 
   ErrorCodes,
   BlockchainError,
@@ -47,13 +40,8 @@ module.exports = {
   // 安全审计
   SecurityAuditor,
 
-  // 合约工具函数
-  callContractMethod,
-  sendContractTransaction,
-  createContractInstance,
-  processContractResult,
-  parseTokenAmount,
-  formatTokenAmount,
+  // 地址管理
+  AddressManager,
   
   // 错误类和工具
   ErrorCodes,

@@ -135,7 +135,10 @@ class ValidationError extends BlockchainError {
  */
 class LoggerError extends BlockchainError {
   constructor(message, context = {}) {
-    super(message, ErrorCodes.LOGGER_ERROR, context);
+    super(message, {
+      code: ErrorCodes.LOGGER_ERROR,
+      context
+    });
     this.name = 'LoggerError';
   }
 }

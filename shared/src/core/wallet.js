@@ -3,7 +3,6 @@ const { WalletError } = require('../utils/errors');
 const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Logger = require('../utils/logger');
-const { ErrorHandler } = require('../utils/errors');
 
 /**
  * 钱包模块
@@ -41,13 +40,39 @@ class Wallet {
       
       return randomWallet;
     } catch (error) {
-      const handledError = ErrorHandler.handle(error, {
-        type: 'wallet',
-        context: { method: 'create' }
-      });
-      Logger.error(`创建钱包失败: ${handledError.message}`, { error: handledError });
-      throw handledError;
+      Logger.error(`创建钱包失败: ${error.message}`, { error });
+      throw new WalletError(`创建钱包失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 创建管理员钱包
+   * @param {Object} [provider] - Provider 实例
+   * @returns {Promise<ethers.Wallet>} 管理员钱包实例
+   * @throws {WalletError} 钱包错误
+   */
+  static async createAdmin(provider) {
+    return this.createFromKeyType('ADMIN', provider);
+  }
+
+  /**
+   * 创建操作员钱包
+   * @param {Object} [provider] - Provider 实例
+   * @returns {Promise<ethers.Wallet>} 操作员钱包实例
+   * @throws {WalletError} 钱包错误
+   */
+  static async createOperator(provider) {
+    return this.createFromKeyType('OPERATOR', provider);
+  }
+
+  /**
+   * 创建管理者钱包
+   * @param {Object} [provider] - Provider 实例
+   * @returns {Promise<ethers.Wallet>} 管理者钱包实例
+   * @throws {WalletError} 钱包错误
+   */
+  static async createManager(provider) {
+    return this.createFromKeyType('MANAGER', provider);
   }
 
   /**
@@ -60,10 +85,9 @@ class Wallet {
   static async createFromKeyType(keyType, provider) {
     try {
       // 验证keyType
-      Validation.validate(
-        Validation.isNotEmpty(keyType),
-        '密钥类型不能为空'
-      );
+      if (!keyType) {
+        throw new WalletError('密钥类型不能为空');
+      }
       
       // 获取私钥
       const privateKey = this._getPrivateKeyFromEnv(keyType);
@@ -74,15 +98,8 @@ class Wallet {
       
       return this.createFromPrivateKey(privateKey, provider);
     } catch (error) {
-      const handledError = ErrorHandler.handle(error, {
-        type: 'wallet',
-        context: { method: 'createFromKeyType', keyType }
-      });
-      Logger.error(`通过密钥类型创建钱包失败: ${handledError.message}`, { 
-        error: handledError,
-        keyType
-      });
-      throw handledError;
+      Logger.error(`通过密钥类型创建钱包失败: ${error.message}`, { error, keyType });
+      throw new WalletError(`通过密钥类型创建钱包失败: ${error.message}`);
     }
   }
 
@@ -113,8 +130,19 @@ class Wallet {
    * @returns {string|null} 私钥
    */
   static _getPrivateKeyFromEnv(keyType) {
-    const envKey = `PRIVATE_KEY_${keyType.toUpperCase()}`;
-    return process.env[envKey] || null;
+    const possibleEnvVars = [
+      `PRIVATE_KEY_${keyType.toUpperCase()}`,
+      `${keyType.toUpperCase()}_PRIVATE_KEY`,
+      keyType.toUpperCase()
+    ];
+
+    for (const envVar of possibleEnvVars) {
+      if (process.env[envVar]) {
+        return process.env[envVar];
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -197,40 +225,37 @@ class Wallet {
   static getAllAccounts() {
     try {
       const accounts = {};
-      
-      // 查找环境变量中的所有私钥
-      Object.keys(process.env).forEach(key => {
-        if (key.startsWith('PRIVATE_KEY_')) {
-          const keyType = key.replace('PRIVATE_KEY_', '');
-          accounts[keyType] = process.env[key];
+      // 遍历环境变量，查找私钥
+      for (const [key, value] of Object.entries(process.env)) {
+        if (key.startsWith('PRIVATE_KEY_') || key.endsWith('_PRIVATE_KEY')) {
+          const name = key.startsWith('PRIVATE_KEY_')
+            ? key.replace('PRIVATE_KEY_', '')
+            : key.replace('_PRIVATE_KEY', '');
+          
+          accounts[name.toLowerCase()] = value;
         }
-      });
+      }
       
       return accounts;
     } catch (error) {
-      const handledError = ErrorHandler.handle(error, {
-        type: 'wallet',
-        context: { method: 'getAllAccounts' }
-      });
-      Logger.error(`获取所有账户失败: ${handledError.message}`, { error: handledError });
-      throw handledError;
+      throw new WalletError(`获取所有账户失败: ${error.message}`);
     }
   }
 
   /**
-   * 验证Provider实例
+   * 验证Provider
    * @param {Object} provider - Provider实例
    * @returns {Promise<boolean>} 是否有效
    */
   static async validateProvider(provider) {
     try {
-      if (!provider) return false;
+      if (!provider) {
+        throw new WalletError('Provider不能为空');
+      }
       
-      // 简单的连接测试
       await provider.getNetwork();
       return true;
     } catch (error) {
-      Logger.error('Provider验证失败', { error: error.message });
       return false;
     }
   }

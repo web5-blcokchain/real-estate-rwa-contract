@@ -236,38 +236,12 @@ class BlockchainService {
         '合约名称不能为空'
       );
       
-      // 创建钱包实例
-      const wallet = await Wallet.create({
+      // 使用Contract.createFromName方法创建合约实例
+      const contract = await Contract.createFromName(contractName, this.networkType, {
         provider: this.provider,
-        keyType: keyType
+        keyType: keyType,
+        deploymentPath: path.resolve(process.env.PROJECT_PATH || path.resolve(__dirname, '../../..'), 'config/deployment.json')
       });
-      
-      // 加载合约地址和ABI
-      const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../../..');
-      
-      // 从deployment.json获取合约地址
-      const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
-      if (!fs.existsSync(deploymentPath)) {
-        throw new Error(`部署文件不存在: ${deploymentPath}`);
-      }
-      
-      const deployment = require(deploymentPath);
-      const contractAddress = deployment[this.networkType]?.[contractName];
-      
-      if (!contractAddress) {
-        throw new Error(`找不到合约地址: ${contractName} on ${this.networkType}`);
-      }
-      
-      // 加载合约ABI
-      const abiPath = path.resolve(projectRootPath, `config/abi/${contractName}.json`);
-      if (!fs.existsSync(abiPath)) {
-        throw new Error(`合约ABI文件不存在: ${abiPath}`);
-      }
-      
-      const abi = require(abiPath);
-      
-      // 创建合约实例
-      const contract = await Contract.create(wallet, contractAddress, abi);
       
       return contract;
     } catch (error) {

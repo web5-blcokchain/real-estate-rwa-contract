@@ -219,38 +219,6 @@ async function deploySystemStep(signer) {
 }
 
 /**
- * 导出合约 ABI 到 config/abi 目录
- * @param {Object} contractNames - 要导出 ABI 的合约名称列表
- */
-async function exportContractABIs(contractNames) {
-  logger.info("导出合约 ABI...");
-  
-  // 确保 config/abi 目录存在
-  const abiDir = path.join(__dirname, "../config/abi");
-  if (!fs.existsSync(abiDir)) {
-    fs.mkdirSync(abiDir, { recursive: true });
-  }
-  
-  // 为每个合约生成 ABI 文件
-  for (const contractName of contractNames) {
-    try {
-      // 读取合约 artifact
-      const artifact = await hre.artifacts.readArtifact(contractName);
-      
-      // 保存 ABI 文件，文件名与合约名称完全一致
-      fs.writeFileSync(
-        path.join(abiDir, `${contractName}.json`),
-        JSON.stringify(artifact.abi, null, 2)
-      );
-      
-      logger.info(`已导出 ${contractName}.json ABI`);
-    } catch (error) {
-      logger.error(`导出 ${contractName} ABI 失败: ${error.message}`);
-    }
-  }
-}
-
-/**
  * 将合约地址更新到.env文件中
  * @param {Object} deploymentInfo - 部署信息
  * @param {Object} implementations - 实现合约地址
@@ -362,27 +330,19 @@ async function main() {
     // 更新部署信息，添加实现地址
     deploymentInfo.implementations = implementations;
 
-    // 保存部署信息到.env文件
+    // 更新.env文件
     updateEnvFile(deploymentInfo, implementations);
     
-    // 导出合约 ABI
-    const contractNames = [
-      "RealEstateSystem",  // System
-      "RealEstateFacade",  // Facade
-      "RoleManager",
-      "PropertyManager",
-      "PropertyToken",     // TokenFactory
-      "TradingManager",
-      "RewardManager",
-      "SimpleERC20"
-    ];
-    await exportContractABIs(contractNames);
-
+    // 写入部署信息到deployment.json
+    fs.writeFileSync(
+      path.join(__dirname, "../config/deployment.json"),
+      JSON.stringify(deploymentInfo, null, 2)
+    );
+    
     // 生成部署报告
-    const report = generateDeploymentReport(deploymentInfo);
-    console.log('\n部署报告:');
-    console.log(report);
-
+    generateDeploymentReport(deploymentInfo);
+    
+    logger.info("部署成功，所有合约和配置已就绪");
   } catch (error) {
     logger.error("部署失败:", error);
     throw error;

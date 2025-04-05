@@ -5,11 +5,7 @@
 const { ethers } = require('ethers');
 const { ConfigError } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const dotenv = require('dotenv');
-const path = require('path');
-
-// 确保环境变量已加载
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+const config = require('../config');
 
 /**
  * Provider类
@@ -25,34 +21,30 @@ class Provider {
    */
   static async create(options = {}) {
     try {
-      // 优先使用传入的RPC URL，其次使用环境变量中的配置
+      // 优先使用传入的RPC URL，其次根据网络类型确定RPC URL
       let rpcUrl = options.rpcUrl;
-      const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
+      const networkType = options.networkType || config.blockchain.defaultNetwork;
       
       if (!rpcUrl) {
-        // 直接从环境变量获取RPC URL
-        rpcUrl = process.env.RPC_URL;
+        // 根据网络类型从配置获取对应的RPC URL
+        switch (networkType.toLowerCase()) {
+          case 'localhost':
+            rpcUrl = config.blockchain.networks.localhost.rpcUrl;
+            break;
+          case 'testnet':
+            rpcUrl = config.blockchain.networks.testnet.rpcUrl;
+            break;
+          case 'mainnet':
+            rpcUrl = config.blockchain.networks.mainnet.rpcUrl;
+            break;
+          default:
+            Logger.warn(`未知网络类型: ${networkType}，将使用localhost`);
+            rpcUrl = config.blockchain.networks.localhost.rpcUrl;
+        }
         
         if (!rpcUrl) {
-          // 根据网络类型从环境变量获取对应的RPC URL
-          switch (networkType.toLowerCase()) {
-            case 'localhost':
-              rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://localhost:8545';
-              break;
-            case 'testnet':
-              rpcUrl = process.env.TESTNET_RPC_URL;
-              break;
-            case 'mainnet':
-              rpcUrl = process.env.MAINNET_RPC_URL;
-              break;
-            default:
-              rpcUrl = 'http://localhost:8545';
-          }
-          
-          if (!rpcUrl) {
-            Logger.warn(`找不到网络${networkType}的RPC URL配置，将使用默认RPC URL`);
-            rpcUrl = 'http://localhost:8545';
-          }
+          Logger.warn(`找不到网络${networkType}的RPC URL配置，将使用默认RPC URL`);
+          rpcUrl = 'http://localhost:8545';
         }
       }
       
@@ -161,187 +153,33 @@ class Provider {
   }
   
   /**
-   * 获取交易收据
-   * @param {ethers.Provider} provider - Provider实例
-   * @param {string} txHash - 交易哈希
-   * @returns {Promise<Object>} 交易收据
-   */
-  static async getTransactionReceipt(provider, txHash) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider实例不能为空');
-      }
-      
-      if (!txHash) {
-        throw new ConfigError('交易哈希不能为空');
-      }
-      
-      const receipt = await provider.getTransactionReceipt(txHash);
-      Logger.debug('获取交易收据成功', { 
-        txHash, 
-        blockNumber: receipt?.blockNumber,
-        status: receipt?.status
-      });
-      
-      return receipt;
-    } catch (error) {
-      Logger.error(`获取交易收据失败: ${error.message}`, { error, txHash });
-      throw new ConfigError(`获取交易收据失败: ${error.message}`);
-    }
-  }
-  
-  /**
-   * 获取当前的Gas价格
-   * @param {ethers.Provider} provider - Provider实例
-   * @returns {Promise<ethers.BigNumber>} Gas价格
-   */
-  static async getGasPrice(provider) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider不能为空');
-      }
-      
-      const feeData = await provider.getFeeData();
-      Logger.debug('获取Gas价格成功', { gasPrice: feeData.gasPrice.toString() });
-      
-      return feeData.gasPrice;
-    } catch (error) {
-      Logger.error(`获取Gas价格失败: ${error.message}`, { error });
-      throw new ConfigError(`获取Gas价格失败: ${error.message}`);
-    }
-  }
-  
-  /**
-   * 获取特定地址的ETH余额
-   * @param {ethers.Provider} provider - Provider实例
-   * @param {string} address - 钱包地址
-   * @returns {Promise<ethers.BigNumber>} 余额（以wei为单位）
-   */
-  static async getBalance(provider, address) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider不能为空');
-      }
-      
-      if (!address) {
-        throw new ConfigError('钱包地址不能为空');
-      }
-      
-      const balance = await provider.getBalance(address);
-      Logger.debug('获取余额成功', { address, balance: balance.toString() });
-      
-      return balance;
-    } catch (error) {
-      Logger.error(`获取余额失败: ${error.message}`, { error, address });
-      throw new ConfigError(`获取余额失败: ${error.message}`);
-    }
-  }
-  
-  /**
-   * 获取特定区块信息
-   * @param {ethers.Provider} provider - Provider实例
-   * @param {number|string} blockHashOrBlockNumber - 区块哈希或区块高度
-   * @returns {Promise<Object>} 区块信息
-   */
-  static async getBlock(provider, blockHashOrBlockNumber) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider不能为空');
-      }
-      
-      if (blockHashOrBlockNumber === undefined || blockHashOrBlockNumber === null) {
-        throw new ConfigError('区块哈希或区块高度不能为空');
-      }
-      
-      const block = await provider.getBlock(blockHashOrBlockNumber);
-      Logger.debug('获取区块信息成功', { 
-        blockNumber: block?.number,
-        timestamp: block?.timestamp
-      });
-      
-      return block;
-    } catch (error) {
-      Logger.error(`获取区块信息失败: ${error.message}`, { error, blockHashOrBlockNumber });
-      throw new ConfigError(`获取区块信息失败: ${error.message}`);
-    }
-  }
-  
-  /**
-   * 估算交易所需的Gas
-   * @param {ethers.Provider} provider - Provider实例
-   * @param {Object} transaction - 交易对象
-   * @returns {Promise<ethers.BigNumber>} Gas估算值
-   */
-  static async estimateGas(provider, transaction) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider不能为空');
-      }
-      
-      if (!transaction) {
-        throw new ConfigError('交易对象不能为空');
-      }
-      
-      const gasEstimate = await provider.estimateGas(transaction);
-      Logger.debug('估算Gas成功', { gasEstimate: gasEstimate.toString() });
-      
-      return gasEstimate;
-    } catch (error) {
-      Logger.error(`估算Gas失败: ${error.message}`, { error, transaction });
-      throw new ConfigError(`估算Gas失败: ${error.message}`);
-    }
-  }
-  
-  /**
-   * 获取链ID
-   * @param {ethers.Provider} provider - Provider实例
-   * @returns {Promise<number>} 链ID
-   */
-  static async getChainId(provider) {
-    try {
-      if (!provider) {
-        throw new ConfigError('Provider不能为空');
-      }
-      
-      const network = await provider.getNetwork();
-      const chainId = network.chainId;
-      Logger.debug('获取链ID成功', { chainId: chainId.toString() });
-      
-      return chainId;
-    } catch (error) {
-      Logger.error(`获取链ID失败: ${error.message}`, { error });
-      throw new ConfigError(`获取链ID失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 隐藏RPC URL中的敏感信息
-   * @param {string} rpcUrl - RPC URL
-   * @returns {string} 处理后的RPC URL
+   * 隐藏RPC URL的敏感信息
    * @private
+   * @param {string} rpcUrl - RPC URL
+   * @returns {string} 处理后的URL
    */
   static _maskRpcUrl(rpcUrl) {
-    if (!rpcUrl) return '';
+    if (!rpcUrl) return '<空URL>';
     
     try {
-      // 隐藏API密钥
       const url = new URL(rpcUrl);
       
-      // 检查URL中是否包含API密钥等敏感信息
+      // 隐藏API密钥等敏感信息
       if (url.username || url.password) {
-        return `${url.protocol}//*****:*****@${url.host}${url.pathname}`;
+        return `${url.protocol}//*****:****@${url.host}${url.pathname}`;
       }
       
-      // 检查查询参数中是否有常见的API密钥
-      if (url.searchParams.has('apiKey') || url.searchParams.has('api_key')) {
-        return `${url.protocol}//${url.host}${url.pathname}?apiKey=*****`;
+      // 隐藏查询参数中的敏感信息
+      if (url.search && url.search.length > 1) {
+        return `${url.origin}${url.pathname}?*****`;
       }
       
       return rpcUrl;
     } catch (error) {
-      return rpcUrl; // 如果解析失败，返回原始URL
+      // 如果URL无效，返回原始URL
+      return rpcUrl;
     }
   }
 }
 
-module.exports = Provider; 
+module.exports = Provider;
