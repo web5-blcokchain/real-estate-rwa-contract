@@ -152,6 +152,30 @@ class Provider {
   }
   
   /**
+   * 获取当前Gas价格
+   * @param {ethers.Provider} provider - Provider实例
+   * @returns {Promise<bigint>} Gas价格（wei）
+   */
+  static async getGasPrice(provider) {
+    try {
+      if (!provider) {
+        throw new ConfigError('Provider实例不能为空');
+      }
+      
+      const gasPrice = await provider.getFeeData();
+      Logger.debug('获取Gas价格成功', { 
+        gasPrice: gasPrice.gasPrice?.toString() || 'N/A',
+        maxFeePerGas: gasPrice.maxFeePerGas?.toString() || 'N/A',
+        maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas?.toString() || 'N/A'
+      });
+      
+      return gasPrice.gasPrice || BigInt(0);
+    } catch (error) {
+      throw new ConfigError(`获取Gas价格失败: ${error.message}`);
+    }
+  }
+  
+  /**
    * 隐藏RPC URL的敏感信息
    * @private
    * @param {string} rpcUrl - RPC URL

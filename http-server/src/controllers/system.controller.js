@@ -13,8 +13,18 @@ const { success, error, paginated } = require('../utils/responseFormatter');
  */
 async function getSystemStatus(req, res, next) {
   try {
-    // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    // 检查RealEstateFacade合约实例是否存在
+    let facade;
+    try {
+      facade = await contractService.createContractInstance('RealEstateFacade');
+    } catch (contractErr) {
+      Logger.warn(`找不到合约地址: RealEstateFacade`, { error: contractErr });
+      return success(res, {
+        statusCode: -1,
+        statusName: 'CONTRACT_NOT_DEPLOYED',
+        error: 'RealEstateFacade合约未部署'
+      });
+    }
     
     // 获取系统合约地址
     const systemAddress = await contractService.callMethod(facade, 'system');
@@ -33,13 +43,13 @@ async function getSystemStatus(req, res, next) {
       3: 'LOCKED'
     };
     
-    return res.json(success({
+    return success(res, {
       statusCode: parseInt(status),
       statusName: statusMap[status] || 'UNKNOWN'
-    }));
+    });
   } catch (err) {
     Logger.error(`获取系统状态失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取系统状态失败', err));
+    return next(err);
   }
 }
 
@@ -66,13 +76,13 @@ async function getSystemVersion(req, res, next) {
     // 获取版本历史记录数量
     const versionHistoryCount = await contractService.callMethod(system, 'getVersionHistoryCount');
     
-    return res.json(success({
+    return success(res, {
       currentVersion: parseInt(version),
       versionHistoryCount: parseInt(versionHistoryCount.toString())
-    }));
+    });
   } catch (err) {
     Logger.error(`获取系统版本信息失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取系统版本信息失败', err));
+    return error(res, '获取系统版本信息失败', 500);
   }
 }
 
@@ -125,15 +135,15 @@ async function getVersionHistory(req, res, next) {
     }
     
     // 返回分页结果
-    return res.json(paginated(versionHistory, {
+    return paginated(res, versionHistory, {
       page,
       pageSize: limit,
       totalItems,
       totalPages
-    }));
+    });
   } catch (err) {
     Logger.error(`获取系统版本历史失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取系统版本历史失败', err));
+    return error(res, '获取系统版本历史失败', 500);
   }
 }
 
@@ -170,7 +180,7 @@ async function getSystemComponents(req, res, next) {
       3: 'LOCKED'
     };
     
-    return res.json(success({
+    return success(res, {
       system: {
         address: systemAddress,
         status: parseInt(status),
@@ -199,10 +209,10 @@ async function getSystemComponents(req, res, next) {
           name: 'RewardManager'
         }
       }
-    }));
+    });
   } catch (err) {
     Logger.error(`获取系统组件信息失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取系统组件信息失败', err));
+    return error(res, '获取系统组件信息失败', 500);
   }
 }
 
@@ -216,7 +226,7 @@ async function pauseSystem(req, res, next) {
   try {
     const { privateKey } = req.body;
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -247,7 +257,7 @@ async function pauseSystem(req, res, next) {
     const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
-      return res.status(403).json(error('只有管理员可以暂停系统'));
+      return error(res, '只有管理员可以暂停系统', 403);
     }
     
     // 暂停系统
@@ -258,14 +268,14 @@ async function pauseSystem(req, res, next) {
       { wallet }
     );
     
-    return res.json(success({
+    return success(res, {
       success: true,
       txHash: tx.transactionHash,
       message: '系统已暂停'
-    }));
+    });
   } catch (err) {
     Logger.error(`暂停系统失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('暂停系统失败', err));
+    return error(res, '暂停系统失败', 500);
   }
 }
 
@@ -279,7 +289,7 @@ async function unpauseSystem(req, res, next) {
   try {
     const { privateKey } = req.body;
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -310,7 +320,7 @@ async function unpauseSystem(req, res, next) {
     const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
-      return res.status(403).json(error('只有管理员可以恢复系统'));
+      return error(res, '只有管理员可以恢复系统', 403);
     }
     
     // 恢复系统
@@ -321,14 +331,14 @@ async function unpauseSystem(req, res, next) {
       { wallet }
     );
     
-    return res.json(success({
+    return success(res, {
       success: true,
       txHash: tx.transactionHash,
       message: '系统已恢复'
-    }));
+    });
   } catch (err) {
     Logger.error(`恢复系统失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('恢复系统失败', err));
+    return error(res, '恢复系统失败', 500);
   }
 }
 
@@ -343,21 +353,21 @@ async function updateSystemComponent(req, res, next) {
     const { componentName, newAddress, privateKey } = req.body;
     
     if (!componentName) {
-      return res.status(400).json(error('组件名称不能为空'));
+      return error(res, '组件名称不能为空', 400);
     }
     
     if (!newAddress || !Validation.isValidAddress(newAddress)) {
-      return res.status(400).json(error('新地址无效'));
+      return error(res, '新地址无效', 400);
     }
     
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 验证组件名称
     const validComponents = ['roleManager', 'propertyManager', 'tradingManager', 'rewardManager'];
     if (!validComponents.includes(componentName)) {
-      return res.status(400).json(error('无效的组件名称'));
+      return error(res, '无效的组件名称', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -382,7 +392,7 @@ async function updateSystemComponent(req, res, next) {
     const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
-      return res.status(403).json(error('只有管理员可以更新系统组件'));
+      return error(res, '只有管理员可以更新系统组件', 403);
     }
     
     // 获取当前组件地址
@@ -402,16 +412,16 @@ async function updateSystemComponent(req, res, next) {
       { wallet }
     );
     
-    return res.json(success({
+    return success(res, {
       success: true,
       component: componentName,
       oldAddress: currentAddress,
       newAddress,
       txHash: tx.transactionHash
-    }));
+    });
   } catch (err) {
     Logger.error(`更新系统组件失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('更新系统组件失败', err));
+    return error(res, '更新系统组件失败', 500);
   }
 }
 
@@ -426,11 +436,11 @@ async function upgradeSystemVersion(req, res, next) {
     const { description, privateKey } = req.body;
     
     if (!description) {
-      return res.status(400).json(error('版本描述不能为空'));
+      return error(res, '版本描述不能为空', 400);
     }
     
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -461,7 +471,7 @@ async function upgradeSystemVersion(req, res, next) {
     const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
-      return res.status(403).json(error('只有管理员可以升级系统版本'));
+      return error(res, '只有管理员可以升级系统版本', 403);
     }
     
     // 获取当前版本
@@ -478,16 +488,16 @@ async function upgradeSystemVersion(req, res, next) {
     // 获取新版本
     const newVersion = await contractService.callMethod(system, 'getVersion');
     
-    return res.json(success({
+    return success(res, {
       success: true,
       oldVersion: parseInt(currentVersion),
       newVersion: parseInt(newVersion),
       description,
       txHash: tx.transactionHash
-    }));
+    });
   } catch (err) {
     Logger.error(`升级系统版本失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('升级系统版本失败', err));
+    return error(res, '升级系统版本失败', 500);
   }
 }
 

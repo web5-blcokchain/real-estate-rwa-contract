@@ -21,23 +21,26 @@ function success(res, data = null, statusCode = 200) {
 /**
  * 错误响应格式化
  * @param {Object} res - Express响应对象
- * @param {Error|string} error - 错误对象或错误消息
+ * @param {Error|string} err - 错误对象或错误消息
  * @param {number} statusCode - HTTP状态码，默认400
  * @returns {Object} 格式化后的响应
  */
-function error(res, error, statusCode = 400) {
-  // 使用ErrorHandler处理错误
-  const handledError = ErrorHandler.handle(error, { type: 'api' });
-  
-  // 确定状态码
-  statusCode = handledError.statusCode || statusCode;
+function error(res, err, statusCode = 400) {
+  // 检查res是否有效
+  if (!res || typeof res.status !== 'function' || typeof res.json !== 'function') {
+    console.error('Invalid response object in error formatter:', res);
+    throw new Error('Invalid response object provided to error formatter');
+  }
+
+  // 如果是字符串，创建一个错误对象
+  const error = typeof err === 'string' ? new Error(err) : err;
   
   // 构建错误响应
   return res.status(statusCode).json({
     success: false,
     error: {
-      code: handledError.code || 'ERROR',
-      message: handledError.message || '未知错误'
+      code: error.code || 'ERROR',
+      message: error.message || '未知错误'
     },
     timestamp: new Date().toISOString()
   });

@@ -17,11 +17,12 @@
     "deploy:mainnet": "hardhat run scripts/deploy-step.js --network mainnet",
     "verify:testnet": "hardhat run scripts/verify-deployment.js --network testnet",
     "verify:mainnet": "hardhat run scripts/verify-deployment.js --network mainnet",
-    "dev:http": "cd http-server && yarn dev",
     "start:node": "hardhat node",
     "test:env": "node test-env.js",
     "server:dev": "nodemon http-server/src/server.js",
-    "server:start": "node http-server/src/server.js"
+    "server:start": "node http-server/src/server.js",
+    "test:api": "node test-api.js",
+    "api": "node http-test.js"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.3",
@@ -31,6 +32,7 @@
     "ethers": "^6.0.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
+    "node-fetch": "^2.6.7",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.17.0",

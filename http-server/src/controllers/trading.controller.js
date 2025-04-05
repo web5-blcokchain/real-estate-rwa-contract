@@ -78,15 +78,15 @@ async function getAllOrders(req, res, next) {
     }
     
     // 返回分页结果
-    return res.json(paginated(orders, {
+    return paginated(res, orders, {
       page,
       pageSize: limit,
       totalItems,
       totalPages
-    }));
+    });
   } catch (err) {
     Logger.error(`获取交易订单列表失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取交易订单列表失败', err));
+    return error(res, '获取交易订单列表失败', 500);
   }
 }
 
@@ -100,7 +100,7 @@ async function getOrderById(req, res, next) {
   try {
     const orderId = req.params.orderId;
     if (!orderId || !Validation.isValidId(orderId)) {
-      return res.status(400).json(error('订单ID无效'));
+      return error(res, '订单ID无效', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -115,7 +115,7 @@ async function getOrderById(req, res, next) {
     
     // 验证订单存在
     if (!orderData || orderData.seller === '0x0000000000000000000000000000000000000000') {
-      return res.status(404).json(error('订单不存在'));
+      return error(res, '订单不存在', 404);
     }
     
     // 获取通证信息
@@ -158,10 +158,10 @@ async function getOrderById(req, res, next) {
       orderDetails.propertyId = propertyData.propertyId;
     }
     
-    return res.json(success(orderDetails));
+    return success(res, orderDetails);
   } catch (err) {
     Logger.error(`获取订单详情失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取订单详情失败', err));
+    return error(res, '获取订单详情失败', 500);
   }
 }
 
@@ -177,19 +177,19 @@ async function createOrder(req, res, next) {
     const { token, amount, price, privateKey } = req.body;
     
     if (!token || !Validation.isValidAddress(token)) {
-      return res.status(400).json(error('通证地址无效'));
+      return error(res, '通证地址无效', 400);
     }
     
     if (!amount || !Validation.isValidAmount(amount)) {
-      return res.status(400).json(error('出售数量无效'));
+      return error(res, '出售数量无效', 400);
     }
     
     if (!price || !Validation.isValidAmount(price)) {
-      return res.status(400).json(error('价格无效'));
+      return error(res, '价格无效', 400);
     }
     
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -212,7 +212,7 @@ async function createOrder(req, res, next) {
     // 检查余额
     const balance = await contractService.callMethod(tokenContract, 'balanceOf', [sellerAddress]);
     if (balance.lt(amount)) {
-      return res.status(400).json(error('通证余额不足'));
+      return error(res, '通证余额不足', 400);
     }
     
     // 检查授权
@@ -253,13 +253,13 @@ async function createOrder(req, res, next) {
       }
     }
     
-    return res.status(201).json(success({
+    return success(res, {
       orderId,
       txHash: tx.transactionHash
-    }));
+    }, 201);
   } catch (err) {
     Logger.error(`创建出售订单失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('创建出售订单失败', err));
+    return error(res, '创建出售订单失败', 500);
   }
 }
 
@@ -273,13 +273,13 @@ async function executeOrder(req, res, next) {
   try {
     const orderId = req.params.orderId;
     if (!orderId || !Validation.isValidId(orderId)) {
-      return res.status(400).json(error('订单ID无效'));
+      return error(res, '订单ID无效', 400);
     }
     
     // 验证请求参数
     const { privateKey } = req.body;
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -294,7 +294,7 @@ async function executeOrder(req, res, next) {
     
     // 验证订单存在且活跃
     if (!orderData || !orderData.active) {
-      return res.status(404).json(error('订单不存在或已被取消'));
+      return error(res, '订单不存在或已被取消', 404);
     }
     
     // 创建钱包
@@ -305,7 +305,7 @@ async function executeOrder(req, res, next) {
     // 检查买家ETH余额
     const buyerBalance = await provider.getBalance(buyerAddress);
     if (buyerBalance.lt(orderData.price)) {
-      return res.status(400).json(error('ETH余额不足以完成交易'));
+      return error(res, 'ETH余额不足以完成交易', 400);
     }
     
     // 使用钱包创建交易管理器合约实例
@@ -322,16 +322,16 @@ async function executeOrder(req, res, next) {
       { wallet, value: orderData.price }
     );
     
-    return res.json(success({
+    return success(res, {
       orderId,
       txHash: tx.transactionHash,
       buyer: buyerAddress,
       amount: orderData.amount.toString(),
       price: orderData.price.toString()
-    }));
+    });
   } catch (err) {
     Logger.error(`执行交易订单失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('执行交易订单失败', err));
+    return error(res, '执行交易订单失败', 500);
   }
 }
 
@@ -345,13 +345,13 @@ async function cancelOrder(req, res, next) {
   try {
     const orderId = req.params.orderId;
     if (!orderId || !Validation.isValidId(orderId)) {
-      return res.status(400).json(error('订单ID无效'));
+      return error(res, '订单ID无效', 400);
     }
     
     // 验证请求参数
     const { privateKey } = req.body;
     if (!privateKey) {
-      return res.status(400).json(error('私钥不能为空'));
+      return error(res, '私钥不能为空', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -366,7 +366,7 @@ async function cancelOrder(req, res, next) {
     
     // 验证订单存在且活跃
     if (!orderData || !orderData.active) {
-      return res.status(404).json(error('订单不存在或已被取消'));
+      return error(res, '订单不存在或已被取消', 404);
     }
     
     // 创建钱包
@@ -376,7 +376,7 @@ async function cancelOrder(req, res, next) {
     
     // 验证调用者是订单创建者
     if (userAddress.toLowerCase() !== orderData.seller.toLowerCase()) {
-      return res.status(403).json(error('只有订单创建者才能取消订单'));
+      return error(res, '只有订单创建者才能取消订单', 403);
     }
     
     // 使用钱包创建交易管理器合约实例
@@ -393,13 +393,13 @@ async function cancelOrder(req, res, next) {
       { wallet }
     );
     
-    return res.json(success({
+    return success(res, {
       orderId,
       txHash: tx.transactionHash
-    }));
+    });
   } catch (err) {
     Logger.error(`取消交易订单失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('取消交易订单失败', err));
+    return error(res, '取消交易订单失败', 500);
   }
 }
 
@@ -413,7 +413,7 @@ async function getUserOrders(req, res, next) {
   try {
     const userAddress = req.params.address;
     if (!userAddress || !Validation.isValidAddress(userAddress)) {
-      return res.status(400).json(error('用户地址无效'));
+      return error(res, '用户地址无效', 400);
     }
     
     // 获取分页参数
@@ -473,15 +473,15 @@ async function getUserOrders(req, res, next) {
     }
     
     // 返回分页结果
-    return res.json(paginated(orders, {
+    return paginated(res, orders, {
       page,
       pageSize: limit,
       totalItems,
       totalPages
-    }));
+    });
   } catch (err) {
     Logger.error(`获取用户交易订单列表失败: ${err.message}`, { error: err });
-    return res.status(500).json(error('获取用户交易订单列表失败', err));
+    return error(res, '获取用户交易订单列表失败', 500);
   }
 }
 

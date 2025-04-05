@@ -1,0 +1,7 @@
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "请求的资源不存在"
+  }
+}

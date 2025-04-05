@@ -248,6 +248,18 @@ function updateEnvFile(deploymentInfo, implementations) {
     updatedContent = updatedContent.split(contractSectionMarker)[0].trim();
   }
   
+  // 合约名称映射关系，使用完整名称作为环境变量
+  const contractFullNames = {
+    'SimpleERC20': 'SimpleERC20',
+    'RoleManager': 'RoleManager',
+    'PropertyManager': 'PropertyManager',
+    'TradingManager': 'TradingManager',
+    'RewardManager': 'RewardManager',
+    'PropertyToken': 'PropertyToken',
+    'System': 'RealEstateSystem',
+    'Facade': 'RealEstateFacade'
+  };
+  
   // 添加新的合约地址部分
   updatedContent += `\n\n# 以下是合约部署后自动生成的地址信息（由scripts/deploy-step.js于${new Date().toISOString()}更新）
 # 这些地址是部署期间自动写入的，无需手动修改
@@ -256,20 +268,22 @@ function updateEnvFile(deploymentInfo, implementations) {
 CONTRACT_SIMPLEERC20_ADDRESS=${deploymentInfo.contracts.SimpleERC20}
 
 # 系统核心合约地址
-CONTRACT_ROLEMANAGER_ADDRESS=${deploymentInfo.contracts.RoleManager}
-CONTRACT_PROPERTYMANAGER_ADDRESS=${deploymentInfo.contracts.PropertyManager}
-CONTRACT_TRADINGMANAGER_ADDRESS=${deploymentInfo.contracts.TradingManager}
-CONTRACT_REWARDMANAGER_ADDRESS=${deploymentInfo.contracts.RewardManager}
-CONTRACT_PROPERTYTOKEN_ADDRESS=${deploymentInfo.contracts.PropertyToken}
-CONTRACT_SYSTEM_ADDRESS=${deploymentInfo.contracts.System}
-CONTRACT_FACADE_ADDRESS=${deploymentInfo.contracts.Facade}
-
-# 代理合约实现地址（仅供参考，通常不需要直接使用）
 `;
+
+  // 添加带有完整名称的合约地址
+  Object.entries(deploymentInfo.contracts).forEach(([shortName, address]) => {
+    if (shortName !== 'SimpleERC20') {
+      const fullName = contractFullNames[shortName] || shortName;
+      updatedContent += `CONTRACT_${fullName.toUpperCase()}_ADDRESS=${address}\n`;
+    }
+  });
+
+  updatedContent += `\n# 代理合约实现地址（仅供参考，通常不需要直接使用）\n`;
 
   // 添加实现合约地址
   for (const [name, address] of Object.entries(implementations)) {
-    updatedContent += `CONTRACT_${name.toUpperCase()}_IMPLEMENTATION=${address}\n`;
+    const fullName = contractFullNames[name] || name;
+    updatedContent += `CONTRACT_${fullName.toUpperCase()}_IMPLEMENTATION=${address}\n`;
   }
   
   // 写入临时文件

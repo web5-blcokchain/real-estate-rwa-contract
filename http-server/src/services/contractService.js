@@ -102,8 +102,19 @@ class ContractService {
    */
   getContractAddress(contractName) {
     try {
-      // 尝试从环境变量获取
-      const envKey = `CONTRACT_${contractName.toUpperCase()}_ADDRESS`;
+      // 合约别名映射表，用于将短名称映射到完整合约名称
+      const contractAliases = {
+        'Facade': 'REALESTATEFACADE',
+        'System': 'REALESTATESYSTEM',
+        'RealEstateFacade': 'REALESTATEFACADE',
+        'RealEstateSystem': 'REALESTATESYSTEM'
+      };
+      
+      // 查找环境变量名
+      const envName = contractAliases[contractName] || contractName.toUpperCase();
+      const envKey = `CONTRACT_${envName}_ADDRESS`;
+      
+      Logger.debug(`尝试从环境变量 ${envKey} 获取合约地址`);
       const address = process.env[envKey];
       
       if (address) {
@@ -122,7 +133,7 @@ class ContractService {
         }
       }
 
-      Logger.warn(`找不到合约地址: ${contractName}`);
+      Logger.warn(`找不到合约地址: ${contractName}，尝试的环境变量: ${envKey}`);
       return null;
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
