@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "data": {
+    "networkType": "localhost",
+    "chainId": "31337",
+    "name": "unknown",
+    "blockNumber": 33,
+    "gasPrice": "1013739796",
+    "formattedGasPrice": "1.01 Gwei",
+    "isConnected": true
+  },
+  "timestamp": "2025-04-05T09:11:45.306Z"
+}

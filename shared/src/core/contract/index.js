@@ -15,7 +15,10 @@ const { ListenerStatus, ContractEvent } = require('./event');
  */
 const Contract = {
   // 工厂方法，用于创建合约实例
-  ...ContractFactory,
+  create: ContractFactory.create,
+  createReadOnly: ContractFactory.createReadOnly,
+  createFromName: ContractFactory.createFromName,
+  loadContractAbi: ContractFactory.loadContractAbi,
   
   // 合约调用功能
   call: ContractCaller.call,

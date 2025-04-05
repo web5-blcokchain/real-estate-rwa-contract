@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": 4000,
+    "message": "this._formatArgs is not a function"
+  },
+  "timestamp": "2025-04-05T09:11:52.120Z"
+}

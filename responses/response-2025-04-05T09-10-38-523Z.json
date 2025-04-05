@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "data": {
+    "statusCode": -1,
+    "statusName": "CONTRACT_NOT_DEPLOYED",
+    "error": "RealEstateFacade合约未部署"
+  },
+  "timestamp": "2025-04-05T09:10:38.521Z"
+}
