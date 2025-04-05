@@ -2,26 +2,45 @@
  * 错误码定义
  */
 const ErrorCodes = {
-  NETWORK_ERROR: 1000,
-  PROVIDER_ERROR: 1500,
-  WALLET_ERROR: 2000,
-  CONTRACT_ERROR: 3000,
-  TRANSACTION_ERROR: 4000,
-  GAS_ERROR: 5000,
-  CONFIG_ERROR: 6000,
-  VALIDATION_ERROR: 7000,
-  LOGGER_ERROR: 8000
+  GENERAL_ERROR: 1000,
+  NETWORK_ERROR: 2000,
+  NETWORK_TIMEOUT: 2001,
+  NETWORK_DISCONNECTED: 2002,
+  WALLET_ERROR: 3000,
+  WALLET_NOT_FOUND: 3001,
+  WALLET_ACCESS_DENIED: 3002,
+  INSUFFICIENT_BALANCE: 3003,
+  CONTRACT_ERROR: 4000,
+  CONTRACT_NOT_FOUND: 4001,
+  CONTRACT_CALL_ERROR: 4002,
+  CONTRACT_EVENT_ERROR: 4003,
+  TX_ERROR: 5000,
+  TX_REJECTED: 5001,
+  TX_DROPPED: 5002,
+  TX_TIMEOUT: 5003,
+  TX_REPLACED: 5004,
+  GAS_ERROR: 6000,
+  GAS_ESTIMATION_FAILED: 6001,
+  GAS_LIMIT_EXCEEDED: 6002,
+  CONFIG_ERROR: 7000,
+  CONFIG_NOT_FOUND: 7001,
+  INVALID_CONFIG: 7002,
+  LOGGER_ERROR: 8000,
+  VALIDATION_ERROR: 9000,
+  INVALID_ADDRESS: 9001,
+  INVALID_HASH: 9002,
+  INVALID_AMOUNT: 9003
 };
 
 /**
  * 区块链基础错误类
  */
 class BlockchainError extends Error {
-  constructor(message, code, context = {}) {
+  constructor(message, options = {}) {
     super(message);
     this.name = 'BlockchainError';
-    this.code = code || ErrorCodes.NETWORK_ERROR;
-    this.context = context;
+    this.code = options.code || ErrorCodes.GENERAL_ERROR;
+    this.context = options.context || {};
     this.timestamp = new Date().toISOString();
     Error.captureStackTrace(this, this.constructor);
   }
@@ -54,19 +73,12 @@ class BlockchainError extends Error {
  * 网络错误类
  */
 class NetworkError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.NETWORK_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.NETWORK_ERROR,
+      context: options.context || {}
+    });
     this.name = 'NetworkError';
-  }
-}
-
-/**
- * Provider错误类
- */
-class ProviderError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.PROVIDER_ERROR, context);
-    this.name = 'ProviderError';
   }
 }
 
@@ -74,8 +86,11 @@ class ProviderError extends BlockchainError {
  * 钱包错误类
  */
 class WalletError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.WALLET_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.WALLET_ERROR,
+      context: options.context || {}
+    });
     this.name = 'WalletError';
   }
 }
@@ -84,8 +99,11 @@ class WalletError extends BlockchainError {
  * 合约错误类
  */
 class ContractError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.CONTRACT_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.CONTRACT_ERROR,
+      context: options.context || {}
+    });
     this.name = 'ContractError';
   }
 }
@@ -94,8 +112,11 @@ class ContractError extends BlockchainError {
  * 交易错误类
  */
 class TransactionError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.TRANSACTION_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.TX_ERROR,
+      context: options.context || {}
+    });
     this.name = 'TransactionError';
   }
 }
@@ -104,8 +125,11 @@ class TransactionError extends BlockchainError {
  * Gas错误类
  */
 class GasError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.GAS_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.GAS_ERROR,
+      context: options.context || {}
+    });
     this.name = 'GasError';
   }
 }
@@ -114,8 +138,11 @@ class GasError extends BlockchainError {
  * 配置错误类
  */
 class ConfigError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.CONFIG_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.CONFIG_ERROR,
+      context: options.context || {}
+    });
     this.name = 'ConfigError';
   }
 }
@@ -124,8 +151,11 @@ class ConfigError extends BlockchainError {
  * 验证错误类
  */
 class ValidationError extends BlockchainError {
-  constructor(message, context = {}) {
-    super(message, ErrorCodes.VALIDATION_ERROR, context);
+  constructor(message, options = {}) {
+    super(message, {
+      code: options.code || ErrorCodes.VALIDATION_ERROR,
+      context: options.context || {}
+    });
     this.name = 'ValidationError';
   }
 }
@@ -134,10 +164,10 @@ class ValidationError extends BlockchainError {
  * 日志错误类
  */
 class LoggerError extends BlockchainError {
-  constructor(message, context = {}) {
+  constructor(message, options = {}) {
     super(message, {
-      code: ErrorCodes.LOGGER_ERROR,
-      context
+      code: options.code || ErrorCodes.LOGGER_ERROR,
+      context: options.context || {}
     });
     this.name = 'LoggerError';
   }
@@ -150,37 +180,73 @@ const ErrorHandler = {
   /**
    * 处理错误
    * @param {Error} error - 错误对象
-   * @param {Object} context - 错误上下文
+   * @param {Object} [options={}] - 处理选项
+   * @param {string} [options.type] - 错误类型
+   * @param {Object} [options.context] - 额外上下文
    * @returns {BlockchainError} 处理后的错误
    */
-  handle(error, context = {}) {
+  handle(error, options = {}) {
     if (error instanceof BlockchainError) {
+      if (options.context) {
+        error.context = { ...error.context, ...options.context };
+      }
       return error;
     }
 
-    // 根据错误类型创建对应的错误对象
-    if (error.message.includes('network')) {
-      return new NetworkError(error.message, context);
-    } else if (error.message.includes('wallet')) {
-      return new WalletError(error.message, context);
-    } else if (error.message.includes('contract')) {
-      return new ContractError(error.message, context);
-    } else if (error.message.includes('transaction')) {
-      return new TransactionError(error.message, context);
-    } else if (error.message.includes('gas')) {
-      return new GasError(error.message, context);
-    } else if (error.message.includes('config')) {
-      return new ConfigError(error.message, context);
-    } else if (error.message.includes('validation')) {
-      return new ValidationError(error.message, context);
-    } else if (error.message.includes('logger')) {
-      return new LoggerError(error.message, context);
-    } else if (error.message.includes('provider')) {
-      return new ProviderError(error.message, context);
+    const message = error.message || '未知错误';
+    const errorContext = options.context || {};
+
+    if (
+      options.type === 'network' ||
+      message.includes('network') ||
+      message.includes('timeout') ||
+      message.includes('ETIMEDOUT') ||
+      message.includes('ECONNRESET')
+    ) {
+      return new NetworkError(message, { context: errorContext });
+    } else if (
+      options.type === 'wallet' ||
+      message.includes('wallet') ||
+      message.includes('account') ||
+      message.includes('private key')
+    ) {
+      return new WalletError(message, { context: errorContext });
+    } else if (
+      options.type === 'contract' ||
+      message.includes('contract') ||
+      message.includes('execution reverted')
+    ) {
+      return new ContractError(message, { context: errorContext });
+    } else if (
+      options.type === 'transaction' ||
+      message.includes('transaction') ||
+      message.includes('tx') ||
+      message.includes('underpriced')
+    ) {
+      return new TransactionError(message, { context: errorContext });
+    } else if (
+      options.type === 'gas' ||
+      message.includes('gas') ||
+      message.includes('fee')
+    ) {
+      return new GasError(message, { context: errorContext });
+    } else if (
+      options.type === 'config' ||
+      message.includes('config') ||
+      message.includes('setting')
+    ) {
+      return new ConfigError(message, { context: errorContext });
+    } else if (
+      options.type === 'validation' ||
+      message.includes('invalid') ||
+      message.includes('valid')
+    ) {
+      return new ValidationError(message, { context: errorContext });
+    } else if (message.includes('logger')) {
+      return new LoggerError(message, { context: errorContext });
     }
 
-    // 默认返回基础错误
-    return new BlockchainError(error.message, ErrorCodes.NETWORK_ERROR, context);
+    return new BlockchainError(message, { context: errorContext });
   }
 };
 
@@ -188,7 +254,6 @@ module.exports = {
   ErrorCodes,
   BlockchainError,
   NetworkError,
-  ProviderError,
   WalletError,
   ContractError,
   TransactionError,

@@ -13,27 +13,40 @@ const Contract = require('./core/contract');
 const Provider = require('./core/provider');
 const Wallet = require('./core/wallet');
 
+// 工具函数
+const { 
+  Logger,
+  Validation,
+  PerformanceMonitor,
+  SecurityAuditor,
+  AddressManager,
+  ErrorCodes,
+  BlockchainError,
+  NetworkError,
+  WalletError,
+  ContractError,
+  TransactionError,
+  GasError,
+  ConfigError,
+  ValidationError,
+  LoggerError,
+  ErrorHandler
+} = require('./utils');
+
 // 配置
 const config = require('./config');
 
-// 工具函数
-const utils = require('./utils');
-
-// 日志配置
-const Logger = utils.Logger;
+// 日志配置 - 不依赖配置模块
 try {
-  // 创建默认日志目录（如果不存在）
-  const fs = require('fs');
-  const path = require('path');
-  const logDir = process.env.LOG_DIR || './logs';
-  
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
-  
   // 只有在运行时环境中才配置日志
   if (process.env.NODE_ENV !== 'test') {
-    Logger.configure(config.logger);
+    Logger.configure({
+      level: process.env.LOG_LEVEL || 'info',
+      directory: process.env.LOG_DIR || require('path').join(process.cwd(), 'logs'),
+      maxSize: process.env.LOG_MAX_SIZE || '10m',
+      maxFiles: parseInt(process.env.LOG_MAX_FILES || '5', 10),
+      console: process.env.LOG_CONSOLE !== 'false'
+    });
   }
 } catch (error) {
   console.warn('日志配置失败，使用默认配置:', error.message);
@@ -65,9 +78,43 @@ module.exports = {
   // 配置
   config,
   
-  // 导出常用工具
-  ...utils,
+  // 工具类
+  Logger,
+  Validation,
+  PerformanceMonitor,
+  SecurityAuditor,
+  AddressManager,
   
-  // 导出所有工具为命名空间
-  utils
+  // 错误类型
+  ErrorCodes,
+  BlockchainError,
+  NetworkError,
+  WalletError,
+  ContractError,
+  TransactionError,
+  GasError,
+  ConfigError,
+  ValidationError,
+  LoggerError,
+  ErrorHandler,
+  
+  // 工具命名空间（不推荐直接使用）
+  utils: {
+    Logger,
+    Validation,
+    PerformanceMonitor,
+    SecurityAuditor,
+    AddressManager,
+    ErrorCodes,
+    BlockchainError,
+    NetworkError,
+    WalletError,
+    ContractError,
+    TransactionError,
+    GasError,
+    ConfigError,
+    ValidationError,
+    LoggerError,
+    ErrorHandler
+  }
 }; 

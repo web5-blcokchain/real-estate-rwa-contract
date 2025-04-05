@@ -5,16 +5,21 @@
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
+const { LoggerError } = require('./errors');
 
 /**
- * 日志错误类
+ * 安全地创建目录
+ * @param {string} dirPath - 目录路径
+ * @private
  */
-class LoggerError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'LoggerError';
-    this.code = 8000;
-    this.timestamp = new Date().toISOString();
+function ensureDirectoryExists(dirPath) {
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    return true;
+  } catch (error) {
+    throw new LoggerError(`无法创建目录 ${dirPath}: ${error.message}`);
   }
 }
 
@@ -28,7 +33,7 @@ class Logger {
     // 默认配置
     this.config = {
       level: 'info',
-      directory: path.join(process.cwd(), 'logs'),
+      directory: process.env.LOG_DIR || path.join(process.cwd(), 'logs'),
       maxSize: 10 * 1024 * 1024, // 10MB
       maxFiles: 5,
       console: true
@@ -78,14 +83,8 @@ class Logger {
     // 合并配置
     this.config = { ...this.config, ...config };
     
-    try {
-      // 确保日志目录存在
-      if (!fs.existsSync(this.config.directory)) {
-        fs.mkdirSync(this.config.directory, { recursive: true });
-      }
-    } catch (error) {
-      throw new LoggerError(`无法创建日志目录: ${error.message}`);
-    }
+    // 确保根日志目录存在
+    ensureDirectoryExists(this.config.directory);
     
     // 清除现有日志实例，下次使用时会重新创建
     this.loggers.clear();
@@ -98,15 +97,15 @@ class Logger {
    * @private
    */
   _getLogger(module = 'default') {
+    // 检查缓存中是否已有该模块的日志实例
     if (this.loggers.has(module)) {
       return this.loggers.get(module);
     }
 
     try {
+      // 创建模块特定的日志目录
       const moduleDir = path.join(this.config.directory, module);
-      if (!fs.existsSync(moduleDir)) {
-        fs.mkdirSync(moduleDir, { recursive: true });
-      }
+      ensureDirectoryExists(moduleDir);
 
       // 标准格式
       const logFormat = winston.format.combine(
@@ -162,6 +161,7 @@ class Logger {
         transports
       });
 
+      // 缓存日志实例
       this.loggers.set(module, logger);
       return logger;
     } catch (error) {

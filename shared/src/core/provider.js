@@ -5,7 +5,6 @@
 const { ethers } = require('ethers');
 const { ConfigError } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const config = require('../config');
 
 /**
  * Provider类
@@ -23,23 +22,23 @@ class Provider {
     try {
       // 优先使用传入的RPC URL，其次根据网络类型确定RPC URL
       let rpcUrl = options.rpcUrl;
-      const networkType = options.networkType || config.blockchain.defaultNetwork;
+      const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
       
       if (!rpcUrl) {
-        // 根据网络类型从配置获取对应的RPC URL
+        // 根据网络类型从环境变量获取对应的RPC URL
         switch (networkType.toLowerCase()) {
           case 'localhost':
-            rpcUrl = config.blockchain.networks.localhost.rpcUrl;
+            rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://localhost:8545';
             break;
           case 'testnet':
-            rpcUrl = config.blockchain.networks.testnet.rpcUrl;
+            rpcUrl = process.env.TESTNET_RPC_URL;
             break;
           case 'mainnet':
-            rpcUrl = config.blockchain.networks.mainnet.rpcUrl;
+            rpcUrl = process.env.MAINNET_RPC_URL;
             break;
           default:
             Logger.warn(`未知网络类型: ${networkType}，将使用localhost`);
-            rpcUrl = config.blockchain.networks.localhost.rpcUrl;
+            rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://localhost:8545';
         }
         
         if (!rpcUrl) {
