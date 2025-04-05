@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
-const { EventError } = require('../utils/errors');
+const { EventError, ErrorHandler } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
+const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Contract = require('./contract');
 const fs = require('fs');
@@ -25,9 +25,18 @@ class EventManager {
    */
   static async create(options = {}) {
     try {
-      const provider = options.provider || Provider.create();
-      const contract = options.contract || await Contract.create();
-      const storagePath = options.storagePath || path.join(process.cwd(), 'logs', 'events');
+      // 获取Provider实例或创建新实例
+      const provider = options.provider || await Provider.create({
+        networkType: process.env.BLOCKCHAIN_NETWORK || 'localhost'
+      });
+      
+      // 获取合约实例或使用null（稍后需要手动设置）
+      const contract = options.contract || null;
+      
+      // 获取事件存储路径
+      const storagePath = options.storagePath || 
+        process.env.EVENT_STORAGE_PATH || 
+        path.join(process.cwd(), 'logs', 'events');
       
       // 确保存储目录存在
       if (!fs.existsSync(storagePath)) {
@@ -38,7 +47,12 @@ class EventManager {
       Logger.info('事件管理器创建成功');
       return manager;
     } catch (error) {
-      throw new EventError(`创建事件管理器失败: ${error.message}`);
+      const handledError = ErrorHandler.handle(error, {
+        type: 'event',
+        context: { method: 'create' }
+      });
+      Logger.error(`创建事件管理器失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 

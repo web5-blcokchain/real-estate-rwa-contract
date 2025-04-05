@@ -27,35 +27,22 @@ console.log("环境变量BLOCKCHAIN_NETWORK:", process.env.BLOCKCHAIN_NETWORK);
 console.log("环境变量NODE_ENV:", process.env.NODE_ENV);
 
 // 在全局作用域声明这些变量
-let AddressConfig, AbiConfig, Logger, ErrorHandler, blockchainService;
+let Logger, ErrorHandler, blockchainService;
 
 try {
-  // 手动加载配置类
-  console.log("开始导入配置模块...");
+  // 导入shared模块
+  console.log("开始导入shared模块...");
   
-  AddressConfig = require('../../shared/src/config/address');
-  console.log("AddressConfig导入成功:", typeof AddressConfig);
+  const shared = require('../../shared/src');
   
-  AbiConfig = require('../../shared/src/config/abi');
-  console.log("AbiConfig导入成功:", typeof AbiConfig);
-  
-  Logger = require('../../shared/src/utils/logger');
+  // 从shared模块获取所需组件
+  Logger = shared.Logger;
   console.log("Logger导入成功:", typeof Logger);
   
-  ErrorHandler = require('../../shared/src/utils/errors');
+  ErrorHandler = shared.ErrorHandler;
   console.log("ErrorHandler导入成功:", typeof ErrorHandler);
   
-  console.log('环境配置加载完成');
-  
-  // 确保Provider和其他依赖模块已加载
-  const Provider = require('../../shared/src/core/provider');
-  console.log("Provider导入成功:", typeof Provider);
-  
-  const Contract = require('../../shared/src/core/contract');
-  console.log("Contract导入成功:", typeof Contract);
-  
-  const Wallet = require('../../shared/src/core/wallet');
-  console.log("Wallet导入成功:", typeof Wallet);
+  console.log('shared模块加载完成');
   
   // 最后加载服务
   const services = require('./services');
@@ -70,12 +57,7 @@ try {
 // 设置部署文件路径
 const deploymentPath = path.resolve(process.env.PROJECT_PATH, 'config/deployment.json');
 if (fs.existsSync(deploymentPath)) {
-  if (AddressConfig && typeof AddressConfig.setDeploymentPath === 'function') {
-    AddressConfig.setDeploymentPath(deploymentPath);
-    console.log(`部署文件路径设置完成: ${deploymentPath}`);
-  } else {
-    console.error('AddressConfig.setDeploymentPath 不是一个函数或AddressConfig未定义');
-  }
+  console.log(`部署文件存在: ${deploymentPath}`);
 } else {
   console.warn(`部署文件不存在: ${deploymentPath}`);
 }
@@ -83,16 +65,7 @@ if (fs.existsSync(deploymentPath)) {
 // 设置ABI目录路径
 const abiDirPath = path.resolve(process.env.PROJECT_PATH, 'config/abi');
 if (fs.existsSync(abiDirPath)) {
-  try {
-    if (AbiConfig && typeof AbiConfig.loadAllContractAbis === 'function') {
-      const abis = AbiConfig.loadAllContractAbis(abiDirPath);
-      console.log(`ABI文件加载成功，共${Object.keys(abis).length}个`);
-    } else {
-      console.error('AbiConfig.loadAllContractAbis 不是一个函数或AbiConfig未定义');
-    }
-  } catch (error) {
-    console.error(`ABI文件加载失败: ${error.message}`);
-  }
+  console.log(`ABI目录存在: ${abiDirPath}`);
 } else {
   console.warn(`ABI目录不存在: ${abiDirPath}`);
 }

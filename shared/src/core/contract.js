@@ -1,5 +1,5 @@
 const { ethers } = require('ethers');
-const { ContractError } = require('../utils/errors');
+const { ContractError, ErrorHandler } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const Validation = require('../utils/validation');
 const Provider = require('./provider');
@@ -24,18 +24,75 @@ class Contract {
 
   /**
    * 创建合约实例
-   * @param {Object} options - 配置选项
-   * @param {string} [options.contractName] - 合约名称
-   * @param {string} [options.address] - 合约地址
-   * @param {string|Array} [options.abi] - 合约 ABI
-   * @param {Object} [options.provider] - Provider 实例
-   * @param {Object} [options.signer] - 签名者实例
-   * @param {string} [options.privateKey] - 私钥
-   * @param {string} [options.keyType] - 私钥类型，例如：'ADMIN', 'MANAGER', 'OPERATOR'等
-   * @param {string} [options.networkType] - 网络类型
+   * @param {Object|ethers.Wallet} signerOrOptions - 签名者实例或配置选项
+   * @param {string} [address] - 合约地址
+   * @param {Object|Array} [abi] - 合约ABI
    * @returns {Promise<ethers.Contract>} 合约实例
    */
-  static async create(options = {}) {
+  static async create(signerOrOptions, address, abi) {
+    try {
+      // 如果第一个参数是对象但不是Wallet实例，使用旧的方式处理（向后兼容）
+      if (typeof signerOrOptions === 'object' && !(signerOrOptions instanceof ethers.Wallet)) {
+        const options = signerOrOptions;
+        return this._createLegacy(options);
+      }
+
+      // 新的简化方式：直接传入签名者、地址和ABI
+      const signer = signerOrOptions;
+      
+      // 验证必要参数
+      if (!address) {
+        throw new ContractError('未提供合约地址');
+      }
+      
+      if (!abi) {
+        throw new ContractError('未提供合约ABI');
+      }
+
+      // 验证参数格式
+      if (!Validation.isValidAddress(address)) {
+        throw new ContractError('无效的合约地址');
+      }
+
+      if (!Validation.isValidAbi(abi)) {
+        throw new ContractError('无效的合约 ABI');
+      }
+
+      // 创建合约实例
+      const contract = new ethers.Contract(address, abi, signer);
+      
+      // 存储合约元数据
+      contract._metadata = {
+        contractName: '未命名合约',
+        address,
+        networkType: 'unknown',
+        createdAt: new Date().toISOString()
+      };
+      
+      // 记录日志
+      Logger.info('合约实例创建成功', { 
+        address,
+        signerAddress: signer.address || 'read-only'
+      });
+      
+      return contract;
+    } catch (error) {
+      const handledError = ErrorHandler.handle(error, {
+        type: 'contract',
+        context: { method: 'create' }
+      });
+      Logger.error('创建合约实例失败', { error: handledError });
+      throw handledError;
+    }
+  }
+
+  /**
+   * 创建合约实例（旧方法，保持向后兼容）
+   * @private
+   * @param {Object} options - 配置选项
+   * @returns {Promise<ethers.Contract>} 合约实例
+   */
+  static async _createLegacy(options = {}) {
     try {
       let address = options.address;
       let abi = options.abi;

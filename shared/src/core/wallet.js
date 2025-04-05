@@ -3,11 +3,7 @@ const { WalletError } = require('../utils/errors');
 const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Logger = require('../utils/logger');
-const dotenv = require('dotenv');
-const path = require('path');
-
-// 确保环境变量已加载
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+const { ErrorHandler } = require('../utils/errors');
 
 /**
  * 钱包模块
@@ -25,37 +21,32 @@ class Wallet {
    */
   static async create(options = {}) {
     try {
-      let wallet;
-      let privateKey = options.privateKey;
-      
-      // 如果没有提供私钥，但提供了 keyType，从环境变量获取
-      if (!privateKey && options.keyType) {
-        try {
-          privateKey = this.getPrivateKey(options.keyType);
-        } catch (error) {
-          throw new WalletError(`获取${options.keyType}私钥失败: ${error.message}`);
-        }
+      // 优先使用直接传入的私钥
+      if (options.privateKey) {
+        return this.createFromPrivateKey(options.privateKey, options.provider);
       }
       
-      // 根据私钥创建钱包
-      if (privateKey) {
-        const provider = options.provider;
-        wallet = provider 
-          ? new ethers.Wallet(privateKey, provider)
-          : new ethers.Wallet(privateKey);
-      } else {
-        // 如果没有提供私钥和密钥类型，创建随机钱包
-        wallet = ethers.Wallet.createRandom();
+      // 否则使用keyType从环境变量获取私钥
+      if (options.keyType) {
+        return this.createFromKeyType(options.keyType, options.provider);
       }
-
-      Logger.info('钱包创建成功', { address: wallet.address });
-      return wallet;
+      
+      // 如果都没有提供，创建一个随机钱包
+      Logger.debug('没有提供私钥或密钥类型，创建随机钱包');
+      const randomWallet = ethers.Wallet.createRandom();
+      
+      if (options.provider) {
+        return randomWallet.connect(options.provider);
+      }
+      
+      return randomWallet;
     } catch (error) {
-      // 处理可能的错误
-      if (error instanceof WalletError) {
-        throw error;
-      }
-      throw new WalletError(`创建钱包失败: ${error.message}`);
+      const handledError = ErrorHandler.handle(error, {
+        type: 'wallet',
+        context: { method: 'create' }
+      });
+      Logger.error(`创建钱包失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
@@ -67,7 +58,32 @@ class Wallet {
    * @throws {WalletError} 钱包错误
    */
   static async createFromKeyType(keyType, provider) {
-    return this.create({ keyType, provider });
+    try {
+      // 验证keyType
+      Validation.validate(
+        Validation.isNotEmpty(keyType),
+        '密钥类型不能为空'
+      );
+      
+      // 获取私钥
+      const privateKey = this._getPrivateKeyFromEnv(keyType);
+      
+      if (!privateKey) {
+        throw new WalletError(`找不到密钥类型 ${keyType} 对应的私钥`);
+      }
+      
+      return this.createFromPrivateKey(privateKey, provider);
+    } catch (error) {
+      const handledError = ErrorHandler.handle(error, {
+        type: 'wallet',
+        context: { method: 'createFromKeyType', keyType }
+      });
+      Logger.error(`通过密钥类型创建钱包失败: ${handledError.message}`, { 
+        error: handledError,
+        keyType
+      });
+      throw handledError;
+    }
   }
 
   /**
@@ -78,17 +94,27 @@ class Wallet {
    * @throws {WalletError} 钱包错误
    */
   static async createFromPrivateKey(privateKey, provider) {
-    return this.create({ privateKey, provider });
+    try {
+      const wallet = provider 
+        ? new ethers.Wallet(privateKey, provider)
+        : new ethers.Wallet(privateKey);
+
+      Logger.info('钱包创建成功', { address: wallet.address });
+      return wallet;
+    } catch (error) {
+      throw new WalletError(`创建钱包失败: ${error.message}`);
+    }
   }
 
   /**
-   * 获取指定类型的私钥
-   * @param {string} keyType - 私钥类型
+   * 从环境变量获取私钥
+   * @private
+   * @param {string} keyType - 密钥类型
    * @returns {string|null} 私钥
    */
-  static getPrivateKey(keyType = 'ADMIN') {
-    const key = `${keyType.toUpperCase()}_PRIVATE_KEY`;
-    return process.env[key] || null;
+  static _getPrivateKeyFromEnv(keyType) {
+    const envKey = `PRIVATE_KEY_${keyType.toUpperCase()}`;
+    return process.env[envKey] || null;
   }
 
   /**
@@ -165,22 +191,29 @@ class Wallet {
   }
 
   /**
-   * 获取所有可用的账户私钥
+   * 获取所有账户私钥
    * @returns {Object} 账户私钥映射
    */
   static getAllAccounts() {
     try {
-      const keys = {};
-      for (const key in process.env) {
-        if (key.endsWith('_PRIVATE_KEY')) {
-          const keyType = key.replace('_PRIVATE_KEY', '');
-          keys[keyType] = process.env[key];
+      const accounts = {};
+      
+      // 查找环境变量中的所有私钥
+      Object.keys(process.env).forEach(key => {
+        if (key.startsWith('PRIVATE_KEY_')) {
+          const keyType = key.replace('PRIVATE_KEY_', '');
+          accounts[keyType] = process.env[key];
         }
-      }
-      return keys;
+      });
+      
+      return accounts;
     } catch (error) {
-      Logger.warn('获取账户私钥失败', { error: error.message });
-      return {};
+      const handledError = ErrorHandler.handle(error, {
+        type: 'wallet',
+        context: { method: 'getAllAccounts' }
+      });
+      Logger.error(`获取所有账户失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 

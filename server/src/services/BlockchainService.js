@@ -3,9 +3,9 @@
  * 提供与区块链交互的相关功能
  */
 const { Provider, Contract, Wallet, Logger, ErrorHandler, Validation } = require('../../../shared/src');
-const { AbiConfig, AddressConfig, EnvConfig } = require('../../../shared/src/config');
 const serverConfig = require('../config');
 const path = require('path');
+const fs = require('fs');
 
 /**
  * 区块链服务类
@@ -33,35 +33,6 @@ class BlockchainService {
       // 获取区块链配置
       const blockchainConfig = serverConfig.getBlockchainConfig();
       this.networkType = blockchainConfig.networkType;
-
-      // 确保EnvConfig已初始化(虽然在入口文件已经调用，这里做双重保证)
-      if (!EnvConfig.isInitialized()) {
-        EnvConfig.load();
-        Logger.info('区块链服务中重新初始化EnvConfig');
-      }
-
-      // 确保已设置deployment.json路径
-      const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../../..');
-      const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
-      
-      if (require('fs').existsSync(deploymentPath)) {
-        try {
-          // 防止AddressConfig.isInitialized未定义
-          if (typeof AddressConfig.isInitialized !== 'function') {
-            // 先尝试直接设置部署路径
-            AddressConfig.setDeploymentPath(deploymentPath);
-            Logger.info(`区块链服务中设置deployment.json路径: ${deploymentPath}`);
-          } else if (!AddressConfig.isInitialized()) {
-            // 如果isInitialized存在并且返回false，再设置
-            AddressConfig.setDeploymentPath(deploymentPath);
-            Logger.info(`区块链服务中设置deployment.json路径: ${deploymentPath}`);
-          } else {
-            Logger.info('部署文件路径已设置，跳过重复设置');
-          }
-        } catch (error) {
-          Logger.warn(`设置部署文件路径失败: ${error.message}，将尝试继续初始化`);
-        }
-      }
 
       // 验证网络类型
       Validation.validate(
@@ -248,9 +219,9 @@ class BlockchainService {
   }
 
   /**
-   * 使用合约名称获取合约实例（已签名）
+   * 根据合约名称获取合约实例
    * @param {string} contractName - 合约名称
-   * @param {string} keyType - 私钥类型(ADMIN/OPERATOR等)
+   * @param {string} keyType - 使用的密钥类型
    * @returns {Promise<Object>} 合约实例
    */
   async getContractInstanceByName(contractName, keyType = 'ADMIN') {
@@ -259,22 +230,44 @@ class BlockchainService {
         throw new Error('区块链服务尚未初始化');
       }
       
-      // 使用Contract类的静态create方法创建合约实例
+      // 验证合约名称
+      Validation.validate(
+        Validation.isNotEmpty(contractName),
+        '合约名称不能为空'
+      );
+      
+      // 创建钱包实例
       const wallet = await Wallet.create({
-        keyType,
-        provider: this.provider
+        provider: this.provider,
+        keyType: keyType
       });
       
-      const contract = await Contract.create({
-        contractName,
-        provider: wallet
-      });
+      // 加载合约地址和ABI
+      const projectRootPath = process.env.PROJECT_PATH || path.resolve(__dirname, '../../..');
       
-      Logger.info(`成功获取合约实例: ${contractName}`, {
-        address: contract.address,
-        keyType,
-        signerAddress: wallet.address
-      });
+      // 从deployment.json获取合约地址
+      const deploymentPath = path.resolve(projectRootPath, 'config/deployment.json');
+      if (!fs.existsSync(deploymentPath)) {
+        throw new Error(`部署文件不存在: ${deploymentPath}`);
+      }
+      
+      const deployment = require(deploymentPath);
+      const contractAddress = deployment[this.networkType]?.[contractName];
+      
+      if (!contractAddress) {
+        throw new Error(`找不到合约地址: ${contractName} on ${this.networkType}`);
+      }
+      
+      // 加载合约ABI
+      const abiPath = path.resolve(projectRootPath, `config/abi/${contractName}.json`);
+      if (!fs.existsSync(abiPath)) {
+        throw new Error(`合约ABI文件不存在: ${abiPath}`);
+      }
+      
+      const abi = require(abiPath);
+      
+      // 创建合约实例
+      const contract = await Contract.create(wallet, contractAddress, abi);
       
       return contract;
     } catch (error) {
@@ -282,11 +275,7 @@ class BlockchainService {
         type: 'contract',
         context: { method: 'getContractInstanceByName', contractName, keyType }
       });
-      Logger.error(`获取合约实例失败: ${handledError.message}`, { 
-        error: handledError, 
-        contractName, 
-        keyType 
-      });
+      Logger.error(`获取合约实例失败: ${handledError.message}`, { error: handledError, contractName });
       throw handledError;
     }
   }

@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
-const { GasError } = require('../utils/errors');
+const { GasError, ErrorHandler } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
+const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const path = require('path');
 const dotenv = require('dotenv');
@@ -17,22 +17,38 @@ class GasManager {
    * 创建 gas 管理器实例
    * @param {Object} options - 配置选项
    * @param {Object} [options.provider] - Provider 实例
-   * @param {number} [options.maxPriorityFeePerGas=1.5] - 最大优先费用倍数
-   * @param {number} [options.maxFeePerGas=2] - 最大费用倍数
-   * @param {number} [options.gasLimitBuffer=1.1] - Gas 限制缓冲倍数
+   * @param {number} [options.maxPriorityFeePerGas] - 最大优先费用倍数
+   * @param {number} [options.maxFeePerGas] - 最大费用倍数
+   * @param {number} [options.gasLimitBuffer] - Gas 限制缓冲倍数
    * @returns {Promise<GasManager>} gas 管理器实例
    */
   static async create(options = {}) {
     try {
-      const provider = options.provider || Provider.create();
-      const maxPriorityFeePerGas = options.maxPriorityFeePerGas || 1.5;
-      const maxFeePerGas = options.maxFeePerGas || 2;
-      const gasLimitBuffer = options.gasLimitBuffer || 1.1;
+      // 创建或使用提供的Provider
+      const provider = options.provider || await Provider.create({
+        networkType: process.env.BLOCKCHAIN_NETWORK || 'localhost'
+      });
+      
+      // 从选项或环境变量获取配置参数
+      const maxPriorityFeePerGas = options.maxPriorityFeePerGas || 
+        parseFloat(process.env.GAS_MAX_PRIORITY_FEE_MULTIPLIER) || 1.5;
+      
+      const maxFeePerGas = options.maxFeePerGas || 
+        parseFloat(process.env.GAS_MAX_FEE_MULTIPLIER) || 2;
+      
+      const gasLimitBuffer = options.gasLimitBuffer || 
+        parseFloat(process.env.GAS_LIMIT_BUFFER) || 1.1;
+      
       const manager = new GasManager(provider, maxPriorityFeePerGas, maxFeePerGas, gasLimitBuffer);
       Logger.info('Gas 管理器创建成功');
       return manager;
     } catch (error) {
-      throw new GasError(`创建 Gas 管理器失败: ${error.message}`);
+      const handledError = ErrorHandler.handle(error, {
+        type: 'gas',
+        context: { method: 'create' }
+      });
+      Logger.error(`创建 Gas 管理器失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 

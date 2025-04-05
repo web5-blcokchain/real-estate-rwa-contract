@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
-const { TransactionError } = require('../utils/errors');
+const { TransactionError, ErrorHandler } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const { Validation } = require('../utils/validation');
+const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Wallet = require('./wallet');
 const GasManager = require('./gas-manager');
@@ -19,23 +19,53 @@ class TransactionManager {
    * 创建交易管理器实例
    * @param {Object} options - 配置选项
    * @param {ethers.Signer} [options.signer] - 签名者实例
-   * @param {number} [options.maxRetries=3] - 最大重试次数
-   * @param {number} [options.retryDelay=1000] - 重试延迟（毫秒）
-   * @param {number} [options.timeout=30000] - 超时时间（毫秒）
+   * @param {Object} [options.provider] - Provider实例
+   * @param {string} [options.keyType] - 密钥类型，用于创建签名者
+   * @param {number} [options.maxRetries] - 最大重试次数
+   * @param {number} [options.retryDelay] - 重试延迟（毫秒）
+   * @param {number} [options.timeout] - 超时时间（毫秒）
    * @returns {Promise<TransactionManager>} 交易管理器实例
    */
   static async create(options = {}) {
     try {
-      const signer = options.signer;
-      const maxRetries = options.maxRetries || 3;
-      const retryDelay = options.retryDelay || 1000;
-      const timeout = options.timeout || 30000;
+      // 获取或创建签名者
+      let signer = options.signer;
+      if (!signer) {
+        // 如果没有提供签名者，但提供了provider和keyType，则创建一个
+        if (options.keyType) {
+          const provider = options.provider || await Provider.create({
+            networkType: process.env.BLOCKCHAIN_NETWORK || 'localhost'
+          });
+          
+          signer = await Wallet.create({
+            keyType: options.keyType,
+            provider
+          });
+        } else {
+          throw new TransactionError('必须提供签名者或密钥类型');
+        }
+      }
+      
+      // 从选项或环境变量获取配置参数
+      const maxRetries = options.maxRetries || 
+        parseInt(process.env.TX_MAX_RETRIES) || 3;
+      
+      const retryDelay = options.retryDelay || 
+        parseInt(process.env.TX_RETRY_DELAY) || 1000;
+      
+      const timeout = options.timeout || 
+        parseInt(process.env.TX_TIMEOUT) || 30000;
 
       const manager = new TransactionManager(signer, maxRetries, retryDelay, timeout);
       Logger.info('交易管理器创建成功');
       return manager;
     } catch (error) {
-      throw new TransactionError(`创建交易管理器失败: ${error.message}`);
+      const handledError = ErrorHandler.handle(error, {
+        type: 'transaction',
+        context: { method: 'create' }
+      });
+      Logger.error(`创建交易管理器失败: ${handledError.message}`, { error: handledError });
+      throw handledError;
     }
   }
 
