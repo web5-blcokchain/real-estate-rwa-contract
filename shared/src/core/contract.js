@@ -2,15 +2,26 @@ const { ethers } = require('ethers');
 const { ContractError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const Validation = require('../utils/validation');
-const { ContractConfig } = require('../config');
 const Provider = require('./provider');
 const Wallet = require('./wallet');
+const path = require('path');
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * Contract 管理器类
  * 提供合约实例的创建、方法调用、事件监听等功能
  */
 class Contract {
+  /**
+   * 缓存的合约配置
+   * @private
+   */
+  static _contractCache = {};
+
   /**
    * 创建合约实例
    * @param {Object} options - 配置选项
@@ -28,32 +39,28 @@ class Contract {
     try {
       let address = options.address;
       let abi = options.abi;
-      const networkType = options.networkType;
+      const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'hardhat';
       let abiPath = options.abiPath || '';
       
-      // 如果提供了合约名称，使用ContractConfig获取地址和ABI
+      // 如果提供了合约名称，尝试从环境变量或本地文件获取地址和ABI
       if (options.contractName) {
         try {
           if (!address) {
-            if (networkType) {
-              // 获取特定网络的合约地址
-              address = ContractConfig.getNetworkSpecificContractAddress(
-                options.contractName, 
-                networkType
-              );
-            } else {
-              // 获取默认合约地址
-              address = ContractConfig.getContractAddress(options.contractName);
+            // 尝试从环境变量获取合约地址
+            const addressEnvKey = `CONTRACT_${options.contractName.toUpperCase()}_ADDRESS`;
+            const networkAddressEnvKey = `${networkType.toUpperCase()}_CONTRACT_${options.contractName.toUpperCase()}_ADDRESS`;
+            
+            address = process.env[networkAddressEnvKey] || process.env[addressEnvKey];
+            
+            if (!address) {
+              Logger.warn(`未找到合约${options.contractName}地址的环境变量配置`);
             }
           }
           
           if (!abi) {
-            // 获取合约ABI
-            const contractConfig = ContractConfig.getContractConfig(options.contractName);
-            abi = contractConfig.abi;
-            
-            // 记录ABI路径
-            abiPath = contractConfig.abiPath || `contracts/${options.contractName}.json`;
+            // 尝试从本地文件加载ABI
+            abi = await this._loadContractAbi(options.contractName);
+            abiPath = `contracts/${options.contractName}.json`;
           }
         } catch (error) {
           throw new ContractError(`获取合约${options.contractName}配置失败: ${error.message}`);
@@ -132,6 +139,61 @@ class Contract {
       }
       throw new ContractError(`创建合约实例失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 加载合约ABI
+   * @private
+   * @param {string} contractName - 合约名称
+   * @returns {Promise<Array>} ABI数组
+   */
+  static async _loadContractAbi(contractName) {
+    // 检查缓存
+    if (this._contractCache[contractName] && this._contractCache[contractName].abi) {
+      return this._contractCache[contractName].abi;
+    }
+
+    // 尝试从不同路径加载ABI
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'contracts', `${contractName}.json`),
+      path.resolve(process.cwd(), 'artifacts/contracts', `${contractName}.sol`, `${contractName}.json`),
+      path.resolve(process.cwd(), 'artifacts', `${contractName}.json`),
+      path.resolve(process.cwd(), 'config/abi', `${contractName}.json`)
+    ];
+
+    for (const filePath of possiblePaths) {
+      try {
+        if (fs.existsSync(filePath)) {
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          const jsonData = JSON.parse(fileContent);
+          
+          // 尝试处理不同格式的ABI文件
+          let abi;
+          if (jsonData.abi) {
+            // Hardhat/Truffle格式
+            abi = jsonData.abi;
+          } else if (Array.isArray(jsonData)) {
+            // 纯ABI数组格式
+            abi = jsonData;
+          } else {
+            abi = jsonData;
+          }
+          
+          // 缓存ABI
+          this._contractCache[contractName] = {
+            abi,
+            abiPath: filePath
+          };
+          
+          Logger.info(`已加载合约${contractName}的ABI`, { path: filePath });
+          return abi;
+        }
+      } catch (error) {
+        Logger.warn(`尝试从${filePath}加载合约ABI失败`, { error: error.message });
+      }
+    }
+
+    throw new ContractError(`未找到合约${contractName}的ABI文件`);
   }
 
   /**

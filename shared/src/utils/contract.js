@@ -5,8 +5,13 @@
 const { ethers } = require('ethers');
 const Logger = require('./logger');
 const { ConfigError } = require('./errors');
-const { EnvConfig, ContractConfig, NetworkConfig, AbiConfig } = require('../config');
-const { Provider, Wallet } = require('../core');
+const { Provider, Wallet, Contract } = require('../core');
+const path = require('path');
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * 处理合约返回结果
@@ -85,59 +90,17 @@ function formatTokenAmount(amount, decimals = 18) {
 async function createContractInstance(contractName, options = {}) {
   try {
     // 获取网络类型
-    const networkType = options.networkType || EnvConfig.getNetworkType();
+    const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
     
-    // 获取合约地址和ABI
-    let contractAddress, contractAbi;
-    
-    try {
-      // 优先使用options中指定的地址
-      contractAddress = options.address;
-      
-      if (!contractAddress) {
-        // 使用ContractConfig获取地址
-        if (networkType) {
-          contractAddress = ContractConfig.getNetworkSpecificContractAddress(contractName, networkType);
-        } else {
-          contractAddress = ContractConfig.getContractAddress(contractName);
-        }
-      }
-      
-      // 获取ABI
-      const contractInfo = ContractConfig.getContractConfig(contractName);
-      contractAbi = contractInfo.abi;
-    } catch (error) {
-      throw new ConfigError(`获取合约配置失败: ${error.message}`);
-    }
-    
-    // 创建Provider
-    const provider = options.provider || await Provider.create({
-      networkType
-    });
-    
-    // 获取钱包或签名者
-    let signer = null;
-    if (options.wallet) {
-      signer = options.wallet.connect(provider);
-    } else if (options.privateKey) {
-      signer = new ethers.Wallet(options.privateKey, provider);
-    }
-    
-    // 创建合约实例
-    const contract = new ethers.Contract(
-      contractAddress,
-      contractAbi,
-      signer || provider
-    );
-    
-    // 记录创建信息
-    Logger.debug('合约实例创建成功', {
+    // 直接使用Contract模块创建合约实例
+    return await Contract.create({
       contractName,
-      address: contractAddress,
-      networkType
+      address: options.address,
+      networkType,
+      provider: options.provider,
+      signer: options.wallet,
+      privateKey: options.privateKey
     });
-    
-    return contract;
   } catch (error) {
     Logger.error('创建合约实例失败', {
       contractName,
@@ -161,7 +124,7 @@ async function createContractInstance(contractName, options = {}) {
 async function callContractMethod(contractName, methodName, args = [], options = {}) {
   try {
     // 获取网络类型
-    const networkType = options.networkType || EnvConfig.getNetworkType();
+    const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
     
     // 记录日志，增加网络类型信息
     Logger.info('调用合约方法', { 
@@ -202,37 +165,36 @@ async function callContractMethod(contractName, methodName, args = [], options =
       stack: error.stack
     });
     
-    // 重新抛出带有上下文的错误
-    throw new ConfigError(`调用合约 ${contractName}.${methodName} 失败: ${error.message}`);
+    throw new ConfigError(`调用合约 ${contractName} 方法 ${methodName} 失败: ${error.message}`);
   }
 }
 
 /**
- * 发送合约交易
+ * 发送合约写入交易
  * @param {string} contractName - 合约名称
  * @param {string} methodName - 方法名称
  * @param {Array} args - 参数数组
- * @param {Object} options - 选项
+ * @param {Object} [options] - 选项
+ * @param {string} [options.networkType] - 网络类型，可选值：localhost, testnet, mainnet
  * @param {Object} [options.wallet] - 钱包实例
  * @param {string} [options.privateKey] - 私钥
- * @param {string} [options.networkType] - 网络类型，可选值：localhost, testnet, mainnet
- * @param {number|string} [options.gasLimit] - Gas限制
- * @param {number|string} [options.gasPrice] - Gas价格
- * @param {number} [options.maxRetries=1] - 最大重试次数
+ * @param {number} [options.gasLimit] - 自定义gas限制
+ * @param {ethers.BigNumber} [options.gasPrice] - 自定义gas价格
+ * @param {number} [options.maxRetries=3] - 最大重试次数
  * @param {boolean} [options.processResult=true] - 是否处理返回结果
- * @returns {Promise<any>} - 返回交易回执
+ * @returns {Promise<any>} - 返回交易收据
  */
 async function sendContractTransaction(contractName, methodName, args = [], options = {}) {
+  const maxRetries = options.maxRetries || 3;
   let retryCount = 0;
-  const maxRetries = options.maxRetries || 1;
   
-  while (retryCount <= maxRetries) {
+  while (true) {
     try {
       // 获取网络类型
-      const networkType = options.networkType || EnvConfig.getNetworkType();
+      const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
       
-      // 记录日志，增加网络类型信息
-      Logger.info('发送合约交易', { 
+      // 记录日志
+      Logger.info('准备发送合约交易', { 
         contractName, 
         methodName,
         networkType,
@@ -259,7 +221,7 @@ async function sendContractTransaction(contractName, methodName, args = [], opti
       if (options.gasPrice) txOptions.gasPrice = options.gasPrice;
       
       // 检查网络是否是本地网络，如果是则添加更高的gas限制
-      if (NetworkConfig.isLocalNetwork() && !options.gasLimit) {
+      if ((networkType === 'localhost' || networkType === 'hardhat') && !options.gasLimit) {
         txOptions.gasLimit = 8000000; // 本地网络使用更高的gas限制
       }
       

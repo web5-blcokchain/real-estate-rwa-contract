@@ -2,8 +2,12 @@ const { ethers } = require('ethers');
 const { GasError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const { Validation } = require('../utils/validation');
-const EnvConfig = require('../config/env');
 const Provider = require('./provider');
+const path = require('path');
+const dotenv = require('dotenv');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * GasManager 管理器类

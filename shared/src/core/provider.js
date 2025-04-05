@@ -5,8 +5,11 @@
 const { ethers } = require('ethers');
 const { ConfigError } = require('../utils/errors');
 const Logger = require('../utils/logger');
-const EnvConfig = require('../config/env');
-const NetworkConfig = require('../config/network');
+const dotenv = require('dotenv');
+const path = require('path');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * Provider类
@@ -24,42 +27,30 @@ class Provider {
     try {
       // 优先使用传入的RPC URL，其次使用环境变量中的配置
       let rpcUrl = options.rpcUrl;
-      const networkType = options.networkType || EnvConfig.getNetworkType();
+      const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
       
       if (!rpcUrl) {
-        // 从环境配置获取RPC URL
-        const envNetworkConfig = EnvConfig.getNetworkConfig();
-        Logger.debug('环境网络配置:', { networkConfig: envNetworkConfig });
-        rpcUrl = envNetworkConfig?.rpcUrl;
+        // 直接从环境变量获取RPC URL
+        rpcUrl = process.env.RPC_URL;
         
         if (!rpcUrl) {
-          Logger.warn('环境配置中没有找到RPC URL');
-          
-          try {
-            // 尝试从网络特定配置获取RPC URL的备用值
-            let networkSpecificConfig;
-            try {
-              networkSpecificConfig = NetworkConfig._getNetworkSpecificConfig(networkType);
-              Logger.debug('网络特定配置:', { networkConfig: networkSpecificConfig });
-            } catch (configError) {
-              Logger.warn(`获取网络特定配置失败: ${configError.message}，将使用默认RPC URL`);
-              // 如果无法获取网络特定配置，使用硬编码的本地RPC URL
-              networkSpecificConfig = { 
-                rpcUrl: 'http://localhost:8545' 
-              };
-            }
-            
-            rpcUrl = networkSpecificConfig?.rpcUrl;
-            
-            if (!rpcUrl) {
-              // 最后的后备方案：使用硬编码的默认RPC URL
-              Logger.warn(`找不到网络${networkType}的RPC URL配置，将使用默认RPC URL`);
+          // 根据网络类型从环境变量获取对应的RPC URL
+          switch (networkType.toLowerCase()) {
+            case 'localhost':
+              rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://localhost:8545';
+              break;
+            case 'testnet':
+              rpcUrl = process.env.TESTNET_RPC_URL;
+              break;
+            case 'mainnet':
+              rpcUrl = process.env.MAINNET_RPC_URL;
+              break;
+            default:
               rpcUrl = 'http://localhost:8545';
-            }
-          } catch (configError) {
-            Logger.error('获取网络特定配置失败:', { error: configError.message });
-            // 最后的后备方案：使用硬编码的默认RPC URL
-            Logger.warn('将使用默认RPC URL: http://localhost:8545');
+          }
+          
+          if (!rpcUrl) {
+            Logger.warn(`找不到网络${networkType}的RPC URL配置，将使用默认RPC URL`);
             rpcUrl = 'http://localhost:8545';
           }
         }

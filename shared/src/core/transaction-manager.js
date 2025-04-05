@@ -2,10 +2,14 @@ const { ethers } = require('ethers');
 const { TransactionError } = require('../utils/errors');
 const Logger = require('../utils/logger');
 const { Validation } = require('../utils/validation');
-const EnvConfig = require('../config/env');
 const Provider = require('./provider');
 const Wallet = require('./wallet');
 const GasManager = require('./gas-manager');
+const path = require('path');
+const dotenv = require('dotenv');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * TransactionManager 管理器类

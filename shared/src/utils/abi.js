@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { AbiConfigError } = require('./errors');
+const { AbiConfigError } = require('../core/errors');
 const validation = require('./validation');
 const EnvConfig = require('./env');
 

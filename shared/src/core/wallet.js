@@ -3,7 +3,11 @@ const { WalletError } = require('../utils/errors');
 const Validation = require('../utils/validation');
 const Provider = require('./provider');
 const Logger = require('../utils/logger');
-const { EnvConfig } = require('../config');
+const dotenv = require('dotenv');
+const path = require('path');
+
+// 确保环境变量已加载
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * 钱包模块
@@ -27,7 +31,7 @@ class Wallet {
       // 如果没有提供私钥，但提供了 keyType，从环境变量获取
       if (!privateKey && options.keyType) {
         try {
-          privateKey = EnvConfig.getPrivateKey(options.keyType);
+          privateKey = this.getPrivateKey(options.keyType);
         } catch (error) {
           throw new WalletError(`获取${options.keyType}私钥失败: ${error.message}`);
         }
@@ -75,6 +79,16 @@ class Wallet {
    */
   static async createFromPrivateKey(privateKey, provider) {
     return this.create({ privateKey, provider });
+  }
+
+  /**
+   * 获取指定类型的私钥
+   * @param {string} keyType - 私钥类型
+   * @returns {string|null} 私钥
+   */
+  static getPrivateKey(keyType = 'ADMIN') {
+    const key = `${keyType.toUpperCase()}_PRIVATE_KEY`;
+    return process.env[key] || null;
   }
 
   /**
@@ -156,7 +170,14 @@ class Wallet {
    */
   static getAllAccounts() {
     try {
-      return EnvConfig.getAllPrivateKeys();
+      const keys = {};
+      for (const key in process.env) {
+        if (key.endsWith('_PRIVATE_KEY')) {
+          const keyType = key.replace('_PRIVATE_KEY', '');
+          keys[keyType] = process.env[key];
+        }
+      }
+      return keys;
     } catch (error) {
       Logger.warn('获取账户私钥失败', { error: error.message });
       return {};
