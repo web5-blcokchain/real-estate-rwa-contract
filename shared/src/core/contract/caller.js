@@ -6,6 +6,7 @@ const { ethers } = require('ethers');
 const { ContractError, ErrorHandler } = require('../../utils/errors');
 const Logger = require('../../utils/logger');
 const Validation = require('../../utils/validation');
+const { formatContractArgs } = require('../../utils/formatter');
 
 /**
  * 合约调用类
@@ -35,7 +36,7 @@ class ContractCaller {
       Logger.debug(`调用合约方法成功: ${method}`, {
         contract: contract.address,
         method,
-        args: this._formatArgs(args)
+        args: formatContractArgs(args)
       });
       
       return result;
@@ -45,7 +46,7 @@ class ContractCaller {
         context: { 
           method: 'call', 
           contractMethod: method,
-          args: this._formatArgs(args)
+          args: formatContractArgs(args)
         }
       });
       Logger.error(`调用合约方法失败: ${handledError.message}`, { error: handledError });
@@ -56,35 +57,36 @@ class ContractCaller {
   /**
    * 批量调用合约方法
    * @param {ethers.Contract} contract - 合约实例
-   * @param {Array<Object>} calls - 调用配置数组，每个对象包含 method 和 args
-   * @returns {Promise<Array>} 调用结果数组
+   * @param {Array<{method: string, args: Array}>} calls - 调用配置
+   * @returns {Promise<Array<{success: boolean, result: any, error: Error}>>} 调用结果
    */
   static async multiCall(contract, calls) {
     try {
-      Validation.validate(
-        Array.isArray(calls),
-        '调用配置必须是数组'
-      );
+      Validation.validate(contract, '合约实例不能为空');
+      Validation.validate(Array.isArray(calls), '调用配置必须是数组');
 
       const results = [];
-      for (let i = 0; i < calls.length; i++) {
-        const { method, args = [] } = calls[i];
+      
+      for (const call of calls) {
         try {
+          const { method, args = [] } = call;
+          Validation.validate(method, '方法名不能为空');
+          
           const result = await this.call(contract, method, args);
           results.push({
             success: true,
             result,
-            index: i
+            error: null
           });
-        } catch (error) {
+        } catch (callError) {
           results.push({
             success: false,
-            error: error.message,
-            index: i
+            result: null,
+            error: callError
           });
         }
       }
-
+      
       return results;
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
@@ -94,31 +96,6 @@ class ContractCaller {
       Logger.error(`批量调用合约方法失败: ${handledError.message}`, { error: handledError });
       throw handledError;
     }
-  }
-
-  /**
-   * 格式化参数以便记录日志
-   * @private
-   * @param {Array} args - 参数数组
-   * @returns {Array} 格式化后的参数
-   */
-  static _formatArgs(args) {
-    return args.map(arg => {
-      if (ethers.BigNumber.isBigNumber(arg)) {
-        return arg.toString();
-      }
-      if (Array.isArray(arg)) {
-        return this._formatArgs(arg);
-      }
-      if (typeof arg === 'object' && arg !== null) {
-        const formattedObj = {};
-        for (const key in arg) {
-          formattedObj[key] = this._formatArgs([arg[key]])[0];
-        }
-        return formattedObj;
-      }
-      return arg;
-    });
   }
 
   /**
@@ -150,7 +127,7 @@ class ContractCaller {
               if (
                 typeof arg !== 'number' && 
                 typeof arg !== 'string' && 
-                !ethers.BigNumber.isBigNumber(arg)
+                !(arg && typeof arg === 'object' && typeof arg.toString === 'function')
               ) {
                 throw new ContractError(`参数${index}类型错误: 预期数字类型，实际${typeof arg}`);
               }
@@ -163,7 +140,9 @@ class ContractCaller {
                 throw new ContractError(`参数${index}类型错误: 预期布尔类型，实际${typeof arg}`);
               }
             } else if (type.startsWith('bytes')) {
-              if (typeof arg !== 'string' || (!arg.startsWith('0x') && type !== 'bytes')) {
+              if (typeof arg !== 'string' && 
+                 !(arg instanceof Uint8Array) && 
+                 !(arg && typeof arg === 'object' && arg.buffer instanceof ArrayBuffer)) {
                 throw new ContractError(`参数${index}类型错误: 预期字节类型`);
               }
             }

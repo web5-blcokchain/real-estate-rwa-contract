@@ -7,7 +7,8 @@ const { ContractError, ErrorHandler } = require('../../utils/errors');
 const Logger = require('../../utils/logger');
 const Validation = require('../../utils/validation');
 const ContractSender = require('./sender');
-const { ContractEvent } = require('./event');
+const ContractEvent = require('./event');
+const { formatContractArgs } = require('../../utils/formatter');
 
 /**
  * 交易状态枚举
@@ -45,7 +46,7 @@ class ContractTransaction {
     Logger.debug(`开始执行合约交易: ${method}`, {
       contract: contract.address,
       method,
-      args: ContractSender._formatArgs(args),
+      args: formatContractArgs(args),
       confirmations,
       timeout
     });
@@ -122,7 +123,7 @@ class ContractTransaction {
         context: { 
           method: 'execute', 
           contractMethod: method,
-          args: ContractSender._formatArgs(args)
+          args: formatContractArgs(args)
         }
       });
 
@@ -145,7 +146,7 @@ class ContractTransaction {
       Logger.error(`合约交易失败: ${handledError.message}`, {
         status,
         method,
-        args: ContractSender._formatArgs(args),
+        args: formatContractArgs(args),
         error: handledError
       });
 

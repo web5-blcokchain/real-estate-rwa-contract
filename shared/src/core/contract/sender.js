@@ -6,6 +6,7 @@ const { ethers } = require('ethers');
 const { ContractError, ErrorHandler } = require('../../utils/errors');
 const Logger = require('../../utils/logger');
 const Validation = require('../../utils/validation');
+const { formatContractArgs } = require('../../utils/formatter');
 
 /**
  * 合约交易发送类
@@ -70,7 +71,7 @@ class ContractSender {
       Logger.info(`发送合约交易成功: ${method}`, {
         contract: contract.address,
         method,
-        args: this._formatArgs(args),
+        args: formatContractArgs(args),
         txHash: tx.hash,
         gasLimit: txOptions.gasLimit?.toString(),
         maxFeePerGas: txOptions.maxFeePerGas?.toString(),
@@ -84,7 +85,7 @@ class ContractSender {
         context: { 
           method: 'send', 
           contractMethod: method,
-          args: this._formatArgs(args)
+          args: formatContractArgs(args)
         }
       });
       Logger.error(`发送合约交易失败: ${handledError.message}`, { error: handledError });
@@ -100,51 +101,29 @@ class ContractSender {
    */
   static async waitForTransaction(tx, confirmations = 1) {
     try {
-      Validation.validate(
-        tx && tx.hash,
-        '无效的交易对象'
-      );
-
-      const receipt = await tx.wait(confirmations);
-      Logger.info(`交易已确认: ${tx.hash}`, {
-        confirmations,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+      Logger.debug(`等待交易确认: ${tx.hash}`, {
+        txHash: tx.hash,
+        confirmations
       });
+      
+      const receipt = await tx.wait(confirmations);
+      
+      Logger.info(`交易已确认: ${tx.hash}`, {
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        status: receipt.status
+      });
+      
       return receipt;
     } catch (error) {
       const handledError = ErrorHandler.handle(error, {
-        type: 'contract',
-        context: { method: 'waitForTransaction' }
+        type: 'transaction',
+        context: { method: 'waitForTransaction', txHash: tx.hash }
       });
       Logger.error(`等待交易确认失败: ${handledError.message}`, { error: handledError });
       throw handledError;
     }
-  }
-
-  /**
-   * 格式化参数以便记录日志
-   * @private
-   * @param {Array} args - 参数数组
-   * @returns {Array} 格式化后的参数
-   */
-  static _formatArgs(args) {
-    return args.map(arg => {
-      if (ethers.BigNumber.isBigNumber(arg)) {
-        return arg.toString();
-      }
-      if (Array.isArray(arg)) {
-        return this._formatArgs(arg);
-      }
-      if (typeof arg === 'object' && arg !== null) {
-        const formattedObj = {};
-        for (const key in arg) {
-          formattedObj[key] = this._formatArgs([arg[key]])[0];
-        }
-        return formattedObj;
-      }
-      return arg;
-    });
   }
 
   /**
@@ -176,7 +155,7 @@ class ContractSender {
               if (
                 typeof arg !== 'number' && 
                 typeof arg !== 'string' && 
-                !ethers.BigNumber.isBigNumber(arg)
+                !(arg && typeof arg === 'object' && typeof arg.toString === 'function')
               ) {
                 throw new ContractError(`参数${index}类型错误: 预期数字类型，实际${typeof arg}`);
               }
@@ -189,7 +168,9 @@ class ContractSender {
                 throw new ContractError(`参数${index}类型错误: 预期布尔类型，实际${typeof arg}`);
               }
             } else if (type.startsWith('bytes')) {
-              if (typeof arg !== 'string' || (!arg.startsWith('0x') && type !== 'bytes')) {
+              if (typeof arg !== 'string' && 
+                 !(arg instanceof Uint8Array) && 
+                 !(arg && typeof arg === 'object' && arg.buffer instanceof ArrayBuffer)) {
                 throw new ContractError(`参数${index}类型错误: 预期字节类型`);
               }
             }
