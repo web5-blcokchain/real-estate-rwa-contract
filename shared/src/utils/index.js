@@ -9,6 +9,7 @@ const Logger = require('./logger');
 const PerformanceMonitor = require('./performance');
 const SecurityAuditor = require('./security');
 const AddressManager = require('./address');
+const { formatContractArgs } = require('./formatter');
 const { 
   ErrorCodes,
   BlockchainError,
@@ -42,6 +43,9 @@ module.exports = {
 
   // 地址管理
   AddressManager,
+  
+  // 格式化工具
+  formatContractArgs,
   
   // 错误类和工具
   ErrorCodes,
