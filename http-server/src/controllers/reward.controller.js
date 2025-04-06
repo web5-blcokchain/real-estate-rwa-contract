@@ -2,7 +2,7 @@
  * 奖励分红控制器
  */
 const { Logger, Validation } = require('../../../shared/src');
-const contractService = require('../services/contractService');
+const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
 
 /**
@@ -19,14 +19,14 @@ async function getAllDistributions(req, res, next) {
     const propertyIdHash = req.query.property;
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RewardManager合约实例
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-    const rewardManager = await contractService.createContractInstance('RewardManager', { address: rewardManagerAddress });
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
     
     // 获取分红总数
-    const totalCount = await contractService.callMethod(rewardManager, 'getTotalDistributions');
+    const totalCount = await blockchainService.callContractMethod(rewardManager, 'getTotalDistributions');
     const totalItems = parseInt(totalCount.toString());
     
     // 计算分页信息
@@ -39,10 +39,10 @@ async function getAllDistributions(req, res, next) {
     for (let i = startIndex; i < endIndex; i++) {
       try {
         // 获取分红ID
-        const distributionId = await contractService.callMethod(rewardManager, 'getDistributionIdAtIndex', [i]);
+        const distributionId = await blockchainService.callContractMethod(rewardManager, 'getDistributionIdAtIndex', [i]);
         
         // 获取分红详情
-        const distribution = await contractService.callMethod(rewardManager, 'getDistribution', [distributionId]);
+        const distribution = await blockchainService.callContractMethod(rewardManager, 'getDistribution', [distributionId]);
         
         // 如果设置了房产过滤，则检查该分红是否属于指定房产
         if (propertyIdHash && distribution.propertyIdHash !== propertyIdHash) {
@@ -52,10 +52,10 @@ async function getAllDistributions(req, res, next) {
         // 获取房产信息
         let propertyInfo = {};
         try {
-          const propertyManager = await contractService.callMethod(facade, 'propertyManager');
-          const propertyManagerContract = await contractService.createContractInstance('PropertyManager', { address: propertyManager });
+          const propertyManager = await blockchainService.callContractMethod(facade, 'propertyManager');
+          const propertyManagerContract = await blockchainService.createContract('PropertyManager', { address: propertyManager });
           
-          const property = await contractService.callMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
+          const property = await blockchainService.callContractMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
           
           propertyInfo = {
             propertyId: property.propertyId,
@@ -64,8 +64,8 @@ async function getAllDistributions(req, res, next) {
           
           // 获取通证符号
           if (property.token !== '0x0000000000000000000000000000000000000000') {
-            const tokenContract = await contractService.createContractInstance('PropertyToken', { address: property.token });
-            propertyInfo.tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
+            const tokenContract = await blockchainService.createContract('PropertyToken', { address: property.token });
+            propertyInfo.tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
           }
         } catch (err) {
           Logger.warn(`获取房产信息失败: ${distribution.propertyIdHash}`, { error: err.message });
@@ -118,14 +118,14 @@ async function getDistributionById(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RewardManager合约实例
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-    const rewardManager = await contractService.createContractInstance('RewardManager', { address: rewardManagerAddress });
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
     
     // 获取分红详情
-    const distribution = await contractService.callMethod(rewardManager, 'getDistribution', [distributionId]);
+    const distribution = await blockchainService.callContractMethod(rewardManager, 'getDistribution', [distributionId]);
     
     // 检查分红是否存在
     if (!distribution || distribution.distributedBy === '0x0000000000000000000000000000000000000000') {
@@ -141,11 +141,11 @@ async function getDistributionById(req, res, next) {
     
     try {
       // 获取房产管理器
-      const propertyManager = await contractService.callMethod(facade, 'propertyManager');
-      const propertyManagerContract = await contractService.createContractInstance('PropertyManager', { address: propertyManager });
+      const propertyManager = await blockchainService.callContractMethod(facade, 'propertyManager');
+      const propertyManagerContract = await blockchainService.createContract('PropertyManager', { address: propertyManager });
       
       // 获取房产详情
-      const property = await contractService.callMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
+      const property = await blockchainService.callContractMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
       
       propertyInfo = {
         propertyId: property.propertyId,
@@ -156,18 +156,18 @@ async function getDistributionById(req, res, next) {
       
       // 获取通证信息和持有人
       if (property.token !== '0x0000000000000000000000000000000000000000') {
-        const tokenContract = await contractService.createContractInstance('PropertyToken', { address: property.token });
-        propertyInfo.tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
-        propertyInfo.tokenName = await contractService.callMethod(tokenContract, 'name');
-        propertyInfo.totalSupply = (await contractService.callMethod(tokenContract, 'totalSupply')).toString();
+        const tokenContract = await blockchainService.createContract('PropertyToken', { address: property.token });
+        propertyInfo.tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
+        propertyInfo.tokenName = await blockchainService.callContractMethod(tokenContract, 'name');
+        propertyInfo.totalSupply = (await blockchainService.callContractMethod(tokenContract, 'totalSupply')).toString();
         
         // 获取通证持有人分红明细
-        const holdersCount = Math.min(10, await contractService.callMethod(rewardManager, 'getHoldersClaimableCount', [distributionId]));
+        const holdersCount = Math.min(10, await blockchainService.callContractMethod(rewardManager, 'getHoldersClaimableCount', [distributionId]));
         for (let i = 0; i < holdersCount; i++) {
           try {
-            const holderAddress = await contractService.callMethod(rewardManager, 'getHolderAddressAtIndex', [distributionId, i]);
-            const holderAmount = await contractService.callMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, holderAddress]);
-            const claimed = await contractService.callMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, holderAddress]);
+            const holderAddress = await blockchainService.callContractMethod(rewardManager, 'getHolderAddressAtIndex', [distributionId, i]);
+            const holderAmount = await blockchainService.callContractMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, holderAddress]);
+            const claimed = await blockchainService.callContractMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, holderAddress]);
             
             tokenHolders.push({
               address: holderAddress,
@@ -229,14 +229,14 @@ async function createDistribution(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 验证房产存在
-    const propertyManager = await contractService.callMethod(facade, 'propertyManager');
-    const propertyManagerContract = await contractService.createContractInstance('PropertyManager', { address: propertyManager });
+    const propertyManager = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const propertyManagerContract = await blockchainService.createContract('PropertyManager', { address: propertyManager });
     
     try {
-      const property = await contractService.callMethod(propertyManagerContract, 'getProperty', [propertyIdHash]);
+      const property = await blockchainService.callContractMethod(propertyManagerContract, 'getProperty', [propertyIdHash]);
       
       // 检查房产是否存在
       if (property.propertyId === '') {
@@ -264,9 +264,9 @@ async function createDistribution(req, res, next) {
     
     // 创建分红
     try {
-      const facadeWithWallet = await contractService.createContractInstance('RealEstateFacade', { privateKey });
+      const facadeWithWallet = await blockchainService.createContract('RealEstateFacade', { privateKey });
       
-      const tx = await contractService.sendTransaction(
+      const tx = await blockchainService.sendContractTransaction(
         facadeWithWallet,
         'distributeRewards',
         [propertyIdHash, amount, description],
@@ -298,10 +298,10 @@ async function createDistribution(req, res, next) {
       
       // 如果无法从事件获取分红ID，则尝试从RewardManager获取最新分红
       if (!distributionId) {
-        const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-        const rewardManager = await contractService.createContractInstance('RewardManager', { address: rewardManagerAddress });
-        const totalDistributions = await contractService.callMethod(rewardManager, 'getTotalDistributions');
-        const latestDistributionId = await contractService.callMethod(rewardManager, 'getDistributionIdAtIndex', [totalDistributions - 1]);
+        const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+        const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
+        const totalDistributions = await blockchainService.callContractMethod(rewardManager, 'getTotalDistributions');
+        const latestDistributionId = await blockchainService.callContractMethod(rewardManager, 'getDistributionIdAtIndex', [totalDistributions - 1]);
         distributionId = latestDistributionId.toString();
       }
       
@@ -359,18 +359,18 @@ async function claimRewards(req, res, next) {
     const address = await wallet.getAddress();
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RewardManager合约实例
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-    const rewardManager = await contractService.createContractInstance('RewardManager', { 
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    const rewardManager = await blockchainService.createContract('RewardManager', { 
       address: rewardManagerAddress,
       wallet
     });
     
     // 验证分红存在
     try {
-      const distribution = await contractService.callMethod(rewardManager, 'getDistribution', [distributionId]);
+      const distribution = await blockchainService.callContractMethod(rewardManager, 'getDistribution', [distributionId]);
       
       if (!distribution || distribution.distributedBy === '0x0000000000000000000000000000000000000000') {
         return error(res, {
@@ -386,7 +386,7 @@ async function claimRewards(req, res, next) {
     }
     
     // 检查是否已领取
-    const claimed = await contractService.callMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
+    const claimed = await blockchainService.callContractMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
     
     if (claimed) {
       return error(res, {
@@ -396,7 +396,7 @@ async function claimRewards(req, res, next) {
     }
     
     // 获取可领取金额
-    const claimableAmount = await contractService.callMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
+    const claimableAmount = await blockchainService.callContractMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
     
     if (claimableAmount.eq(0)) {
       return error(res, {
@@ -406,7 +406,7 @@ async function claimRewards(req, res, next) {
     }
     
     // 领取分红
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       rewardManager,
       'claimReward',
       [distributionId],
@@ -451,15 +451,15 @@ async function getClaimableAmount(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RewardManager合约实例
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-    const rewardManager = await contractService.createContractInstance('RewardManager', { address: rewardManagerAddress });
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
     
     // 验证分红存在
     try {
-      const distribution = await contractService.callMethod(rewardManager, 'getDistribution', [distributionId]);
+      const distribution = await blockchainService.callContractMethod(rewardManager, 'getDistribution', [distributionId]);
       
       if (!distribution || distribution.distributedBy === '0x0000000000000000000000000000000000000000') {
         return error(res, {
@@ -475,10 +475,10 @@ async function getClaimableAmount(req, res, next) {
     }
     
     // 获取可领取金额
-    const claimableAmount = await contractService.callMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
+    const claimableAmount = await blockchainService.callContractMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
     
     // 检查是否已领取
-    const claimed = await contractService.callMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
+    const claimed = await blockchainService.callContractMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
     
     // 返回结果
     return success(res, {
@@ -511,22 +511,22 @@ async function getUserClaimableRewards(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RewardManager合约实例
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
-    const rewardManager = await contractService.createContractInstance('RewardManager', { address: rewardManagerAddress });
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
     
     // 获取分红总数
-    const totalCount = await contractService.callMethod(rewardManager, 'getTotalDistributions');
+    const totalCount = await blockchainService.callContractMethod(rewardManager, 'getTotalDistributions');
     
     // 获取用户可领取的奖励列表
     let claimableRewards = [];
     
     for (let i = 0; i < totalCount; i++) {
       try {
-        const distributionId = await contractService.callMethod(rewardManager, 'getDistributionIdAtIndex', [i]);
-        const claimableAmount = await contractService.callMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
+        const distributionId = await blockchainService.callContractMethod(rewardManager, 'getDistributionIdAtIndex', [i]);
+        const claimableAmount = await blockchainService.callContractMethod(rewardManager, 'getHolderClaimableAmount', [distributionId, address]);
         
         // 跳过没有可领取金额的分红
         if (claimableAmount.eq(0)) {
@@ -534,7 +534,7 @@ async function getUserClaimableRewards(req, res, next) {
         }
         
         // 检查是否已领取
-        const claimed = await contractService.callMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
+        const claimed = await blockchainService.callContractMethod(rewardManager, 'hasHolderClaimedReward', [distributionId, address]);
         
         // 跳过已领取的分红
         if (claimed) {
@@ -542,15 +542,15 @@ async function getUserClaimableRewards(req, res, next) {
         }
         
         // 获取分红详情
-        const distribution = await contractService.callMethod(rewardManager, 'getDistribution', [distributionId]);
+        const distribution = await blockchainService.callContractMethod(rewardManager, 'getDistribution', [distributionId]);
         
         // 获取房产信息
         let propertyInfo = {};
         try {
-          const propertyManager = await contractService.callMethod(facade, 'propertyManager');
-          const propertyManagerContract = await contractService.createContractInstance('PropertyManager', { address: propertyManager });
+          const propertyManager = await blockchainService.callContractMethod(facade, 'propertyManager');
+          const propertyManagerContract = await blockchainService.createContract('PropertyManager', { address: propertyManager });
           
-          const property = await contractService.callMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
+          const property = await blockchainService.callContractMethod(propertyManagerContract, 'getProperty', [distribution.propertyIdHash]);
           
           propertyInfo = {
             propertyId: property.propertyId,
@@ -559,8 +559,8 @@ async function getUserClaimableRewards(req, res, next) {
           
           // 获取通证符号
           if (property.token !== '0x0000000000000000000000000000000000000000') {
-            const tokenContract = await contractService.createContractInstance('PropertyToken', { address: property.token });
-            propertyInfo.tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
+            const tokenContract = await blockchainService.createContract('PropertyToken', { address: property.token });
+            propertyInfo.tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
           }
         } catch (err) {
           Logger.warn(`获取房产信息失败: ${distribution.propertyIdHash}`, { error: err.message });

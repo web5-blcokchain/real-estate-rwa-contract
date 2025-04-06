@@ -2,7 +2,7 @@
  * 系统管理控制器
  */
 const { Logger, Validation } = require('../../../shared/src');
-const contractService = require('../services/contractService');
+const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
 
 /**
@@ -16,7 +16,7 @@ async function getSystemStatus(req, res, next) {
     // 检查RealEstateFacade合约实例是否存在
     let facade;
     try {
-      facade = await contractService.createContractInstance('RealEstateFacade');
+      facade = await blockchainService.createContract('RealEstateFacade');
     } catch (contractErr) {
       Logger.warn(`找不到合约地址: RealEstateFacade`, { error: contractErr });
       return success(res, {
@@ -27,13 +27,13 @@ async function getSystemStatus(req, res, next) {
     }
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 获取系统合约实例
-    const system = await contractService.createContractInstance('RealEstateSystem', { address: systemAddress });
+    const system = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
     
     // 获取系统状态
-    const status = await contractService.callMethod(system, 'getSystemStatus');
+    const status = await blockchainService.callContractMethod(system, 'getSystemStatus');
     
     // 状态映射
     const statusMap = {
@@ -62,19 +62,19 @@ async function getSystemStatus(req, res, next) {
 async function getSystemVersion(req, res, next) {
   try {
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 获取系统合约实例
-    const system = await contractService.createContractInstance('RealEstateSystem', { address: systemAddress });
+    const system = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
     
     // 获取当前版本
-    const version = await contractService.callMethod(system, 'getVersion');
+    const version = await blockchainService.callContractMethod(system, 'getVersion');
     
     // 获取版本历史记录数量
-    const versionHistoryCount = await contractService.callMethod(system, 'getVersionHistoryCount');
+    const versionHistoryCount = await blockchainService.callContractMethod(system, 'getVersionHistoryCount');
     
     return success(res, {
       currentVersion: parseInt(version),
@@ -99,16 +99,16 @@ async function getVersionHistory(req, res, next) {
     const limit = parseInt(req.query.limit) || 10;
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 获取系统合约实例
-    const system = await contractService.createContractInstance('RealEstateSystem', { address: systemAddress });
+    const system = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
     
     // 获取版本历史记录数量
-    const totalCount = await contractService.callMethod(system, 'getVersionHistoryCount');
+    const totalCount = await blockchainService.callContractMethod(system, 'getVersionHistoryCount');
     const totalItems = parseInt(totalCount.toString());
     
     // 计算分页信息
@@ -121,7 +121,7 @@ async function getVersionHistory(req, res, next) {
     for (let i = startIndex; i < endIndex && i < totalItems; i++) {
       try {
         // 假设有一个通过索引获取版本历史的方法
-        const versionData = await contractService.callMethod(system, 'getVersionHistoryAtIndex', [i]);
+        const versionData = await blockchainService.callContractMethod(system, 'getVersionHistoryAtIndex', [i]);
         
         versionHistory.push({
           index: i,
@@ -156,21 +156,21 @@ async function getVersionHistory(req, res, next) {
 async function getSystemComponents(req, res, next) {
   try {
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取各个组件地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const rewardManagerAddress = await contractService.callMethod(facade, 'rewardManager');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
     
     // 获取系统合约实例
-    const system = await contractService.createContractInstance('RealEstateSystem', { address: systemAddress });
+    const system = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
     
     // 获取系统状态和版本
-    const status = await contractService.callMethod(system, 'getSystemStatus');
-    const version = await contractService.callMethod(system, 'getVersion');
+    const status = await blockchainService.callContractMethod(system, 'getSystemStatus');
+    const version = await blockchainService.callContractMethod(system, 'getVersion');
     
     // 状态映射
     const statusMap = {
@@ -230,17 +230,17 @@ async function pauseSystem(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 创建钱包
-    const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const provider = await blockchainService.getProvider();
+    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
     
     // 创建系统合约实例（带钱包）
-    const system = await contractService.createContractInstance('RealEstateSystem', { 
+    const system = await blockchainService.createContract('RealEstateSystem', { 
       address: systemAddress,
       wallet
     });
@@ -249,19 +249,19 @@ async function pauseSystem(req, res, next) {
     const callerAddress = await wallet.getAddress();
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 检查是否有管理员权限
     const ADMIN_ROLE = '0x523a704056dcd17bcf83bed8b68c59416dac1119be77755efe3bde0a64e46e0c';
-    const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
+    const hasAdminRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
       return error(res, '只有管理员可以暂停系统', 403);
     }
     
     // 暂停系统
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       system,
       'pause',
       [],
@@ -293,17 +293,17 @@ async function unpauseSystem(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 创建钱包
-    const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const provider = await blockchainService.getProvider();
+    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
     
     // 创建系统合约实例（带钱包）
-    const system = await contractService.createContractInstance('RealEstateSystem', { 
+    const system = await blockchainService.createContract('RealEstateSystem', { 
       address: systemAddress,
       wallet
     });
@@ -312,19 +312,19 @@ async function unpauseSystem(req, res, next) {
     const callerAddress = await wallet.getAddress();
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 检查是否有管理员权限
     const ADMIN_ROLE = '0x523a704056dcd17bcf83bed8b68c59416dac1119be77755efe3bde0a64e46e0c';
-    const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
+    const hasAdminRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
       return error(res, '只有管理员可以恢复系统', 403);
     }
     
     // 恢复系统
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       system,
       'unpause',
       [],
@@ -371,41 +371,41 @@ async function updateSystemComponent(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 创建钱包
-    const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const provider = await blockchainService.getProvider();
+    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
     
     // 获取调用者地址
     const callerAddress = await wallet.getAddress();
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 检查是否有管理员权限
     const ADMIN_ROLE = '0x523a704056dcd17bcf83bed8b68c59416dac1119be77755efe3bde0a64e46e0c';
-    const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
+    const hasAdminRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
       return error(res, '只有管理员可以更新系统组件', 403);
     }
     
     // 获取当前组件地址
-    const currentAddress = await contractService.callMethod(facade, componentName);
+    const currentAddress = await blockchainService.callContractMethod(facade, componentName);
     
     // 创建Facade合约实例（带钱包）
-    const facadeWithWallet = await contractService.createContractInstance('RealEstateFacade', { 
+    const facadeWithWallet = await blockchainService.createContract('RealEstateFacade', { 
       address: facade.address,
       wallet
     });
     
     // 更新组件
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       facadeWithWallet,
       `set${componentName.charAt(0).toUpperCase() + componentName.slice(1)}`,
       [newAddress],
@@ -444,17 +444,17 @@ async function upgradeSystemVersion(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取系统合约地址
-    const systemAddress = await contractService.callMethod(facade, 'system');
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
     
     // 创建钱包
-    const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const provider = await blockchainService.getProvider();
+    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
     
     // 创建系统合约实例（带钱包）
-    const system = await contractService.createContractInstance('RealEstateSystem', { 
+    const system = await blockchainService.createContract('RealEstateSystem', { 
       address: systemAddress,
       wallet
     });
@@ -463,22 +463,22 @@ async function upgradeSystemVersion(req, res, next) {
     const callerAddress = await wallet.getAddress();
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 检查是否有管理员权限
     const ADMIN_ROLE = '0x523a704056dcd17bcf83bed8b68c59416dac1119be77755efe3bde0a64e46e0c';
-    const hasAdminRole = await contractService.callMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
+    const hasAdminRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [ADMIN_ROLE, callerAddress]);
     
     if (!hasAdminRole) {
       return error(res, '只有管理员可以升级系统版本', 403);
     }
     
     // 获取当前版本
-    const currentVersion = await contractService.callMethod(system, 'getVersion');
+    const currentVersion = await blockchainService.callContractMethod(system, 'getVersion');
     
     // 升级版本
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       system,
       'upgradeVersion',
       [description],
@@ -486,7 +486,7 @@ async function upgradeSystemVersion(req, res, next) {
     );
     
     // 获取新版本
-    const newVersion = await contractService.callMethod(system, 'getVersion');
+    const newVersion = await blockchainService.callContractMethod(system, 'getVersion');
     
     return success(res, {
       success: true,

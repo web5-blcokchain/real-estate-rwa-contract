@@ -2,7 +2,7 @@
  * 交易管理控制器
  */
 const { Logger, Validation } = require('../../../shared/src');
-const contractService = require('../services/contractService');
+const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
 
 /**
@@ -19,14 +19,14 @@ async function getAllOrders(req, res, next) {
     const propertyFilter = req.query.property;
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
     
     // 获取订单总数
-    const totalCount = await contractService.callMethod(tradingManager, 'getOrdersCount');
+    const totalCount = await blockchainService.callContractMethod(tradingManager, 'getOrdersCount');
     const totalItems = parseInt(totalCount.toString());
     
     // 计算分页信息
@@ -37,17 +37,17 @@ async function getAllOrders(req, res, next) {
     // 获取订单列表
     let orders = [];
     for (let i = startIndex; i < endIndex; i++) {
-      const orderId = await contractService.callMethod(tradingManager, 'getOrderIdAtIndex', [i]);
-      const orderData = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+      const orderId = await blockchainService.callContractMethod(tradingManager, 'getOrderIdAtIndex', [i]);
+      const orderData = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
       
       // 如果有房产过滤，检查通证是否匹配
       if (propertyFilter) {
         // 获取PropertyManager合约实例
-        const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-        const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress });
+        const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+        const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
         
         // 检查该通证是否属于指定房产
-        const properties = await contractService.callMethod(propertyManager, 'getPropertiesByToken', [orderData.token]);
+        const properties = await blockchainService.callContractMethod(propertyManager, 'getPropertiesByToken', [orderData.token]);
         if (!properties.some(prop => prop.toLowerCase() === propertyFilter.toLowerCase())) {
           continue; // 跳过不匹配的订单
         }
@@ -57,9 +57,9 @@ async function getAllOrders(req, res, next) {
       let tokenSymbol = '';
       let tokenName = '';
       try {
-        const tokenContract = await contractService.createContractInstance('PropertyToken', { address: orderData.token });
-        tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
-        tokenName = await contractService.callMethod(tokenContract, 'name');
+        const tokenContract = await blockchainService.createContract('PropertyToken', { address: orderData.token });
+        tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
+        tokenName = await blockchainService.callContractMethod(tokenContract, 'name');
       } catch (err) {
         Logger.warn(`获取通证信息失败: ${err.message}`);
       }
@@ -104,14 +104,14 @@ async function getOrderById(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
     
     // 获取订单详情
-    const orderData = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+    const orderData = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
     
     // 验证订单存在
     if (!orderData || orderData.seller === '0x0000000000000000000000000000000000000000') {
@@ -123,18 +123,18 @@ async function getOrderById(req, res, next) {
     let tokenName = '';
     let propertyData = null;
     try {
-      const tokenContract = await contractService.createContractInstance('PropertyToken', { address: orderData.token });
-      tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
-      tokenName = await contractService.callMethod(tokenContract, 'name');
+      const tokenContract = await blockchainService.createContract('PropertyToken', { address: orderData.token });
+      tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
+      tokenName = await blockchainService.callContractMethod(tokenContract, 'name');
       
       // 获取PropertyManager合约实例
-      const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-      const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress });
+      const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+      const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
       
       // 获取房产信息
-      const properties = await contractService.callMethod(propertyManager, 'getPropertiesByToken', [orderData.token]);
+      const properties = await blockchainService.callContractMethod(propertyManager, 'getPropertiesByToken', [orderData.token]);
       if (properties && properties.length > 0) {
-        propertyData = await contractService.callMethod(propertyManager, 'getProperty', [properties[0]]);
+        propertyData = await blockchainService.callContractMethod(propertyManager, 'getProperty', [properties[0]]);
       }
     } catch (err) {
       Logger.warn(`获取通证或房产信息失败: ${err.message}`);
@@ -193,10 +193,10 @@ async function createOrder(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
     
     // 创建钱包
     const provider = await contractService.blockchainService.getProvider();
@@ -204,22 +204,22 @@ async function createOrder(req, res, next) {
     const sellerAddress = await wallet.getAddress();
     
     // 检查通证授权
-    const tokenContract = await contractService.createContractInstance('PropertyToken', { 
+    const tokenContract = await blockchainService.createContract('PropertyToken', { 
       address: token,
       wallet
     });
     
     // 检查余额
-    const balance = await contractService.callMethod(tokenContract, 'balanceOf', [sellerAddress]);
+    const balance = await blockchainService.callContractMethod(tokenContract, 'balanceOf', [sellerAddress]);
     if (balance.lt(amount)) {
       return error(res, '通证余额不足', 400);
     }
     
     // 检查授权
-    const allowance = await contractService.callMethod(tokenContract, 'allowance', [sellerAddress, tradingManagerAddress]);
+    const allowance = await blockchainService.callContractMethod(tokenContract, 'allowance', [sellerAddress, tradingManagerAddress]);
     if (allowance.lt(amount)) {
       // 授权通证给交易管理器
-      const approveTx = await contractService.sendTransaction(
+      const approveTx = await blockchainService.sendContractTransaction(
         tokenContract,
         'approve',
         [tradingManagerAddress, amount],
@@ -230,13 +230,13 @@ async function createOrder(req, res, next) {
     }
     
     // 创建交易管理器合约实例（带钱包）
-    const tradingManager = await contractService.createContractInstance('TradingManager', { 
+    const tradingManager = await blockchainService.createContract('TradingManager', { 
       address: tradingManagerAddress,
       wallet
     });
     
     // 创建出售订单
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       tradingManager,
       'createOrder',
       [token, amount, price],
@@ -283,14 +283,14 @@ async function executeOrder(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
     
     // 获取订单详情
-    const orderData = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+    const orderData = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
     
     // 验证订单存在且活跃
     if (!orderData || !orderData.active) {
@@ -309,13 +309,13 @@ async function executeOrder(req, res, next) {
     }
     
     // 使用钱包创建交易管理器合约实例
-    const tradingManagerWithWallet = await contractService.createContractInstance('TradingManager', { 
+    const tradingManagerWithWallet = await blockchainService.createContract('TradingManager', { 
       address: tradingManagerAddress,
       wallet
     });
     
     // 执行订单
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       tradingManagerWithWallet,
       'executeOrder',
       [orderId],
@@ -355,14 +355,14 @@ async function cancelOrder(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
     
     // 获取订单详情
-    const orderData = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+    const orderData = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
     
     // 验证订单存在且活跃
     if (!orderData || !orderData.active) {
@@ -380,13 +380,13 @@ async function cancelOrder(req, res, next) {
     }
     
     // 使用钱包创建交易管理器合约实例
-    const tradingManagerWithWallet = await contractService.createContractInstance('TradingManager', { 
+    const tradingManagerWithWallet = await blockchainService.createContract('TradingManager', { 
       address: tradingManagerAddress,
       wallet
     });
     
     // 取消订单
-    const tx = await contractService.sendTransaction(
+    const tx = await blockchainService.sendContractTransaction(
       tradingManagerWithWallet,
       'cancelOrder',
       [orderId],
@@ -422,14 +422,14 @@ async function getUserOrders(req, res, next) {
     const activeOnly = req.query.active === 'true';
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取TradingManager合约实例
-    const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-    const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
     
     // 获取用户订单总数
-    const totalCount = await contractService.callMethod(tradingManager, 'getUserOrdersCount', [userAddress]);
+    const totalCount = await blockchainService.callContractMethod(tradingManager, 'getUserOrdersCount', [userAddress]);
     const totalItems = parseInt(totalCount.toString());
     
     // 计算分页信息
@@ -440,8 +440,8 @@ async function getUserOrders(req, res, next) {
     // 获取用户订单列表
     let orders = [];
     for (let i = startIndex; i < endIndex; i++) {
-      const orderId = await contractService.callMethod(tradingManager, 'getUserOrderIdAtIndex', [userAddress, i]);
-      const orderData = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+      const orderId = await blockchainService.callContractMethod(tradingManager, 'getUserOrderIdAtIndex', [userAddress, i]);
+      const orderData = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
       
       // 如果只查询活跃订单且当前订单不活跃，则跳过
       if (activeOnly && !orderData.active) {
@@ -452,9 +452,9 @@ async function getUserOrders(req, res, next) {
       let tokenSymbol = '';
       let tokenName = '';
       try {
-        const tokenContract = await contractService.createContractInstance('PropertyToken', { address: orderData.token });
-        tokenSymbol = await contractService.callMethod(tokenContract, 'symbol');
-        tokenName = await contractService.callMethod(tokenContract, 'name');
+        const tokenContract = await blockchainService.createContract('PropertyToken', { address: orderData.token });
+        tokenSymbol = await blockchainService.callContractMethod(tokenContract, 'symbol');
+        tokenName = await blockchainService.callContractMethod(tokenContract, 'name');
       } catch (err) {
         Logger.warn(`获取通证信息失败: ${err.message}`);
       }

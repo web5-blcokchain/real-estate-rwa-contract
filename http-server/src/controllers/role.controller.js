@@ -2,7 +2,7 @@
  * 角色管理控制器
  */
 const { Logger, Validation } = require('../../../shared/src');
-const contractService = require('../services/contractService');
+const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
 
 /**
@@ -14,11 +14,11 @@ const { success, error, paginated } = require('../utils/responseFormatter');
 async function getAllRoles(req, res, next) {
   try {
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 预定义角色名称
     const roleNames = {
@@ -36,13 +36,13 @@ async function getAllRoles(req, res, next) {
     for (const [roleId, roleName] of Object.entries(roleNames)) {
       try {
         // 获取该角色的成员数量
-        const memberCount = await contractService.callMethod(roleManager, 'getRoleMemberCount', [roleId]);
+        const memberCount = await blockchainService.callContractMethod(roleManager, 'getRoleMemberCount', [roleId]);
         
         // 获取该角色的所有成员
         let members = [];
         for (let i = 0; i < Math.min(memberCount.toNumber(), 20); i++) {
           try {
-            const memberAddress = await contractService.callMethod(roleManager, 'getRoleMember', [roleId, i]);
+            const memberAddress = await blockchainService.callContractMethod(roleManager, 'getRoleMember', [roleId, i]);
             members.push(memberAddress);
           } catch (err) {
             Logger.warn(`获取角色成员失败: ${roleName}, 索引: ${i}`, { error: err.message });
@@ -52,7 +52,7 @@ async function getAllRoles(req, res, next) {
         roles.push({
           roleId,
           roleName,
-          adminRole: await contractService.callMethod(roleManager, 'getRoleAdmin', [roleId]),
+          adminRole: await blockchainService.callContractMethod(roleManager, 'getRoleAdmin', [roleId]),
           memberCount: memberCount.toString(),
           members
         });
@@ -87,11 +87,11 @@ async function getRoleById(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 预定义角色名称
     const roleNames = {
@@ -106,13 +106,13 @@ async function getRoleById(req, res, next) {
     const roleName = roleNames[roleId] || 'CUSTOM_ROLE';
     
     // 获取该角色的成员数量
-    const memberCount = await contractService.callMethod(roleManager, 'getRoleMemberCount', [roleId]);
+    const memberCount = await blockchainService.callContractMethod(roleManager, 'getRoleMemberCount', [roleId]);
     
     // 获取该角色的所有成员
     let members = [];
     for (let i = 0; i < Math.min(memberCount.toNumber(), 100); i++) {
       try {
-        const memberAddress = await contractService.callMethod(roleManager, 'getRoleMember', [roleId, i]);
+        const memberAddress = await blockchainService.callContractMethod(roleManager, 'getRoleMember', [roleId, i]);
         members.push(memberAddress);
       } catch (err) {
         Logger.warn(`获取角色成员失败: ${roleName}, 索引: ${i}`, { error: err.message });
@@ -120,7 +120,7 @@ async function getRoleById(req, res, next) {
     }
     
     // 获取该角色的管理员角色
-    const adminRole = await contractService.callMethod(roleManager, 'getRoleAdmin', [roleId]);
+    const adminRole = await blockchainService.callContractMethod(roleManager, 'getRoleAdmin', [roleId]);
     const adminRoleName = roleNames[adminRole] || 'CUSTOM_ADMIN_ROLE';
     
     // 整理角色数据
@@ -183,10 +183,10 @@ async function grantRole(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await contractService.createContractInstance('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
     
     // 预定义角色名称（用于日志）
     const roleNames = {
@@ -201,7 +201,7 @@ async function grantRole(req, res, next) {
     
     // 授予角色
     try {
-      const tx = await contractService.sendTransaction(
+      const tx = await blockchainService.sendContractTransaction(
         facade,
         'grantRole',
         [roleId, account],
@@ -272,10 +272,10 @@ async function revokeRole(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await contractService.createContractInstance('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
     
     // 预定义角色名称（用于日志）
     const roleNames = {
@@ -290,7 +290,7 @@ async function revokeRole(req, res, next) {
     
     // 撤销角色
     try {
-      const tx = await contractService.sendTransaction(
+      const tx = await blockchainService.sendContractTransaction(
         facade,
         'revokeRole',
         [roleId, account],
@@ -353,11 +353,11 @@ async function hasRole(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 预定义角色名称
     const roleNames = {
@@ -371,7 +371,7 @@ async function hasRole(req, res, next) {
     const roleName = roleNames[roleId] || 'CUSTOM_ROLE';
     
     // 检查是否拥有角色
-    const hasRole = await contractService.callMethod(roleManager, 'hasRole', [roleId, account]);
+    const hasRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [roleId, account]);
     
     // 返回结果
     return success(res, {
@@ -405,11 +405,11 @@ async function getAccountRoles(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取RoleManager合约实例
-    const roleManagerAddress = await contractService.callMethod(facade, 'roleManager');
-    const roleManager = await contractService.createContractInstance('RoleManager', { address: roleManagerAddress });
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const roleManager = await blockchainService.createContract('RoleManager', { address: roleManagerAddress });
     
     // 预定义角色
     const predefinedRoles = [
@@ -440,7 +440,7 @@ async function getAccountRoles(req, res, next) {
     
     for (const role of predefinedRoles) {
       try {
-        const hasRole = await contractService.callMethod(roleManager, 'hasRole', [role.roleId, address]);
+        const hasRole = await blockchainService.callContractMethod(roleManager, 'hasRole', [role.roleId, address]);
         
         if (hasRole) {
           accountRoles.push({

@@ -2,7 +2,7 @@
  * 房产管理控制器
  */
 const { Logger, Validation } = require('../../../shared/src');
-const contractService = require('../services/contractService');
+const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
 
 /**
@@ -19,14 +19,14 @@ async function getAllProperties(req, res, next) {
     const status = req.query.status ? parseInt(req.query.status) : null;
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取PropertyManager合约实例
-    const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-    const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress });
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
     
     // 获取房产总数
-    const totalCount = await contractService.callMethod(propertyManager, 'getPropertyCount');
+    const totalCount = await blockchainService.callContractMethod(propertyManager, 'getPropertyCount');
     const totalItems = parseInt(totalCount.toString());
     
     // 计算分页信息
@@ -39,10 +39,10 @@ async function getAllProperties(req, res, next) {
     for (let i = startIndex; i < endIndex; i++) {
       try {
         // 获取房产ID哈希
-        const propertyIdHash = await contractService.callMethod(propertyManager, 'getPropertyIdHashAtIndex', [i]);
+        const propertyIdHash = await blockchainService.callContractMethod(propertyManager, 'getPropertyIdHashAtIndex', [i]);
         
         // 获取房产详情
-        const property = await contractService.callMethod(propertyManager, 'getProperty', [propertyIdHash]);
+        const property = await blockchainService.callContractMethod(propertyManager, 'getProperty', [propertyIdHash]);
         
         // 如果指定了状态筛选，则检查
         if (status !== null && parseInt(property.status.toString()) !== status) {
@@ -53,11 +53,11 @@ async function getAllProperties(req, res, next) {
         let tokenInfo = {};
         if (property.token !== '0x0000000000000000000000000000000000000000') {
           try {
-            const tokenContract = await contractService.createContractInstance('PropertyToken', { address: property.token });
+            const tokenContract = await blockchainService.createContract('PropertyToken', { address: property.token });
             tokenInfo = {
-              tokenName: await contractService.callMethod(tokenContract, 'name'),
-              tokenSymbol: await contractService.callMethod(tokenContract, 'symbol'),
-              totalSupply: (await contractService.callMethod(tokenContract, 'totalSupply')).toString()
+              tokenName: await blockchainService.callContractMethod(tokenContract, 'name'),
+              tokenSymbol: await blockchainService.callContractMethod(tokenContract, 'symbol'),
+              totalSupply: (await blockchainService.callContractMethod(tokenContract, 'totalSupply')).toString()
             };
           } catch (err) {
             Logger.warn(`获取通证信息失败: ${property.token}`, { error: err.message });
@@ -113,14 +113,14 @@ async function getPropertyById(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取PropertyManager合约实例
-    const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-    const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress });
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
     
     // 获取房产详情
-    const property = await contractService.callMethod(propertyManager, 'getProperty', [propertyIdHash]);
+    const property = await blockchainService.callContractMethod(propertyManager, 'getProperty', [propertyIdHash]);
     
     // 检查房产是否存在
     if (!property || property.propertyId === '') {
@@ -134,29 +134,29 @@ async function getPropertyById(req, res, next) {
     let tokenInfo = {};
     if (property.token !== '0x0000000000000000000000000000000000000000') {
       try {
-        const tokenContract = await contractService.createContractInstance('PropertyToken', { address: property.token });
+        const tokenContract = await blockchainService.createContract('PropertyToken', { address: property.token });
         tokenInfo = {
-          tokenName: await contractService.callMethod(tokenContract, 'name'),
-          tokenSymbol: await contractService.callMethod(tokenContract, 'symbol'),
-          totalSupply: (await contractService.callMethod(tokenContract, 'totalSupply')).toString(),
-          decimals: await contractService.callMethod(tokenContract, 'decimals')
+          tokenName: await blockchainService.callContractMethod(tokenContract, 'name'),
+          tokenSymbol: await blockchainService.callContractMethod(tokenContract, 'symbol'),
+          totalSupply: (await blockchainService.callContractMethod(tokenContract, 'totalSupply')).toString(),
+          decimals: await blockchainService.callContractMethod(tokenContract, 'decimals')
         };
         
         // 获取当前售卖中的订单
         try {
-          const tradingManagerAddress = await contractService.callMethod(facade, 'tradingManager');
-          const tradingManager = await contractService.createContractInstance('TradingManager', { address: tradingManagerAddress });
+          const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+          const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
           
           // 获取活跃订单数量
-          const activeOrdersCount = await contractService.callMethod(tradingManager, 'getActiveOrdersCountByToken', [property.token]);
+          const activeOrdersCount = await blockchainService.callContractMethod(tradingManager, 'getActiveOrdersCountByToken', [property.token]);
           
           if (activeOrdersCount.gt(0)) {
             // 获取活跃订单
             let activeOrders = [];
             for (let i = 0; i < Math.min(activeOrdersCount.toNumber(), 5); i++) {
               try {
-                const orderId = await contractService.callMethod(tradingManager, 'getActiveOrderIdByTokenAndIndex', [property.token, i]);
-                const order = await contractService.callMethod(tradingManager, 'getOrder', [orderId]);
+                const orderId = await blockchainService.callContractMethod(tradingManager, 'getActiveOrderIdByTokenAndIndex', [property.token, i]);
+                const order = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
                 
                 activeOrders.push({
                   orderId: orderId.toString(),
@@ -257,18 +257,18 @@ async function registerProperty(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await contractService.createContractInstance('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
     
     // 获取PropertyManager合约实例
-    const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-    const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress, privateKey });
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress, privateKey });
     
     // 计算房产ID哈希
-    const propertyIdHash = await contractService.callMethod(propertyManager, 'calculatePropertyIdHash', [propertyId]);
+    const propertyIdHash = await blockchainService.callContractMethod(propertyManager, 'calculatePropertyIdHash', [propertyId]);
     
     // 检查房产是否已存在
     try {
-      const existingProperty = await contractService.callMethod(propertyManager, 'getProperty', [propertyIdHash]);
+      const existingProperty = await blockchainService.callContractMethod(propertyManager, 'getProperty', [propertyIdHash]);
       
       if (existingProperty && existingProperty.propertyId !== '') {
         return error(res, {
@@ -283,7 +283,7 @@ async function registerProperty(req, res, next) {
     
     // 注册房产并创建通证
     try {
-      const tx = await contractService.sendTransaction(
+      const tx = await blockchainService.sendContractTransaction(
         facade,
         'registerPropertyAndCreateToken',
         [propertyId, country, metadataURI, tokenName, tokenSymbol, initialSupply],
@@ -310,7 +310,7 @@ async function registerProperty(req, res, next) {
       
       // 如果无法从事件获取通证地址，则直接查询
       if (!tokenAddress) {
-        const property = await contractService.callMethod(propertyManager, 'getProperty', [propertyIdHash]);
+        const property = await blockchainService.callContractMethod(propertyManager, 'getProperty', [propertyIdHash]);
         tokenAddress = property.token;
       }
       
@@ -359,14 +359,14 @@ async function getTokenHolders(req, res, next) {
     }
     
     // 获取RealEstateFacade合约实例
-    const facade = await contractService.createContractInstance('RealEstateFacade');
+    const facade = await blockchainService.createContract('RealEstateFacade');
     
     // 获取PropertyManager合约实例
-    const propertyManagerAddress = await contractService.callMethod(facade, 'propertyManager');
-    const propertyManager = await contractService.createContractInstance('PropertyManager', { address: propertyManagerAddress });
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
     
     // 获取房产详情
-    const property = await contractService.callMethod(propertyManager, 'getProperty', [propertyIdHash]);
+    const property = await blockchainService.callContractMethod(propertyManager, 'getProperty', [propertyIdHash]);
     
     // 检查房产是否存在
     if (!property || property.propertyId === '') {
@@ -390,8 +390,8 @@ async function getTokenHolders(req, res, next) {
     const holderData = [
       {
         address: property.registeredBy,
-        balance: (await contractService.callMethod(
-          await contractService.createContractInstance('PropertyToken', { address: property.token }),
+        balance: (await blockchainService.callContractMethod(
+          await blockchainService.createContract('PropertyToken', { address: property.token }),
           'balanceOf',
           [property.registeredBy]
         )).toString(),
