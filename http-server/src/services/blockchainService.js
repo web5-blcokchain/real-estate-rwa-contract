@@ -1,6 +1,6 @@
 /**
  * 区块链服务
- * 提供与区块链网络的交互功能
+ * 提供与区块链网络的交互功能，正确使用shared模块
  */
 const { Provider, Logger, ErrorHandler } = require('../../../shared/src');
 
@@ -32,7 +32,7 @@ class BlockchainService {
       // 获取网络类型
       this.networkType = process.env.BLOCKCHAIN_NETWORK || 'localhost';
       
-      // 创建Provider
+      // 使用shared模块的Provider.create方法
       this.provider = await Provider.create({
         networkType: this.networkType
       });

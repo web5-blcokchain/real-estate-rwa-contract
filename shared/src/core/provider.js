@@ -16,6 +16,8 @@ class Provider {
    * @param {Object} options - 创建选项
    * @param {string} [options.networkType] - 网络类型
    * @param {string} [options.rpcUrl] - RPC URL
+   * @param {number} [options.retryCount=3] - 连接失败重试次数
+   * @param {number} [options.retryDelay=1000] - 重试间隔(毫秒)
    * @returns {Promise<ethers.JsonRpcProvider>} Provider实例
    */
   static async create(options = {}) {
@@ -23,6 +25,8 @@ class Provider {
       // 优先使用传入的RPC URL，其次根据网络类型确定RPC URL
       let rpcUrl = options.rpcUrl;
       const networkType = options.networkType || process.env.BLOCKCHAIN_NETWORK || 'localhost';
+      const retryCount = options.retryCount || 3;
+      const retryDelay = options.retryDelay || 1000;
       
       if (!rpcUrl) {
         // 根据网络类型从环境变量获取对应的RPC URL
@@ -49,26 +53,47 @@ class Provider {
       
       Logger.debug(`将使用RPC URL: ${this._maskRpcUrl(rpcUrl)}`);
       
-      // 创建Provider实例
-      try {
-        // 创建JSON-RPC Provider
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        
-        // 测试连接
-        Logger.debug('测试网络连接...');
-        const network = await provider.getNetwork();
-        Logger.debug(`连接成功! 网络: ${network.name}, 链ID: ${network.chainId}`);
-        
-        Logger.info('Provider创建成功', { 
-          rpcUrl: this._maskRpcUrl(rpcUrl),
-          networkType 
-        });
-        
-        return provider;
-      } catch (error) {
-        Logger.error('Provider创建错误详情:', { error: error.message });
-        throw new ConfigError(`创建Provider失败: ${error.message}`);
+      // 创建Provider实例并重试
+      let provider = null;
+      let lastError = null;
+      
+      for (let i = 0; i < retryCount; i++) {
+        try {
+          // ethers v6 兼容的Provider创建方法
+          provider = new ethers.JsonRpcProvider(rpcUrl);
+          
+          // 测试连接 - ethers v6中使用getNetwork()
+          Logger.debug('测试网络连接...');
+          const network = await provider.getNetwork();
+          
+          Logger.debug(`连接成功! 网络: ${network.name}, 链ID: ${network.chainId}`);
+          
+          Logger.info('Provider创建成功', { 
+            rpcUrl: this._maskRpcUrl(rpcUrl),
+            networkType,
+            attempt: i + 1
+          });
+          
+          return provider;
+        } catch (error) {
+          lastError = error;
+          Logger.warn(`Provider连接尝试${i + 1}/${retryCount}失败: ${error.message}`);
+          
+          if (i < retryCount - 1) {
+            // 不是最后一次尝试，等待后重试
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        }
       }
+      
+      // 所有重试都失败
+      Logger.error('所有Provider连接尝试均失败:', { 
+        error: lastError?.message || '未知错误',
+        networkType,
+        rpcUrl: this._maskRpcUrl(rpcUrl)
+      });
+      
+      throw new ConfigError(`创建Provider失败: ${lastError?.message || '未知错误'}`);
     } catch (error) {
       Logger.error('创建Provider失败', { 
         error: error.message,
