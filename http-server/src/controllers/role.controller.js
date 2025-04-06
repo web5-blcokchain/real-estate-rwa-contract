@@ -148,10 +148,10 @@ async function getRoleById(req, res, next) {
  */
 async function grantRole(req, res, next) {
   try {
-    const { roleId, account, privateKey } = req.body;
+    const { roleId, account, keyType } = req.body;
     
     // 验证参数
-    if (!roleId || !account || !privateKey) {
+    if (!roleId || !account || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
@@ -174,16 +174,16 @@ async function grantRole(req, res, next) {
       }, 400);
     }
     
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的keyType',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
     
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    // 获取RealEstateFacade合约实例（带keyType）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
     
     // 获取RoleManager合约实例
     const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
@@ -205,7 +205,7 @@ async function grantRole(req, res, next) {
         facade,
         'grantRole',
         [roleId, account],
-        { privateKey }
+        { keyType }
       );
       
       // 返回结果
@@ -237,10 +237,10 @@ async function grantRole(req, res, next) {
  */
 async function revokeRole(req, res, next) {
   try {
-    const { roleId, account, privateKey } = req.body;
+    const { roleId, account, keyType } = req.body;
     
     // 验证参数
-    if (!roleId || !account || !privateKey) {
+    if (!roleId || !account || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
@@ -263,16 +263,16 @@ async function revokeRole(req, res, next) {
       }, 400);
     }
     
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的keyType',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
     
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    // 获取RealEstateFacade合约实例（带keyType）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
     
     // 获取RoleManager合约实例
     const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
@@ -294,7 +294,7 @@ async function revokeRole(req, res, next) {
         facade,
         'revokeRole',
         [roleId, account],
-        { privateKey }
+        { keyType }
       );
       
       // 返回结果

@@ -65,7 +65,11 @@ const swaggerSpec = swaggerJsDoc(swaggerOptions);
 
 // 应用中间件
 app.use(helmet()); // 安全相关HTTP头
-app.use(cors()); // 支持跨域请求
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+})); // 支持跨域请求
 app.use(express.json()); // 解析JSON请求体
 app.use(express.static(path.join(__dirname, '../public'))); // 静态文件
 

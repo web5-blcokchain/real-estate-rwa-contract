@@ -17,6 +17,15 @@ class ContractAddress {
   static _cachedAddresses = {};
 
   /**
+   * 合约名称别名映射
+   * @private
+   */
+  static _contractAliases = {
+    'RealEstateFacade': 'Facade',
+    'RealEstateSystem': 'System'
+  };
+
+  /**
    * 从环境变量获取合约地址
    * @param {string} contractName - 合约名称
    * @returns {string} 合约地址
@@ -32,6 +41,9 @@ class ContractAddress {
       if (this._cachedAddresses[contractName]) {
         return this._cachedAddresses[contractName];
       }
+
+      // 检查别名映射
+      const aliasedName = this._contractAliases[contractName] || contractName;
       
       // 尝试不同格式的环境变量名
       const possibleEnvVars = [
@@ -42,7 +54,14 @@ class ContractAddress {
         `CONTRACT_${contractName.toUpperCase()}`,
         
         // 3. 合约名_CONTRACT_ADDRESS (例如：REALESTATEFACADE_CONTRACT_ADDRESS)
-        `${contractName.toUpperCase()}_CONTRACT_ADDRESS`
+        `${contractName.toUpperCase()}_CONTRACT_ADDRESS`,
+        
+        // 4. 尝试别名 (如果有)
+        ...(aliasedName !== contractName ? [
+          `${aliasedName.toUpperCase()}_ADDRESS`,
+          `CONTRACT_${aliasedName.toUpperCase()}`,
+          `${aliasedName.toUpperCase()}_CONTRACT_ADDRESS`
+        ] : [])
       ];
       
       // 尝试查找环境变量

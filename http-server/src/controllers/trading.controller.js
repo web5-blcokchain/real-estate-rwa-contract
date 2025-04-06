@@ -174,7 +174,7 @@ async function getOrderById(req, res, next) {
 async function createOrder(req, res, next) {
   try {
     // 验证请求参数
-    const { token, amount, price, privateKey } = req.body;
+    const { token, amount, price, keyType } = req.body;
     
     if (!token || !Validation.isValidAddress(token)) {
       return error(res, '通证地址无效', 400);
@@ -188,8 +188,12 @@ async function createOrder(req, res, next) {
       return error(res, '价格无效', 400);
     }
     
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    if (!keyType) {
+      return error(res, '密钥类型不能为空', 400);
+    }
+    
+    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
+      return error(res, '无效的密钥类型', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -200,7 +204,7 @@ async function createOrder(req, res, next) {
     
     // 创建钱包
     const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     const sellerAddress = await wallet.getAddress();
     
     // 检查通证授权
@@ -277,9 +281,13 @@ async function executeOrder(req, res, next) {
     }
     
     // 验证请求参数
-    const { privateKey } = req.body;
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    const { keyType } = req.body;
+    if (!keyType) {
+      return error(res, '密钥类型不能为空', 400);
+    }
+    
+    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
+      return error(res, '无效的密钥类型', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -299,7 +307,7 @@ async function executeOrder(req, res, next) {
     
     // 创建钱包
     const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     const buyerAddress = await wallet.getAddress();
     
     // 检查买家ETH余额
@@ -349,9 +357,13 @@ async function cancelOrder(req, res, next) {
     }
     
     // 验证请求参数
-    const { privateKey } = req.body;
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    const { keyType } = req.body;
+    if (!keyType) {
+      return error(res, '密钥类型不能为空', 400);
+    }
+    
+    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
+      return error(res, '无效的密钥类型', 400);
     }
     
     // 获取RealEstateFacade合约实例
@@ -371,7 +383,7 @@ async function cancelOrder(req, res, next) {
     
     // 创建钱包
     const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     const userAddress = await wallet.getAddress();
     
     // 验证调用者是订单创建者

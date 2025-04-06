@@ -210,10 +210,10 @@ async function getDistributionById(req, res, next) {
  */
 async function createDistribution(req, res, next) {
   try {
-    const { propertyIdHash, amount, description, privateKey } = req.body;
+    const { propertyIdHash, amount, description, keyType } = req.body;
     
     // 验证参数
-    if (!propertyIdHash || !amount || !description || !privateKey) {
+    if (!propertyIdHash || !amount || !description || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
@@ -221,10 +221,10 @@ async function createDistribution(req, res, next) {
     }
     
     // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的私钥类型',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
     
@@ -264,14 +264,14 @@ async function createDistribution(req, res, next) {
     
     // 创建分红
     try {
-      const facadeWithWallet = await blockchainService.createContract('RealEstateFacade', { privateKey });
+      const facadeWithWallet = await blockchainService.createContract('RealEstateFacade', { keyType });
       
       const tx = await blockchainService.sendContractTransaction(
         facadeWithWallet,
         'distributeRewards',
         [propertyIdHash, amount, description],
         { 
-          privateKey,
+          keyType,
           value: amount // 发送分红金额
         }
       );
@@ -335,7 +335,7 @@ async function createDistribution(req, res, next) {
 async function claimRewards(req, res, next) {
   try {
     const { distributionId } = req.params;
-    const { privateKey } = req.body;
+    const { keyType } = req.body;
     
     // 验证分红ID
     if (isNaN(parseInt(distributionId))) {
@@ -346,16 +346,16 @@ async function claimRewards(req, res, next) {
     }
     
     // 验证私钥格式
-    if (!privateKey || !Validation.isValidPrivateKey(privateKey)) {
+    if (!keyType || !['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的私钥类型',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
     
     // 创建钱包
     const provider = await contractService.blockchainService.getProvider();
-    const wallet = await contractService.blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await contractService.blockchainService.createWallet({ keyType });
     const address = await wallet.getAddress();
     
     // 获取RealEstateFacade合约实例

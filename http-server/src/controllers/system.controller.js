@@ -4,6 +4,8 @@
 const { Logger, Validation } = require('../../../shared/src');
 const blockchainService = require('../services/blockchainService');
 const { success, error, paginated } = require('../utils/responseFormatter');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * 获取系统状态
@@ -224,9 +226,13 @@ async function getSystemComponents(req, res, next) {
  */
 async function pauseSystem(req, res, next) {
   try {
-    const { privateKey } = req.body;
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    const { keyType } = req.body;
+    if (!keyType) {
+      return error(res, 'keyType不能为空', 400);
+    }
+    
+    if (!['admin'].includes(keyType)) {
+      return error(res, '只有管理员可以暂停系统', 403);
     }
     
     // 获取RealEstateFacade合约实例
@@ -237,7 +243,7 @@ async function pauseSystem(req, res, next) {
     
     // 创建钱包
     const provider = await blockchainService.getProvider();
-    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     
     // 创建系统合约实例（带钱包）
     const system = await blockchainService.createContract('RealEstateSystem', { 
@@ -287,9 +293,13 @@ async function pauseSystem(req, res, next) {
  */
 async function unpauseSystem(req, res, next) {
   try {
-    const { privateKey } = req.body;
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    const { keyType } = req.body;
+    if (!keyType) {
+      return error(res, 'keyType不能为空', 400);
+    }
+    
+    if (!['admin'].includes(keyType)) {
+      return error(res, '只有管理员可以恢复系统', 403);
     }
     
     // 获取RealEstateFacade合约实例
@@ -300,7 +310,7 @@ async function unpauseSystem(req, res, next) {
     
     // 创建钱包
     const provider = await blockchainService.getProvider();
-    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     
     // 创建系统合约实例（带钱包）
     const system = await blockchainService.createContract('RealEstateSystem', { 
@@ -350,7 +360,7 @@ async function unpauseSystem(req, res, next) {
  */
 async function updateSystemComponent(req, res, next) {
   try {
-    const { componentName, newAddress, privateKey } = req.body;
+    const { componentName, newAddress, keyType } = req.body;
     
     if (!componentName) {
       return error(res, '组件名称不能为空', 400);
@@ -360,8 +370,12 @@ async function updateSystemComponent(req, res, next) {
       return error(res, '新地址无效', 400);
     }
     
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    if (!keyType) {
+      return error(res, 'keyType不能为空', 400);
+    }
+    
+    if (!['admin'].includes(keyType)) {
+      return error(res, '只有管理员可以更新系统组件', 403);
     }
     
     // 验证组件名称
@@ -378,7 +392,7 @@ async function updateSystemComponent(req, res, next) {
     
     // 创建钱包
     const provider = await blockchainService.getProvider();
-    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     
     // 获取调用者地址
     const callerAddress = await wallet.getAddress();
@@ -433,14 +447,18 @@ async function updateSystemComponent(req, res, next) {
  */
 async function upgradeSystemVersion(req, res, next) {
   try {
-    const { description, privateKey } = req.body;
+    const { description, keyType } = req.body;
     
     if (!description) {
       return error(res, '版本描述不能为空', 400);
     }
     
-    if (!privateKey) {
-      return error(res, '私钥不能为空', 400);
+    if (!keyType) {
+      return error(res, 'keyType不能为空', 400);
+    }
+    
+    if (!['admin'].includes(keyType)) {
+      return error(res, '只有管理员可以升级系统版本', 403);
     }
     
     // 获取RealEstateFacade合约实例
@@ -451,7 +469,7 @@ async function upgradeSystemVersion(req, res, next) {
     
     // 创建钱包
     const provider = await blockchainService.getProvider();
-    const wallet = await blockchainService.createWalletFromPrivateKey(privateKey, provider);
+    const wallet = await blockchainService.createWallet({ keyType });
     
     // 创建系统合约实例（带钱包）
     const system = await blockchainService.createContract('RealEstateSystem', { 
@@ -501,6 +519,54 @@ async function upgradeSystemVersion(req, res, next) {
   }
 }
 
+/**
+ * 获取系统合约地址
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function getSystemContracts(req, res, next) {
+  try {
+    // 读取config/deployment.json文件
+    const configPath = path.join(__dirname, '../../../config/deployment.json');
+    let deploymentConfig;
+    
+    try {
+      const configData = fs.readFileSync(configPath, 'utf8');
+      deploymentConfig = JSON.parse(configData);
+    } catch (fileErr) {
+      Logger.error(`读取部署配置文件失败: ${fileErr.message}`, { error: fileErr });
+      return error(res, '读取部署配置文件失败', 500);
+    }
+    
+    // 整理合约地址信息
+    const contractAddresses = {
+      network: deploymentConfig.network,
+      timestamp: deploymentConfig.timestamp,
+      deployer: deploymentConfig.deployer,
+      deploymentMethod: deploymentConfig.deploymentMethod,
+      status: deploymentConfig.status,
+      contracts: {},
+      implementations: {}
+    };
+    
+    // 添加合约地址
+    if (deploymentConfig.contracts) {
+      contractAddresses.contracts = deploymentConfig.contracts;
+    }
+    
+    // 添加实现地址
+    if (deploymentConfig.implementations) {
+      contractAddresses.implementations = deploymentConfig.implementations;
+    }
+    
+    return success(res, contractAddresses);
+  } catch (err) {
+    Logger.error(`获取系统合约地址失败: ${err.message}`, { error: err });
+    return error(res, '获取系统合约地址失败', 500);
+  }
+}
+
 module.exports = {
   getSystemStatus,
   getSystemVersion,
@@ -509,5 +575,6 @@ module.exports = {
   pauseSystem,
   unpauseSystem,
   updateSystemComponent,
-  upgradeSystemVersion
+  upgradeSystemVersion,
+  getSystemContracts
 }; 

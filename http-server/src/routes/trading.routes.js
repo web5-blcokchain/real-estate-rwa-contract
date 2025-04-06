@@ -188,7 +188,7 @@ router.get('/orders/:orderId', tradingController.getOrderById);
  *               - token
  *               - amount
  *               - price
- *               - privateKey
+ *               - keyType
  *             properties:
  *               token:
  *                 type: string
@@ -202,9 +202,11 @@ router.get('/orders/:orderId', tradingController.getOrderById);
  *                 type: string
  *                 example: "50000000000000000000"
  *                 description: 出售价格（以wei为单位）
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 卖家私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "user"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       201:
  *         description: 订单创建成功
@@ -260,11 +262,13 @@ router.post('/orders', tradingController.createOrder);
  *           schema:
  *             type: object
  *             required:
- *               - privateKey
+ *               - keyType
  *             properties:
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 买家私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "user"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 交易执行成功
@@ -322,11 +326,13 @@ router.post('/orders/:orderId/execute', tradingController.executeOrder);
  *           schema:
  *             type: object
  *             required:
- *               - privateKey
+ *               - keyType
  *             properties:
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 卖家私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "user"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 订单取消成功

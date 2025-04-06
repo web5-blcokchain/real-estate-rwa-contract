@@ -28,7 +28,7 @@ const facadeController = require('../controllers/facade.controller');
  *               - tokenSymbol
  *               - initialSupply
  *               - propertyTokenImplementation
- *               - privateKey
+ *               - keyType
  *             properties:
  *               propertyId:
  *                 type: string
@@ -58,10 +58,11 @@ const facadeController = require('../controllers/facade.controller');
  *                 type: string
  *                 description: PropertyToken合约的实现地址
  *                 example: "0x1234567890123456789012345678901234567890"
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 管理员私钥（只有管理员可以注册不动产）
- *                 example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 成功注册不动产并创建代币
@@ -121,7 +122,7 @@ router.post('/property-token', facadeController.registerPropertyAndCreateToken);
  *             required:
  *               - propertyIdHash
  *               - status
- *               - privateKey
+ *               - keyType
  *             properties:
  *               propertyIdHash:
  *                 type: string
@@ -132,10 +133,11 @@ router.post('/property-token', facadeController.registerPropertyAndCreateToken);
  *                 description: 新状态值（0=活跃，1=锁定，2=暂停，3=归档）
  *                 enum: [0, 1, 2, 3]
  *                 example: 0
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 管理员私钥（只有管理员可以更新不动产状态）
- *                 example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 成功更新不动产状态
@@ -197,16 +199,17 @@ router.put('/property-status', facadeController.updatePropertyStatus);
  *             type: object
  *             required:
  *               - distributionId
- *               - privateKey
+ *               - keyType
  *             properties:
  *               distributionId:
- *                 type: integer
- *                 description: 奖励分配的ID
- *                 example: 1
- *               privateKey:
  *                 type: string
- *                 description: 领取者的私钥
- *                 example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                 description: 分配ID
+ *                 example: "1"
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "user"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 成功领取奖励
@@ -224,29 +227,104 @@ router.put('/property-status', facadeController.updatePropertyStatus);
  *                     txHash:
  *                       type: string
  *                       example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
- *                     distributionId:
+ *                     claimedAmount:
  *                       type: string
- *                       example: "1"
- *                     amount:
- *                       type: string
- *                       example: "1000000000000000000"
+ *                       example: "10000000000000000000"
  *                     gasUsed:
  *                       type: string
- *                       example: "65432"
+ *                       example: "54321"
  *                     blockNumber:
  *                       type: integer
- *                       example: 12346
+ *                       example: 12345
  *                 timestamp:
  *                   type: string
  *                   example: "2023-04-01T12:00:00.000Z"
  *       400:
- *         description: 请求参数错误或没有可领取的奖励
+ *         description: 请求参数错误
  *       401:
  *         description: 未授权访问
  *       500:
  *         description: 服务器内部错误
  */
 router.post('/claim-rewards', facadeController.claimRewards);
+
+/**
+ * @swagger
+ * /api/v1/facade/distribute-rewards:
+ *   post:
+ *     summary: 分配奖励
+ *     description: 为指定不动产的代币持有者分配奖励
+ *     tags: [Facade]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyIdHash
+ *               - amount
+ *               - keyType
+ *             properties:
+ *               propertyIdHash:
+ *                 type: string
+ *                 description: 不动产ID的哈希值
+ *                 example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *               amount:
+ *                 type: string
+ *                 description: 分配的金额（以wei为单位）
+ *                 example: "1000000000000000000000"
+ *               description:
+ *                 type: string
+ *                 description: 奖励描述
+ *                 example: "二季度租金收益"
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "manager"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 成功分配奖励
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     txHash:
+ *                       type: string
+ *                       example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                     distributionId:
+ *                       type: string
+ *                       example: "1"
+ *                     totalAmount:
+ *                       type: string
+ *                       example: "1000000000000000000000"
+ *                     gasUsed:
+ *                       type: string
+ *                       example: "54321"
+ *                     blockNumber:
+ *                       type: integer
+ *                       example: 12345
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 请求参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/distribute-rewards', facadeController.distributeRewards);
 
 /**
  * @swagger

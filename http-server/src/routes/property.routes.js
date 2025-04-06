@@ -185,7 +185,7 @@ router.get('/:propertyIdHash', propertyController.getPropertyById);
  *               - tokenName
  *               - tokenSymbol
  *               - initialSupply
- *               - privateKey
+ *               - keyType
  *             properties:
  *               propertyId:
  *                 type: string
@@ -205,9 +205,11 @@ router.get('/:propertyIdHash', propertyController.getPropertyById);
  *               initialSupply:
  *                 type: string
  *                 example: "1000000"
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 管理员私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       201:
  *         description: 房产登记成功

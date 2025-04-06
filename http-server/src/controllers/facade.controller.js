@@ -22,22 +22,22 @@ async function registerPropertyAndCreateToken(req, res, next) {
       tokenSymbol,
       initialSupply,
       propertyTokenImplementation,
-      privateKey
+      keyType
     } = req.body;
 
     // 验证参数
-    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply || !propertyTokenImplementation || !privateKey) {
+    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply || !propertyTokenImplementation || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
       }, 400);
     }
 
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType是否有效
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的密钥类型，有效值为: admin, manager, operator',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
@@ -50,7 +50,7 @@ async function registerPropertyAndCreateToken(req, res, next) {
     }
 
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
 
     // 注册不动产并创建代币
     const tx = await blockchainService.callContractMethod(
@@ -107,10 +107,10 @@ async function registerPropertyAndCreateToken(req, res, next) {
  */
 async function updatePropertyStatus(req, res, next) {
   try {
-    const { propertyIdHash, status, privateKey } = req.body;
+    const { propertyIdHash, status, keyType } = req.body;
 
     // 验证参数
-    if (!propertyIdHash || status === undefined || !privateKey) {
+    if (!propertyIdHash || status === undefined || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
@@ -134,16 +134,16 @@ async function updatePropertyStatus(req, res, next) {
       }, 400);
     }
 
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType是否有效
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的密钥类型，有效值为: admin, manager, operator',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
 
     // 获取当前状态以记录变更
     let currentStatus;
@@ -182,56 +182,39 @@ async function updatePropertyStatus(req, res, next) {
  */
 async function claimRewards(req, res, next) {
   try {
-    const { distributionId, privateKey } = req.body;
+    const { distributionId, keyType } = req.body;
 
     // 验证参数
-    if (!distributionId || !privateKey) {
+    if (!distributionId || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
       }, 400);
     }
 
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType是否有效
+    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的密钥类型，有效值为: admin, manager, operator, user',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
 
-    // 获取可领取的奖励金额
-    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
-    const rewardManager = await blockchainService.createContract('RewardManager', { address: rewardManagerAddress });
-    
     // 获取钱包地址
-    const wallet = blockchainService.createWallet(privateKey);
-    const address = wallet.address;
+    const wallet = await blockchainService.createWallet({ keyType });
+    const account = await wallet.getAddress();
 
-    const [amount, canClaim] = await blockchainService.callContractMethod(
-      rewardManager,
-      'getAvailableDistributionAmount',
-      [distributionId, address]
-    );
-
-    if (!canClaim || amount.eq(0)) {
-      return error(res, {
-        message: '没有可领取的奖励',
-        code: 'NO_REWARDS_AVAILABLE'
-      }, 400);
-    }
-
-    // 领取奖励
+    // 调用合约方法
     const tx = await blockchainService.callContractMethod(facade, 'claimRewards', [distributionId]);
     const receipt = await tx.wait();
 
     return success(res, {
       txHash: receipt.hash,
-      distributionId: distributionId.toString(),
-      amount: amount.toString(),
+      distributionId,
+      account,
       gasUsed: receipt.gasUsed.toString(),
       blockNumber: receipt.blockNumber
     });
@@ -242,56 +225,48 @@ async function claimRewards(req, res, next) {
 }
 
 /**
- * 执行交易（购买代币）
+ * 执行交易
  * @param {Object} req - 请求对象
  * @param {Object} res - 响应对象
  * @param {Function} next - 下一个中间件
  */
 async function executeTrade(req, res, next) {
   try {
-    const { orderId, privateKey, value } = req.body;
+    const { orderId, keyType, value } = req.body;
 
     // 验证参数
-    if (!orderId || !privateKey) {
+    if (!orderId || !keyType) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
       }, 400);
     }
 
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
+    // 验证keyType是否有效
+    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
       return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
+        message: '无效的密钥类型，有效值为: admin, manager, operator, user',
+        code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
     // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
 
-    // 获取订单信息，确认价格和状态
-    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
-    const tradingManager = await blockchainService.createContract('TradingManager', { address: tradingManagerAddress });
-    
-    const orderInfo = await blockchainService.callContractMethod(tradingManager, 'getOrder', [orderId]);
-    
-    // 解构订单信息
-    const [, seller, token, amount, price, , active] = orderInfo;
+    // 获取交易信息
+    const { seller, token, amount, price } = await blockchainService.callContractMethod(
+      facade,
+      'getTradeInfo',
+      [orderId]
+    );
 
-    if (!active) {
+    // 确保value不小于price
+    if (value === undefined) {
+      value = price;
+    } else if (BigInt(value) < BigInt(price)) {
       return error(res, {
-        message: '订单不活跃或已被取消',
-        code: 'ORDER_INACTIVE'
-      }, 400);
-    }
-
-    // 确保提供的value足够支付订单
-    const requiredValue = price;
-    if (!value || BigInt(value) < requiredValue) {
-      return error(res, {
-        message: `提供的资金不足，需要至少 ${requiredValue.toString()} wei`,
-        code: 'INSUFFICIENT_FUNDS'
+        message: '提供的ETH不足以支付订单价格',
+        code: 'INSUFFICIENT_VALUE'
       }, 400);
     }
 

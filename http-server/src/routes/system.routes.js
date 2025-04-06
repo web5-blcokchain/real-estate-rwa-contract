@@ -516,4 +516,346 @@ router.put('/components', systemController.updateSystemComponent);
  */
 router.post('/version', systemController.upgradeSystemVersion);
 
+/**
+ * @swagger
+ * /api/v1/system/contracts:
+ *   get:
+ *     summary: 获取系统合约地址
+ *     description: 获取系统中所有已部署合约和实现地址
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: 成功获取合约地址
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     network:
+ *                       type: string
+ *                       example: "localhost"
+ *                     timestamp:
+ *                       type: string
+ *                       example: "2023-04-01T12:00:00.000Z"
+ *                     deployer:
+ *                       type: string
+ *                       example: "0x..."
+ *                     deploymentMethod:
+ *                       type: string
+ *                       example: "step-by-step"
+ *                     status:
+ *                       type: string
+ *                       example: "completed"
+ *                     contracts:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: string
+ *                         example: "0x..."
+ *                     implementations:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: string
+ *                         example: "0x..."
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.get('/contracts', systemController.getSystemContracts);
+
+/**
+ * @swagger
+ * /api/v1/system/initialize:
+ *   post:
+ *     summary: 初始化系统
+ *     description: 部署和初始化关键的区块链系统合约
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - keyType
+ *             properties:
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 系统初始化成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     transactions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           description:
+ *                             type: string
+ *                             example: "部署RoleManager"
+ *                           hash:
+ *                             type: string
+ *                             example: "0x123..."
+ *                     addresses:
+ *                       type: object
+ *                       properties:
+ *                         RoleManager:
+ *                           type: string
+ *                           example: "0x456..."
+ *                         PropertyToken:
+ *                           type: string
+ *                           example: "0x789..."
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/initialize', systemController.initializeSystem);
+
+/**
+ * @swagger
+ * /api/v1/system/upgrade:
+ *   post:
+ *     summary: 升级系统组件
+ *     description: 升级指定的系统组件到新版本
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - component
+ *               - newAddress
+ *               - keyType
+ *             properties:
+ *               component:
+ *                 type: string
+ *                 description: 要升级的组件名
+ *                 example: "PropertyToken"
+ *               newAddress:
+ *                 type: string
+ *                 description: 新实现的合约地址
+ *                 example: "0x987..."
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 组件升级成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     component:
+ *                       type: string
+ *                       example: "PropertyToken"
+ *                     oldAddress:
+ *                       type: string
+ *                       example: "0x789..."
+ *                     newAddress:
+ *                       type: string
+ *                       example: "0x987..."
+ *                     txHash:
+ *                       type: string
+ *                       example: "0xabc..."
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/upgrade', systemController.upgradeSystemComponent);
+
+/**
+ * @swagger
+ * /api/v1/system/contract-functions:
+ *   post:
+ *     summary: 调用合约方法
+ *     description: 通用的合约方法调用接口
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contractName
+ *               - contractAddress
+ *               - methodName
+ *               - params
+ *               - keyType
+ *             properties:
+ *               contractName:
+ *                 type: string
+ *                 description: 合约名称
+ *                 example: "RoleManager"
+ *               contractAddress:
+ *                 type: string
+ *                 description: 合约地址
+ *                 example: "0x456..."
+ *               methodName:
+ *                 type: string
+ *                 description: 方法名
+ *                 example: "hasRole"
+ *               params:
+ *                 type: array
+ *                 description: 方法参数
+ *                 example: ["0x123...", "ADMIN"]
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 方法调用成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     result:
+ *                       type: string
+ *                       example: "true"
+ *                     txHash:
+ *                       type: string
+ *                       example: "0xabc..."
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/contract-functions', systemController.callContractFunction);
+
+/**
+ * @swagger
+ * /api/v1/system/transaction:
+ *   post:
+ *     summary: 发送交易
+ *     description: 发送原始交易到区块链
+ *     tags: [System]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - to
+ *               - data
+ *               - keyType
+ *             properties:
+ *               to:
+ *                 type: string
+ *                 description: 目标地址
+ *                 example: "0x456..."
+ *               data:
+ *                 type: string
+ *                 description: 交易数据
+ *                 example: "0x1234abcd..."
+ *               value:
+ *                 type: string
+ *                 description: 交易金额（以wei为单位）
+ *                 example: "1000000000000000000"
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 交易发送成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     txHash:
+ *                       type: string
+ *                       example: "0xabc..."
+ *                     blockNumber:
+ *                       type: integer
+ *                       example: 12345
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/transaction', systemController.sendTransaction);
+
 module.exports = router; 

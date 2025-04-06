@@ -167,7 +167,7 @@ router.get('/address/:address', roleController.getAccountRoles);
  *             required:
  *               - roleHash
  *               - address
- *               - privateKey
+ *               - keyType
  *             properties:
  *               roleHash:
  *                 type: string
@@ -177,9 +177,11 @@ router.get('/address/:address', roleController.getAccountRoles);
  *                 type: string
  *                 example: "0x..."
  *                 description: 接收角色的地址
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 管理员私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 角色授予成功
@@ -227,7 +229,7 @@ router.post('/grant', roleController.grantRole);
  *             required:
  *               - roleHash
  *               - address
- *               - privateKey
+ *               - keyType
  *             properties:
  *               roleHash:
  *                 type: string
@@ -237,9 +239,11 @@ router.post('/grant', roleController.grantRole);
  *                 type: string
  *                 example: "0x..."
  *                 description: 撤销角色的地址
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 管理员私钥
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *     responses:
  *       200:
  *         description: 角色撤销成功
@@ -268,5 +272,150 @@ router.post('/grant', roleController.grantRole);
  *         description: 服务器内部错误
  */
 router.post('/revoke', roleController.revokeRole);
+
+/**
+ * @swagger
+ * /api/v1/roles/users/{address}:
+ *   put:
+ *     summary: 设置用户角色
+ *     description: 为指定地址设置角色
+ *     tags: [Roles]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: 用户地址
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *               - keyType
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [USER, MANAGER, OPERATOR]
+ *                 description: 角色名称
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 角色设置成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     transactionHash:
+ *                       type: string
+ *                       example: "0x..."
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.put('/users/:address', roleController.setUserRole);
+
+/**
+ * @swagger
+ * /api/v1/roles/batch:
+ *   post:
+ *     summary: 批量设置用户角色
+ *     description: 为多个地址批量设置角色
+ *     tags: [Roles]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - users
+ *               - keyType
+ *             properties:
+ *               users:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     address:
+ *                       type: string
+ *                       example: "0x..."
+ *                     role:
+ *                       type: string
+ *                       enum: [USER, MANAGER, OPERATOR]
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "admin"
+ *                 description: 密钥类型（admin, manager, operator, user）
+ *     responses:
+ *       200:
+ *         description: 批量角色设置成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           address:
+ *                             type: string
+ *                             example: "0x..."
+ *                           role:
+ *                             type: string
+ *                             example: "USER"
+ *                           success:
+ *                             type: boolean
+ *                             example: true
+ *                           transactionHash:
+ *                             type: string
+ *                             example: "0x..."
+ *                           error:
+ *                             type: string
+ *                             example: null
+ *                 timestamp:
+ *                   type: string
+ *                   example: "2023-04-01T12:00:00.000Z"
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权访问
+ *       500:
+ *         description: 服务器内部错误
+ */
+router.post('/batch', roleController.setBatchRoles);
 
 module.exports = router; 

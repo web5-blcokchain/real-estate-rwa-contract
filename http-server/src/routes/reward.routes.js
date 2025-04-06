@@ -182,7 +182,7 @@ router.get('/distributions/:distributionId', rewardController.getDistributionByI
  *               - propertyIdHash
  *               - amount
  *               - description
- *               - privateKey
+ *               - keyType
  *             properties:
  *               propertyIdHash:
  *                 type: string
@@ -196,6 +196,11 @@ router.get('/distributions/:distributionId', rewardController.getDistributionByI
  *                 type: string
  *                 example: "2023年第1季度租金收益"
  *                 description: 分配描述
+ *               keyType:
+ *                 type: string
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "manager"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *               applyFees:
  *                 type: boolean
  *                 example: true
@@ -204,9 +209,6 @@ router.get('/distributions/:distributionId', rewardController.getDistributionByI
  *                 type: string
  *                 example: "0x0000000000000000000000000000000000000000"
  *                 description: 支付通证地址（0地址表示ETH）
- *               privateKey:
- *                 type: string
- *                 description: 管理员私钥
  *     responses:
  *       201:
  *         description: 收益分配创建成功
@@ -262,11 +264,11 @@ router.post('/distributions', rewardController.createDistribution);
  *           schema:
  *             type: object
  *             required:
- *               - privateKey
+ *               - keyType
  *             properties:
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 用户私钥
+ *                 description: 用户密钥类型
  *     responses:
  *       200:
  *         description: 收益领取成功

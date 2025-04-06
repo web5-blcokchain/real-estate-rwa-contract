@@ -97,6 +97,9 @@ class BlockchainService {
    * 
    * @param {string} contractName - 合约名称
    * @param {Object} options - 可选参数
+   * @param {Object} [options.wallet] - 钱包实例
+   * @param {string} [options.keyType] - 密钥类型 (admin, manager, operator, user)
+   * @param {string} [options.address] - 合约地址
    * @returns {Promise<Object>} 合约实例
    */
   async createContract(contractName, options = {}) {
@@ -107,7 +110,7 @@ class BlockchainService {
       
       // 如果提供了keyType但没有提供wallet，从keyType创建钱包
       if (!signer && options.keyType) {
-        signer = await Wallet.createFromKeyType(options.keyType, this.provider);
+        signer = await this.createWallet({ keyType: options.keyType });
       }
       
       // 直接使用shared模块的Contract.createFromName
@@ -174,18 +177,16 @@ class BlockchainService {
     await this.ensureInitialized();
     
     try {
-      // 检查是否提供了钱包、私钥或keyType
-      if (!options.wallet && !options.privateKey && !options.keyType) {
-        throw new Error('发送交易需要提供钱包、私钥或钱包类型');
+      // 检查是否提供了钱包或keyType
+      if (!options.wallet && !options.keyType) {
+        throw new Error('发送交易需要提供钱包或密钥类型');
       }
       
-      // 获取钱包 - 优先级：1. 已有钱包 2. 私钥 3. keyType
+      // 获取钱包 - 优先级：1. 已有钱包 2. keyType
       let wallet = options.wallet;
       
-      if (!wallet && options.privateKey) {
-        wallet = await this.createWalletFromPrivateKey(options.privateKey);
-      } else if (!wallet && options.keyType) {
-        wallet = await Wallet.createFromKeyType(options.keyType, this.provider);
+      if (!wallet && options.keyType) {
+        wallet = await this.createWallet({ keyType: options.keyType });
       }
       
       // 获取合约实例
@@ -216,32 +217,10 @@ class BlockchainService {
   }
 
   /**
-   * 从私钥创建钱包
-   * 
-   * @param {string} privateKey - 私钥
-   * @param {Object} provider - 可选的provider，如果不提供则使用服务内部的provider
-   * @returns {Promise<Object>} 钱包实例
-   */
-  async createWalletFromPrivateKey(privateKey, provider = null) {
-    await this.ensureInitialized();
-    
-    try {
-      // 如果未提供provider，使用服务内部的provider
-      const targetProvider = provider || this.provider;
-      
-      // 使用shared模块的Wallet功能
-      return await Wallet.createFromPrivateKey(privateKey, targetProvider);
-    } catch (error) {
-      const handledError = ErrorHandler.handle(error);
-      Logger.error(`从私钥创建钱包失败: ${handledError.message}`, { error: handledError });
-      throw handledError;
-    }
-  }
-
-  /**
    * 创建钱包
    * 
    * @param {Object} options - 钱包选项
+   * @param {string} [options.keyType] - 密钥类型 (admin, manager, operator, user)
    * @returns {Promise<Object>} 钱包实例
    */
   async createWallet(options = {}) {
