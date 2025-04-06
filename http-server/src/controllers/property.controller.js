@@ -228,23 +228,15 @@ async function registerProperty(req, res, next) {
       metadataURI, 
       tokenName, 
       tokenSymbol, 
-      initialSupply, 
-      privateKey 
+      initialSupply,
+      walletType = 'PROPERTY_MANAGER'  // 使用默认的钱包类型，而不是用户提供的私钥
     } = req.body;
     
     // 验证参数
-    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply || !privateKey) {
+    if (!propertyId || !country || !metadataURI || !tokenName || !tokenSymbol || !initialSupply) {
       return error(res, {
         message: '缺少必填参数',
         code: 'MISSING_PARAMETERS'
-      }, 400);
-    }
-    
-    // 验证私钥格式
-    if (!Validation.isValidPrivateKey(privateKey)) {
-      return error(res, {
-        message: '无效的私钥格式',
-        code: 'INVALID_PRIVATE_KEY'
       }, 400);
     }
     
@@ -256,12 +248,15 @@ async function registerProperty(req, res, next) {
       }, 400);
     }
     
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { privateKey });
+    // 获取RealEstateFacade合约实例（使用 keyType）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType: walletType });
     
     // 获取PropertyManager合约实例
     const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
-    const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress, privateKey });
+    const propertyManager = await blockchainService.createContract('PropertyManager', { 
+      address: propertyManagerAddress, 
+      keyType: walletType 
+    });
     
     // 计算房产ID哈希
     const propertyIdHash = await blockchainService.callContractMethod(propertyManager, 'calculatePropertyIdHash', [propertyId]);
@@ -287,7 +282,7 @@ async function registerProperty(req, res, next) {
         facade,
         'registerPropertyAndCreateToken',
         [propertyId, country, metadataURI, tokenName, tokenSymbol, initialSupply],
-        { privateKey }
+        { keyType: walletType }
       );
       
       // 获取通证地址
@@ -324,7 +319,8 @@ async function registerProperty(req, res, next) {
         metadataURI,
         tokenName,
         tokenSymbol,
-        initialSupply
+        initialSupply,
+        walletType
       }, 201);
     } catch (err) {
       Logger.error(`注册房产失败: ${err.message}`, { error: err });

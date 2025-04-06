@@ -103,15 +103,22 @@ class BlockchainService {
     await this.ensureInitialized();
     
     try {
+      let signer = options.wallet;
+      
+      // 如果提供了keyType但没有提供wallet，从keyType创建钱包
+      if (!signer && options.keyType) {
+        signer = await Wallet.createFromKeyType(options.keyType, this.provider);
+      }
+      
       // 直接使用shared模块的Contract.createFromName
       return await Contract.createFromName(
         contractName,
         this.networkType,
         {
           provider: this.provider,
-          signer: options.wallet,
-          readOnly: !options.wallet,
-          keyType: options.keyType
+          signer: signer,
+          readOnly: !signer,
+          address: options.address
         }
       );
     } catch (error) {
@@ -167,15 +174,18 @@ class BlockchainService {
     await this.ensureInitialized();
     
     try {
-      // 检查是否提供了钱包
-      if (!options.wallet && !options.privateKey) {
-        throw new Error('发送交易需要提供钱包或私钥');
+      // 检查是否提供了钱包、私钥或keyType
+      if (!options.wallet && !options.privateKey && !options.keyType) {
+        throw new Error('发送交易需要提供钱包、私钥或钱包类型');
       }
       
-      // 如果提供了私钥，创建钱包
+      // 获取钱包 - 优先级：1. 已有钱包 2. 私钥 3. keyType
       let wallet = options.wallet;
+      
       if (!wallet && options.privateKey) {
         wallet = await this.createWalletFromPrivateKey(options.privateKey);
+      } else if (!wallet && options.keyType) {
+        wallet = await Wallet.createFromKeyType(options.keyType, this.provider);
       }
       
       // 获取合约实例
