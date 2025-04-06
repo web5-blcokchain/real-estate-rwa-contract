@@ -11,6 +11,7 @@ const tradingRoutes = require('./trading.routes');
 const rewardRoutes = require('./reward.routes');
 const roleRoutes = require('./role.routes');
 const systemRoutes = require('./system.routes');
+const facadeRoutes = require('./facade.routes');
 
 /**
  * @swagger
@@ -27,6 +28,8 @@ const systemRoutes = require('./system.routes');
  *     description: 角色权限管理API
  *   - name: System
  *     description: 系统管理API
+ *   - name: Facade
+ *     description: RealEstateFacade合约直接访问API
  */
 
 // 注册各模块路由
@@ -36,6 +39,7 @@ router.use('/v1/trading', tradingRoutes);
 router.use('/v1/rewards', rewardRoutes);
 router.use('/v1/roles', roleRoutes);
 router.use('/v1/system', systemRoutes);
+router.use('/v1/facade', facadeRoutes);
 
 // API版本信息
 router.get('/version', (req, res) => {
