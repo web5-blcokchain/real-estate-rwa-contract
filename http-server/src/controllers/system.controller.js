@@ -567,6 +567,309 @@ async function getSystemContracts(req, res, next) {
   }
 }
 
+/**
+ * 初始化系统
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function initializeSystem(req, res, next) {
+  try {
+    const { keyType } = req.body;
+    
+    // 验证参数
+    if (!keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证keyType
+    if (!['admin'].includes(keyType)) {
+      return error(res, {
+        message: '只有管理员可以初始化系统',
+        code: 'PERMISSION_DENIED'
+      }, 403);
+    }
+    
+    // 获取RealEstateFacade合约实例
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
+    
+    // 初始化系统
+    const tx = await blockchainService.sendContractTransaction(
+      facade,
+      'initializeSystem',
+      [],
+      { keyType }
+    );
+    
+    // 获取系统组件地址
+    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
+    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    
+    // 返回结果
+    return success(res, {
+      transactions: [
+        {
+          description: '初始化系统',
+          hash: tx.hash
+        }
+      ],
+      addresses: {
+        RealEstateFacade: facade.address,
+        RealEstateSystem: systemAddress,
+        RoleManager: roleManagerAddress,
+        PropertyManager: propertyManagerAddress,
+        TradingManager: tradingManagerAddress,
+        RewardManager: rewardManagerAddress
+      }
+    });
+  } catch (err) {
+    Logger.error(`初始化系统失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: '初始化系统失败',
+      code: 'INITIALIZATION_FAILED',
+      details: err.message
+    }, 500);
+  }
+}
+
+/**
+ * 升级系统组件
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function upgradeSystemComponent(req, res, next) {
+  try {
+    const { component, newAddress, keyType } = req.body;
+    
+    // 验证参数
+    if (!component || !newAddress || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证地址格式
+    if (!Validation.isValidAddress(newAddress)) {
+      return error(res, {
+        message: '无效的合约地址格式',
+        code: 'INVALID_ADDRESS'
+      }, 400);
+    }
+    
+    // 验证keyType
+    if (!['admin'].includes(keyType)) {
+      return error(res, {
+        message: '只有管理员可以升级系统组件',
+        code: 'PERMISSION_DENIED'
+      }, 403);
+    }
+    
+    // 获取RealEstateFacade合约实例
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
+    
+    // 获取当前组件地址
+    let oldAddress;
+    let upgradeMethod;
+    
+    switch (component) {
+      case 'PropertyToken':
+        upgradeMethod = 'upgradePropertyTokenImplementation';
+        // 获取PropertyManager合约实例
+        const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+        const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
+        oldAddress = await blockchainService.callContractMethod(propertyManager, 'propertyTokenImplementation');
+        break;
+      case 'RoleManager':
+        upgradeMethod = 'upgradeRoleManager';
+        oldAddress = await blockchainService.callContractMethod(facade, 'roleManager');
+        break;
+      case 'PropertyManager':
+        upgradeMethod = 'upgradePropertyManager';
+        oldAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
+        break;
+      case 'TradingManager':
+        upgradeMethod = 'upgradeTradingManager';
+        oldAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
+        break;
+      case 'RewardManager':
+        upgradeMethod = 'upgradeRewardManager';
+        oldAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+        break;
+      case 'RealEstateSystem':
+        upgradeMethod = 'upgradeSystem';
+        oldAddress = await blockchainService.callContractMethod(facade, 'system');
+        break;
+      default:
+        return error(res, {
+          message: '不支持的组件类型',
+          code: 'UNSUPPORTED_COMPONENT'
+        }, 400);
+    }
+    
+    // 升级组件
+    const tx = await blockchainService.sendContractTransaction(
+      facade,
+      upgradeMethod,
+      [newAddress],
+      { keyType }
+    );
+    
+    // 返回结果
+    return success(res, {
+      component,
+      oldAddress,
+      newAddress,
+      txHash: tx.hash
+    });
+  } catch (err) {
+    Logger.error(`升级系统组件失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: '升级系统组件失败',
+      code: 'UPGRADE_FAILED',
+      details: err.message
+    }, 500);
+  }
+}
+
+/**
+ * 调用合约方法
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function callContractFunction(req, res, next) {
+  try {
+    const { contractName, contractAddress, methodName, params, keyType } = req.body;
+    
+    // 验证参数
+    if (!contractName || !contractAddress || !methodName || !params || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证地址格式
+    if (!Validation.isValidAddress(contractAddress)) {
+      return error(res, {
+        message: '无效的合约地址格式',
+        code: 'INVALID_ADDRESS'
+      }, 400);
+    }
+    
+    // 验证参数格式
+    if (!Array.isArray(params)) {
+      return error(res, {
+        message: 'params必须是数组',
+        code: 'INVALID_PARAMS'
+      }, 400);
+    }
+    
+    // 创建合约实例
+    const contract = await blockchainService.createContract(contractName, { 
+      address: contractAddress,
+      keyType
+    });
+    
+    // 调用合约方法
+    const result = await blockchainService.sendContractTransaction(
+      contract,
+      methodName,
+      params,
+      { keyType }
+    );
+    
+    // 返回结果
+    return success(res, {
+      result: result.toString(),
+      txHash: result.hash
+    });
+  } catch (err) {
+    Logger.error(`调用合约方法失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: '调用合约方法失败',
+      code: 'CONTRACT_CALL_FAILED',
+      details: err.message
+    }, 500);
+  }
+}
+
+/**
+ * 发送交易
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function sendTransaction(req, res, next) {
+  try {
+    const { to, data, value, keyType } = req.body;
+    
+    // 验证参数
+    if (!to || !data || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证地址格式
+    if (!Validation.isValidAddress(to)) {
+      return error(res, {
+        message: '无效的目标地址格式',
+        code: 'INVALID_ADDRESS'
+      }, 400);
+    }
+    
+    // 验证data格式
+    if (!data.startsWith('0x')) {
+      return error(res, {
+        message: 'data必须是16进制格式且以0x开头',
+        code: 'INVALID_DATA'
+      }, 400);
+    }
+    
+    // 创建钱包
+    const wallet = await blockchainService.createWallet({ keyType });
+    
+    // 准备交易选项
+    const txOptions = {
+      to,
+      data
+    };
+    
+    // 设置value（如果有）
+    if (value) {
+      txOptions.value = value;
+    }
+    
+    // 发送交易
+    const tx = await wallet.sendTransaction(txOptions);
+    const receipt = await tx.wait();
+    
+    // 返回结果
+    return success(res, {
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString()
+    });
+  } catch (err) {
+    Logger.error(`发送交易失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: '发送交易失败',
+      code: 'TRANSACTION_FAILED',
+      details: err.message
+    }, 500);
+  }
+}
+
 module.exports = {
   getSystemStatus,
   getSystemVersion,
@@ -576,5 +879,9 @@ module.exports = {
   unpauseSystem,
   updateSystemComponent,
   upgradeSystemVersion,
-  getSystemContracts
+  getSystemContracts,
+  initializeSystem,
+  upgradeSystemComponent,
+  callContractFunction,
+  sendTransaction
 }; 

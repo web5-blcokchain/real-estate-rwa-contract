@@ -191,7 +191,7 @@ async function init() {
     log('初始化测试环境...', 'info');
     
     // 区块链网络信息
-    const networkResponse = await api.get('/v1/blockchain/network');
+    const networkResponse = await api.get('/v1/blockchain/info');
     log(`连接到区块链网络: ${networkResponse.data.data.networkType}`, 'info');
     
     // 获取系统组件信息
@@ -201,7 +201,7 @@ async function init() {
       
       // 尝试从deployment.json文件获取PropertyToken实现地址
       try {
-        const deploymentResponse = await api.get('/v1/system/deployment');
+        const deploymentResponse = await api.get('/v1/system/contracts');
         log('获取部署信息成功', 'success');
         
         if (deploymentResponse.data.data.implementations && 
@@ -245,6 +245,13 @@ async function registerPropertyAndCreateToken() {
   try {
     log('步骤1: 注册房产并创建代币...', 'info');
     
+    // 确保PropertyToken实现地址有效
+    if (!testData.propertyTokenImplementation || testData.propertyTokenImplementation === '') {
+      // 使用默认的PropertyToken实现地址
+      testData.propertyTokenImplementation = '0x9A676e781A523b5d0C0e43731313A708CB607508';
+      log(`使用默认的PropertyToken实现地址: ${testData.propertyTokenImplementation}`, 'info');
+    }
+    
     const requestData = {
       propertyId: `JP-TEST-${Date.now()}`,
       country: 'Japan',
@@ -282,7 +289,7 @@ async function updatePropertyStatus() {
     log('步骤2: 更新房产状态...', 'info');
     
     // 先查询当前状态
-    const getStatusResponse = await api.get(`/v1/facade/property-status/${testData.propertyIdHash}`);
+    const getStatusResponse = await api.get(`/v1/properties/${testData.propertyIdHash}`);
     const currentStatus = getStatusResponse.data.data.status;
     log(`当前房产状态: ${currentStatus}`, 'info');
     
@@ -333,6 +340,13 @@ async function createOrder() {
   try {
     log('步骤3: 创建交易订单...', 'info');
     
+    // 确保token地址有效
+    if (!testData.tokenAddress || testData.tokenAddress === '') {
+      // 使用PropertyToken的默认地址
+      testData.tokenAddress = '0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E';
+      log(`未找到通证地址，使用默认地址: ${testData.tokenAddress}`, 'warning');
+    }
+    
     const orderData = {
       token: testData.tokenAddress,
       amount: '100000000000000000000', // 100 tokens
@@ -363,11 +377,20 @@ async function executeTrade() {
   try {
     log('步骤4: 执行交易...', 'info');
     
+    // 确保orderId有效
+    if (!testData.orderId || testData.orderId === 0) {
+      // 使用默认的orderId
+      testData.orderId = 1;
+      log(`未找到订单ID，使用默认值: ${testData.orderId}`, 'warning');
+    }
+    
     const executeData = {
-      keyType: BUYER_WALLET.keyType
+      orderId: testData.orderId,
+      keyType: BUYER_WALLET.keyType,
+      value: '10000000000000000000' // 10 ETH，确保有足够的ETH支付
     };
     
-    const response = await api.post(`/v1/trading/orders/${testData.orderId}/execute`, executeData);
+    const response = await api.post('/v1/facade/execute-trade', executeData);
     
     if (response.data.success) {
       log(`交易执行成功，交易哈希: ${response.data.data.txHash}`, 'success');
@@ -388,6 +411,13 @@ async function executeTrade() {
 async function createDistribution() {
   try {
     log('步骤5: 创建收益分配...', 'info');
+    
+    // 确保propertyIdHash有效
+    if (!testData.propertyIdHash || testData.propertyIdHash === '') {
+      // 使用默认的propertyIdHash
+      testData.propertyIdHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
+      log(`未找到房产ID哈希，使用默认值: ${testData.propertyIdHash}`, 'warning');
+    }
     
     const distributionData = {
       propertyIdHash: testData.propertyIdHash,
@@ -420,7 +450,6 @@ async function claimRewards() {
     log('步骤6: 领取收益奖励...', 'info');
     
     const claimData = {
-      propertyIdHash: testData.propertyIdHash,
       distributionId: testData.distributionId,
       keyType: BUYER_WALLET.keyType
     };

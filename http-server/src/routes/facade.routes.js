@@ -343,17 +343,17 @@ router.post('/distribute-rewards', facadeController.distributeRewards);
  *             type: object
  *             required:
  *               - orderId
- *               - privateKey
- *               - value
+ *               - keyType
  *             properties:
  *               orderId:
  *                 type: integer
  *                 description: 订单ID
  *                 example: 1
- *               privateKey:
+ *               keyType:
  *                 type: string
- *                 description: 买家的私钥
- *                 example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                 enum: [admin, manager, operator, user]
+ *                 example: "user"
+ *                 description: 密钥类型（admin, manager, operator, user）
  *               value:
  *                 type: string
  *                 description: 要发送的ETH金额（以wei为单位）

@@ -464,11 +464,243 @@ async function getAccountRoles(req, res, next) {
   }
 }
 
+/**
+ * 设置用户角色
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function setUserRole(req, res, next) {
+  try {
+    const { address } = req.params;
+    const { role, keyType } = req.body;
+    
+    // 验证参数
+    if (!address || !role || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证地址格式
+    if (!Validation.isValidAddress(address)) {
+      return error(res, {
+        message: '无效的钱包地址格式',
+        code: 'INVALID_ADDRESS'
+      }, 400);
+    }
+    
+    // 验证角色
+    const validRoles = ['USER', 'MANAGER', 'OPERATOR'];
+    if (!validRoles.includes(role)) {
+      return error(res, {
+        message: '无效的角色值，有效值为: USER, MANAGER, OPERATOR',
+        code: 'INVALID_ROLE'
+      }, 400);
+    }
+    
+    // 验证keyType
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+      return error(res, {
+        message: '无效的keyType，有效值为: admin, manager, operator',
+        code: 'INVALID_KEY_TYPE'
+      }, 400);
+    }
+    
+    // 获取RealEstateFacade合约实例（带keyType）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
+    
+    // 角色映射
+    const roleMapping = {
+      'USER': '0x0000000000000000000000000000000000000000000000000000000000000000', // DEFAULT_ROLE
+      'MANAGER': '0x6148a9658a54b229f7084f635f852f1b8a7f29d4c8a7d5967fca2bc55baedc21', // PROPERTY_MANAGER_ROLE
+      'OPERATOR': '0x0e2a6e1a51243bdf4099a8f4e9db921ebd43987d4d743a9d8d97c96dbaba6f78', // TRADING_MANAGER_ROLE
+    };
+    
+    const roleId = roleMapping[role];
+    
+    // 授予角色
+    try {
+      // 先撤销之前的所有角色
+      for (const [roleName, id] of Object.entries(roleMapping)) {
+        if (roleName !== role) {
+          try {
+            const hasRole = await blockchainService.callContractMethod(facade, 'hasRole', [id, address]);
+            if (hasRole) {
+              await blockchainService.sendContractTransaction(
+                facade,
+                'revokeRole',
+                [id, address],
+                { keyType }
+              );
+              Logger.info(`已撤销角色 ${roleName} 从地址 ${address}`);
+            }
+          } catch (error) {
+            Logger.warn(`撤销角色失败: ${roleName}`, { error: error.message });
+          }
+        }
+      }
+      
+      // 授予新角色
+      const tx = await blockchainService.sendContractTransaction(
+        facade,
+        'grantRole',
+        [roleId, address],
+        { keyType }
+      );
+      
+      // 返回结果
+      return success(res, {
+        transactionHash: tx.hash,
+        address,
+        role,
+        roleId
+      });
+    } catch (err) {
+      Logger.error(`设置用户角色失败: ${err.message}`, { error: err });
+      return error(res, {
+        message: '设置用户角色失败',
+        code: 'SET_USER_ROLE_FAILED',
+        details: err.message
+      }, 500);
+    }
+  } catch (err) {
+    Logger.error('设置用户角色失败', { error: err });
+    return next(err);
+  }
+}
+
+/**
+ * 批量设置用户角色
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function setBatchRoles(req, res, next) {
+  try {
+    const { users, keyType } = req.body;
+    
+    // 验证参数
+    if (!users || !Array.isArray(users) || users.length === 0 || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+    
+    // 验证keyType
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+      return error(res, {
+        message: '无效的keyType，有效值为: admin, manager, operator',
+        code: 'INVALID_KEY_TYPE'
+      }, 400);
+    }
+    
+    // 获取RealEstateFacade合约实例（带keyType）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
+    
+    // 角色映射
+    const roleMapping = {
+      'USER': '0x0000000000000000000000000000000000000000000000000000000000000000', // DEFAULT_ROLE
+      'MANAGER': '0x6148a9658a54b229f7084f635f852f1b8a7f29d4c8a7d5967fca2bc55baedc21', // PROPERTY_MANAGER_ROLE
+      'OPERATOR': '0x0e2a6e1a51243bdf4099a8f4e9db921ebd43987d4d743a9d8d97c96dbaba6f78', // TRADING_MANAGER_ROLE
+    };
+    
+    // 批量设置角色
+    const results = [];
+    
+    for (const user of users) {
+      const { address, role } = user;
+      
+      // 验证地址格式
+      if (!Validation.isValidAddress(address)) {
+        results.push({
+          address,
+          role,
+          success: false,
+          error: '无效的钱包地址格式'
+        });
+        continue;
+      }
+      
+      // 验证角色
+      const validRoles = ['USER', 'MANAGER', 'OPERATOR'];
+      if (!validRoles.includes(role)) {
+        results.push({
+          address,
+          role,
+          success: false,
+          error: '无效的角色值，有效值为: USER, MANAGER, OPERATOR'
+        });
+        continue;
+      }
+      
+      try {
+        const roleId = roleMapping[role];
+        
+        // 先撤销之前的所有角色
+        for (const [roleName, id] of Object.entries(roleMapping)) {
+          if (roleName !== role) {
+            try {
+              const hasRole = await blockchainService.callContractMethod(facade, 'hasRole', [id, address]);
+              if (hasRole) {
+                await blockchainService.sendContractTransaction(
+                  facade,
+                  'revokeRole',
+                  [id, address],
+                  { keyType }
+                );
+                Logger.info(`已撤销角色 ${roleName} 从地址 ${address}`);
+              }
+            } catch (error) {
+              Logger.warn(`撤销角色失败: ${roleName} 从地址 ${address}`, { error: error.message });
+            }
+          }
+        }
+        
+        // 授予新角色
+        const tx = await blockchainService.sendContractTransaction(
+          facade,
+          'grantRole',
+          [roleId, address],
+          { keyType }
+        );
+        
+        results.push({
+          address,
+          role,
+          success: true,
+          transactionHash: tx.hash
+        });
+      } catch (err) {
+        Logger.error(`设置用户角色失败: ${address} - ${role}`, { error: err });
+        results.push({
+          address,
+          role,
+          success: false,
+          error: err.message
+        });
+      }
+    }
+    
+    // 返回结果
+    return success(res, {
+      results
+    });
+  } catch (err) {
+    Logger.error('批量设置用户角色失败', { error: err });
+    return next(err);
+  }
+}
+
 module.exports = {
   getAllRoles,
   getRoleById,
   grantRole,
   revokeRole,
   hasRole,
-  getAccountRoles
+  getAccountRoles,
+  setUserRole,
+  setBatchRoles
 }; 

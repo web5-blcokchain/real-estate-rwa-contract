@@ -232,7 +232,7 @@ async function claimRewards(req, res, next) {
  */
 async function executeTrade(req, res, next) {
   try {
-    const { orderId, keyType, value } = req.body;
+    const { orderId, keyType, value: inputValue } = req.body;
 
     // 验证参数
     if (!orderId || !keyType) {
@@ -261,13 +261,16 @@ async function executeTrade(req, res, next) {
     );
 
     // 确保value不小于price
-    if (value === undefined) {
-      value = price;
-    } else if (BigInt(value) < BigInt(price)) {
+    let finalValue;
+    if (inputValue === undefined) {
+      finalValue = price;
+    } else if (BigInt(inputValue) < BigInt(price)) {
       return error(res, {
         message: '提供的ETH不足以支付订单价格',
         code: 'INSUFFICIENT_VALUE'
       }, 400);
+    } else {
+      finalValue = inputValue;
     }
 
     // 执行交易
@@ -275,7 +278,7 @@ async function executeTrade(req, res, next) {
       facade,
       'executeTrade',
       [orderId],
-      { value: BigInt(value) }
+      { value: BigInt(finalValue) }
     );
     
     const receipt = await tx.wait();
@@ -319,10 +322,89 @@ async function getVersion(req, res, next) {
   }
 }
 
+/**
+ * 分配奖励
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
+ * @param {Function} next - 下一个中间件
+ */
+async function distributeRewards(req, res, next) {
+  try {
+    const { propertyIdHash, amount, description, keyType } = req.body;
+
+    // 验证参数
+    if (!propertyIdHash || !amount || !keyType) {
+      return error(res, {
+        message: '缺少必填参数',
+        code: 'MISSING_PARAMETERS'
+      }, 400);
+    }
+
+    // 验证propertyIdHash格式
+    if (!Validation.isValidBytes32(propertyIdHash)) {
+      return error(res, {
+        message: '无效的不动产ID哈希格式',
+        code: 'INVALID_PROPERTY_ID_HASH'
+      }, 400);
+    }
+
+    // 验证keyType是否有效
+    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+      return error(res, {
+        message: '无效的密钥类型，有效值为: admin, manager, operator',
+        code: 'INVALID_KEY_TYPE'
+      }, 400);
+    }
+
+    // 获取RealEstateFacade合约实例（带钱包）
+    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
+
+    // 准备分配描述
+    const rewardDescription = description || '收益分配';
+
+    // 分配奖励
+    const tx = await blockchainService.sendContractTransaction(
+      facade,
+      'distributeRewards',
+      [propertyIdHash, amount, rewardDescription],
+      { 
+        keyType,
+        value: amount // 发送相应金额的ETH
+      }
+    );
+
+    // 从事件中获取distributionId
+    let distributionId;
+    for (const event of tx.logs) {
+      try {
+        const parsedEvent = facade.interface.parseLog(event);
+        if (parsedEvent && parsedEvent.name === 'RewardsDistributed') {
+          distributionId = parsedEvent.args.distributionId.toString();
+          break;
+        }
+      } catch (e) {
+        // 忽略不能解析的事件
+      }
+    }
+
+    return success(res, {
+      txHash: tx.hash,
+      distributionId,
+      totalAmount: amount,
+      gasUsed: tx.gasUsed.toString(),
+      blockNumber: tx.blockNumber
+    });
+  } catch (err) {
+    Logger.error(`分配奖励失败: ${req.body.propertyIdHash}`, { error: err });
+    return next(err);
+  }
+}
+
 module.exports = {
   registerPropertyAndCreateToken,
   updatePropertyStatus,
   claimRewards,
   executeTrade,
-  getVersion
+  getVersion,
+  distributeRewards
 }; 
