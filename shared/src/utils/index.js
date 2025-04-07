@@ -8,7 +8,7 @@ const Validation = require('./validation');
 const Logger = require('./logger');
 const PerformanceMonitor = require('./performance');
 const SecurityAuditor = require('./security');
-const AddressManager = require('./address');
+const ContractAddress = require('./address');
 const { formatContractArgs } = require('./formatter');
 const { 
   ErrorCodes,
@@ -42,7 +42,7 @@ module.exports = {
   SecurityAuditor,
 
   // 地址管理
-  AddressManager,
+  ContractAddress,
   
   // 格式化工具
   formatContractArgs,

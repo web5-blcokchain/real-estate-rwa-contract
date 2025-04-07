@@ -1,7 +1,7 @@
 /**
  * 系统管理控制器
  */
-const { Logger, Validation, Contract } = require('../../../shared/src');
+const { Logger, Validation, Contract, ContractAddress } = require('../../../shared/src');
 const blockchainService = require('../services/blockchainService');
 const { success, error, failure, paginated } = require('../utils/responseFormatter');
 const fs = require('fs');
@@ -162,9 +162,9 @@ async function getSystemComponents(req, res, next) {
     // 获取 RealEstateFacade 地址
     let facadeAddress = null;
     try {
-      // 尝试从环境变量获取Facade地址
-      facadeAddress = process.env.REALESTATEFACADE_ADDRESS || process.env.FACADE_ADDRESS || process.env.CONTRACT_REALESTATEFACADE;
-      Logger.debug(`从环境变量获取到Facade地址: ${facadeAddress}`);
+      // 使用ContractAddress获取Facade地址
+      facadeAddress = ContractAddress.getContractAddress('RealEstateFacade');
+      Logger.debug(`使用ContractAddress获取到Facade地址: ${facadeAddress}`);
     } catch (error) {
       Logger.warn(`无法获取Facade地址: ${error.message}`);
     }
@@ -190,15 +190,15 @@ async function getSystemComponents(req, res, next) {
     } catch (error) {
       Logger.warn(`无法从Facade获取System地址: ${error.message}`);
       
-      // 尝试从环境变量获取System地址
+      // 使用ContractAddress获取System地址
       try {
-        systemAddress = process.env.REALESTATESYSTEM_ADDRESS || process.env.SYSTEM_ADDRESS || process.env.CONTRACT_REALESTATESYSTEM;
+        systemAddress = ContractAddress.getContractAddress('RealEstateSystem');
         if (systemAddress) {
-          Logger.debug(`从环境变量获取到System地址: ${systemAddress}`);
+          Logger.debug(`使用ContractAddress获取到System地址: ${systemAddress}`);
           components.system = systemAddress;
         }
-      } catch (envError) {
-        Logger.warn(`从环境变量获取System地址失败: ${envError.message}`);
+      } catch (addressError) {
+        Logger.warn(`使用ContractAddress获取System地址失败: ${addressError.message}`);
       }
     }
     
@@ -222,15 +222,15 @@ async function getSystemComponents(req, res, next) {
       rewardManager: 'getRewardManagerAddress'
     };
     
-    // 环境变量名映射
-    const envNameMap = {
-      roleManager: ['ROLEMANAGER_ADDRESS', 'ROLE_MANAGER_ADDRESS', 'CONTRACT_ROLEMANAGER'],
-      propertyManager: ['PROPERTYMANAGER_ADDRESS', 'PROPERTY_MANAGER_ADDRESS', 'CONTRACT_PROPERTYMANAGER'],
-      tradingManager: ['TRADINGMANAGER_ADDRESS', 'TRADING_MANAGER_ADDRESS', 'CONTRACT_TRADINGMANAGER'],
-      rewardManager: ['REWARDMANAGER_ADDRESS', 'REWARD_MANAGER_ADDRESS', 'CONTRACT_REWARDMANAGER']
+    // 合约名称映射
+    const contractNameMap = {
+      roleManager: 'RoleManager',
+      propertyManager: 'PropertyManager',
+      tradingManager: 'TradingManager',
+      rewardManager: 'RewardManager'
     };
     
-    // 尝试从System合约获取各组件地址，失败则从环境变量获取
+    // 尝试从System合约获取各组件地址，失败则使用ContractAddress获取
     for (const componentName of componentNames) {
       try {
         if (systemContract) {
@@ -244,17 +244,14 @@ async function getSystemComponents(req, res, next) {
       } catch (error) {
         Logger.warn(`无法从System获取${componentName}地址: ${error.message}`);
         
-        // 尝试从环境变量获取地址
+        // 使用ContractAddress获取地址
         try {
-          for (const envName of envNameMap[componentName]) {
-            if (process.env[envName]) {
-              components[componentName] = process.env[envName];
-              Logger.debug(`从环境变量${envName}获取到${componentName}地址: ${components[componentName]}`);
-              break;
-            }
-          }
-        } catch (envError) {
-          Logger.warn(`从环境变量获取${componentName}地址失败: ${envError.message}`);
+          const contractName = contractNameMap[componentName];
+          const address = ContractAddress.getContractAddress(contractName);
+          components[componentName] = address;
+          Logger.debug(`使用ContractAddress获取到${componentName}地址: ${address}`);
+        } catch (addressError) {
+          Logger.warn(`使用ContractAddress获取${componentName}地址失败: ${addressError.message}`);
         }
       }
     }
@@ -622,38 +619,17 @@ async function upgradeSystemVersion(req, res, next) {
  */
 async function getSystemContracts(req, res, next) {
   try {
-    // 读取config/deployment.json文件
-    const configPath = path.join(__dirname, '../../../config/deployment.json');
-    let deploymentConfig;
+    Logger.info('获取系统合约地址信息');
     
-    try {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      deploymentConfig = JSON.parse(configData);
-    } catch (fileErr) {
-      Logger.error(`读取部署配置文件失败: ${fileErr.message}`, { error: fileErr });
-      return error(res, '读取部署配置文件失败', 500);
-    }
+    // 使用共享模块的ContractAddress.getAllAddresses方法获取所有合约地址
+    const addresses = ContractAddress.getAllAddresses();
     
-    // 整理合约地址信息
+    // 构建响应对象
     const contractAddresses = {
-      network: deploymentConfig.network,
-      timestamp: deploymentConfig.timestamp,
-      deployer: deploymentConfig.deployer,
-      deploymentMethod: deploymentConfig.deploymentMethod,
-      status: deploymentConfig.status,
-      contracts: {},
-      implementations: {}
+      network: process.env.BLOCKCHAIN_NETWORK || 'localhost',
+      contracts: addresses.contracts,
+      implementations: addresses.implementations
     };
-    
-    // 添加合约地址
-    if (deploymentConfig.contracts) {
-      contractAddresses.contracts = deploymentConfig.contracts;
-    }
-    
-    // 添加实现地址
-    if (deploymentConfig.implementations) {
-      contractAddresses.implementations = deploymentConfig.implementations;
-    }
     
     return success(res, contractAddresses);
   } catch (err) {

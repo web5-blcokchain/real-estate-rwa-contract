@@ -19,7 +19,7 @@ const {
   Validation,
   PerformanceMonitor,
   SecurityAuditor,
-  AddressManager,
+  ContractAddress,
   ErrorCodes,
   BlockchainError,
   NetworkError,
@@ -83,7 +83,7 @@ module.exports = {
   Validation,
   PerformanceMonitor,
   SecurityAuditor,
-  AddressManager,
+  ContractAddress,
   
   // 错误类型
   ErrorCodes,
@@ -104,7 +104,7 @@ module.exports = {
     Validation,
     PerformanceMonitor,
     SecurityAuditor,
-    AddressManager,
+    ContractAddress,
     ErrorCodes,
     BlockchainError,
     NetworkError,

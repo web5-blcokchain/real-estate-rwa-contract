@@ -8,7 +8,7 @@ const Logger = require('../../utils/logger');
 const Validation = require('../../utils/validation');
 const Provider = require('../provider');
 const Wallet = require('../wallet');
-const AddressManager = require('../../utils/address');
+const ContractAddress = require('../../utils/address');
 const path = require('path');
 const fs = require('fs');
 
@@ -177,8 +177,9 @@ class ContractFactory {
         });
       }
       
-      // 从环境变量获取合约地址
-      const address = AddressManager.getAddress(contractName, networkType);
+      // 从环境变量获取合约地址 - 不再使用networkType参数
+      // 按照项目约定，合约地址和网络类型无关
+      const address = options.address || ContractAddress.getAddress(contractName);
       
       // 加载ABI
       Logger.info(`加载合约ABI: ${contractName}`);

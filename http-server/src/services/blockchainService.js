@@ -110,11 +110,26 @@ class BlockchainService {
       
       // 如果提供了keyType但没有提供wallet，从keyType创建钱包
       if (!signer && options.keyType) {
-        signer = await this.createWallet({ keyType: options.keyType });
+        try {
+          Logger.debug(`尝试使用keyType创建钱包: ${options.keyType}`);
+          signer = await this.createWallet({ keyType: options.keyType });
+          Logger.debug(`使用keyType成功创建钱包: ${options.keyType}`);
+        } catch (walletError) {
+          Logger.error(`使用keyType创建钱包失败: ${walletError.message}`, { error: walletError });
+          throw new Error(`创建钱包失败: ${walletError.message}`);
+        }
       }
       
+      // 记录创建合约前的信息
+      Logger.info(`尝试创建合约实例: ${contractName}`, { 
+        contractName,
+        networkType: this.networkType, 
+        hasSigner: !!signer,
+        customAddress: options.address ? true : false 
+      });
+      
       // 直接使用shared模块的Contract.createFromName
-      return await Contract.createFromName(
+      const contract = await Contract.createFromName(
         contractName,
         this.networkType,
         {
@@ -124,11 +139,40 @@ class BlockchainService {
           address: options.address
         }
       );
+      
+      Logger.info(`成功创建合约实例: ${contractName}`, { 
+        contractName,
+        address: contract.address,
+        networkType: this.networkType
+      });
+      
+      return contract;
     } catch (error) {
+      // 尝试从环境变量获取地址（作为调试信息）
+      let debugInfo = { contractName, networkType: this.networkType };
+      
+      try {
+        const envVars = [
+          `${contractName.toUpperCase()}_ADDRESS`, 
+          `CONTRACT_${contractName.toUpperCase()}`,
+          `CONTRACT_${contractName.toUpperCase()}_ADDRESS`
+        ];
+                         
+        for (const envVar of envVars) {
+          if (process.env[envVar]) {
+            debugInfo.foundEnvVar = envVar;
+            debugInfo.envVarValue = process.env[envVar].substring(0, 10) + '...';
+            break;
+          }
+        }
+      } catch (envError) {
+        // 忽略环境变量检查错误
+      }
+      
       const handledError = ErrorHandler.handle(error);
       Logger.error(`创建合约实例失败: ${handledError.message}`, { 
         error: handledError,
-        contractName
+        ...debugInfo
       });
       throw handledError;
     }
