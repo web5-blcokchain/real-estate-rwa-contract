@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { ethers, upgrades } = require("hardhat");
 require('dotenv').config();
+const { verifyFacadeConnections } = require("./verify-facade-connections");
 
 const logger = {
   info: (message, ...args) => console.log(`INFO: ${message}`, ...args),
@@ -192,9 +193,9 @@ async function deploySystemStep(signer) {
   logger.info("System deployed at:", systemAddress);
   
   // 部署 Facade
-  logger.info("Deploying Facade...");
-  const Facade = await ethers.getContractFactory("RealEstateFacade");
-  const facade = await upgrades.deployProxy(Facade, [
+  logger.info("Deploying RealEstateFacade...");
+  const RealEstateFacade = await ethers.getContractFactory("RealEstateFacade");
+  const realEstateFacade = await upgrades.deployProxy(RealEstateFacade, [
     systemAddress,
     roleManagerAddress,
     propertyManagerAddress,
@@ -203,9 +204,9 @@ async function deploySystemStep(signer) {
   ], {
     kind: "uups",
   });
-  await facade.waitForDeployment();
-  const facadeAddress = await facade.getAddress();
-  logger.info("Facade deployed at:", facadeAddress);
+  await realEstateFacade.waitForDeployment();
+  const realEstateFacadeAddress = await realEstateFacade.getAddress();
+  logger.info("RealEstateFacade deployed at:", realEstateFacadeAddress);
   
   return {
     roleManager,
@@ -214,7 +215,7 @@ async function deploySystemStep(signer) {
     rewardManager,
     propertyToken,
     system,
-    facade
+    realEstateFacade
   };
 }
 
@@ -257,7 +258,7 @@ function updateEnvFile(deploymentInfo, implementations) {
     'RewardManager': 'RewardManager',
     'PropertyToken': 'PropertyToken',
     'System': 'RealEstateSystem',
-    'Facade': 'RealEstateFacade'
+    'RealEstateFacade': 'RealEstateFacade'
   };
   
   // 添加新的合约地址部分
@@ -332,7 +333,7 @@ async function main() {
         RewardManager: await contracts.rewardManager.getAddress(),
         PropertyToken: await contracts.propertyToken.getAddress(),
         System: await contracts.system.getAddress(),
-        Facade: await contracts.facade.getAddress()
+        RealEstateFacade: await contracts.realEstateFacade.getAddress()
       },
       systemStatus: "1",
       deployMethod: "step-by-step"
@@ -347,11 +348,22 @@ async function main() {
     // 更新.env文件
     updateEnvFile(deploymentInfo, implementations);
     
-    // 写入部署信息到deployment.json
-    fs.writeFileSync(
-      path.join(__dirname, "../config/deployment.json"),
-      JSON.stringify(deploymentInfo, null, 2)
-    );
+    // 验证RealEstateFacade合约与子模块的连接
+    logger.info("验证RealEstateFacade合约与子模块的连接...");
+    try {
+      const verificationResult = await verifyFacadeConnections();
+      
+      deploymentInfo.verificationResult = verificationResult;
+      
+      if (verificationResult.success) {
+        logger.info("所有组件连接验证成功!");
+      } else {
+        logger.warn("组件连接验证失败，请检查部署日志和合约状态");
+      }
+    } catch (verifyError) {
+      logger.error("验证过程失败:", verifyError);
+      deploymentInfo.verificationError = verifyError.message;
+    }
     
     // 生成部署报告
     generateDeploymentReport(deploymentInfo);
@@ -437,6 +449,36 @@ function generateDeploymentReport(deploymentInfo) {
     } else {
       reportContent += `| ${name} | ${address} | 未获取 |\n`;
     }
+  }
+  
+  // 添加组件连接验证结果
+  if (deploymentInfo.verificationResult) {
+    reportContent += `
+## 组件连接验证结果
+
+| 组件 | 连接状态 |
+|------|----------|
+`;
+    
+    const connections = deploymentInfo.verificationResult.connections;
+    const statusMap = {
+      true: "✅ 成功",
+      false: "❌ 失败"
+    };
+    
+    for (const [component, status] of Object.entries(connections)) {
+      reportContent += `| ${component} | ${statusMap[status]} |\n`;
+    }
+    
+    reportContent += `
+总体验证结果: ${deploymentInfo.verificationResult.success ? "✅ 成功" : "❌ 失败"}
+`;
+  } else if (deploymentInfo.verificationError) {
+    reportContent += `
+## 组件连接验证结果
+
+验证过程失败: ${deploymentInfo.verificationError}
+`;
   }
   
   // 添加初始化参数

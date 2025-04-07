@@ -38,7 +38,7 @@ class ContractSender {
       }
 
       // 验证参数类型
-      this._validateMethodArgs(contract, method, args);
+      ContractSender._validateMethodArgs(contract, method, args);
 
       // 构建交易选项
       const txOptions = { ...options };

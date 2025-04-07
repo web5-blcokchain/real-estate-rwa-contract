@@ -296,7 +296,7 @@ async function getSystemComponents(req, res, next) {
       address: systemAddress || null,
       status: Number(status),
       statusName: statusNames[Number(status)] || 'Unknown',
-      version,
+      version: version ? Number(version) : 0,
       components: {}
     };
     
@@ -304,6 +304,9 @@ async function getSystemComponents(req, res, next) {
     for (const [key, value] of Object.entries(components)) {
       if (value && typeof value === 'string' && value.startsWith('0x')) {
         result.components[key] = value;
+      } else if (value && typeof value === 'bigint') {
+        // 将BigInt转换为字符串
+        result.components[key] = value.toString();
       }
     }
     

@@ -4,6 +4,35 @@
 const { ErrorHandler } = require('../../../shared/src');
 
 /**
+ * 处理BigInt序列化问题
+ * @param {*} obj - 要处理的数据对象
+ * @returns {*} 处理后的数据对象
+ */
+function processData(obj) {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => processData(item));
+  }
+  
+  if (typeof obj === 'object' && obj !== null) {
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = processData(value);
+    }
+    return result;
+  }
+  
+  return obj;
+}
+
+/**
  * 成功响应格式化
  * @param {Object} res - Express响应对象
  * @param {*} data - 响应数据
@@ -11,9 +40,11 @@ const { ErrorHandler } = require('../../../shared/src');
  * @returns {Object} 格式化后的响应
  */
 function success(res, data = null, statusCode = 200) {
+  const processedData = processData(data);
+  
   return res.status(statusCode).json({
     success: true,
-    data,
+    data: processedData,
     timestamp: new Date().toISOString()
   });
 }
@@ -38,10 +69,10 @@ function error(res, err, statusCode = 400) {
   // 构建错误响应
   return res.status(statusCode).json({
     success: false,
-    error: {
+    error: processData({
       code: error.code || 'ERROR',
       message: error.message || '未知错误'
-    },
+    }),
     timestamp: new Date().toISOString()
   });
 }
@@ -57,10 +88,10 @@ function error(res, err, statusCode = 400) {
 function failure(res, message, details = null, statusCode = 400) {
   return res.status(statusCode).json({
     success: false,
-    failure: {
+    failure: processData({
       message: message || '操作失败',
       details: details
-    },
+    }),
     timestamp: new Date().toISOString()
   });
 }
@@ -74,15 +105,18 @@ function failure(res, message, details = null, statusCode = 400) {
  * @returns {Object} 格式化后的分页响应
  */
 function paginated(res, items, pagination, statusCode = 200) {
+  const processedItems = processData(items);
+  const processedPagination = processData(pagination);
+  
   return res.status(statusCode).json({
     success: true,
     data: {
-      items,
+      items: processedItems,
       pagination: {
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-        totalItems: pagination.totalItems,
-        totalPages: pagination.totalPages
+        page: processedPagination.page,
+        pageSize: processedPagination.pageSize,
+        totalItems: processedPagination.totalItems,
+        totalPages: processedPagination.totalPages
       }
     },
     timestamp: new Date().toISOString()

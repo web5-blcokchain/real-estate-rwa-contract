@@ -1,10 +1,83 @@
 /**
  * RealEstateFacade合约控制器
- * 实现RealEstateFacade合约中尚未在其他控制器中实现的功能
+ * 简化版本 - 直接使用ethers.js V6
  */
-const { Logger, Validation } = require('../../../shared/src');
+const { Logger, Validation, ContractAddress } = require('../../../shared/src');
 const blockchainService = require('../services/blockchainService');
 const { success, error } = require('../utils/responseFormatter');
+const { ethers } = require('ethers');
+const fs = require('fs');
+const path = require('path');
+
+// 缓存ABI，避免重复读取
+let FACADE_ABI = null;
+
+/**
+ * 获取合约ABI
+ * @param {string} contractName - 合约名称
+ */
+async function getContractABI(contractName) {
+  if (contractName === 'RealEstateFacade' && FACADE_ABI) {
+    return FACADE_ABI;
+  }
+  
+  // 查找可能的ABI位置
+  const possiblePaths = [
+    path.join(__dirname, `../../../contracts/artifacts/contracts/${contractName}.sol/${contractName}.json`),
+    path.join(__dirname, `../../../shared/src/abis/${contractName}.json`),
+    path.join(__dirname, `../../../contracts/abis/${contractName}.json`)
+  ];
+  
+  for (const abiPath of possiblePaths) {
+    try {
+      if (fs.existsSync(abiPath)) {
+        const fileContent = fs.readFileSync(abiPath, 'utf8');
+        const jsonContent = JSON.parse(fileContent);
+        const abi = jsonContent.abi || jsonContent;
+        
+        if (contractName === 'RealEstateFacade') {
+          FACADE_ABI = abi;
+        }
+        
+        return abi;
+      }
+    } catch (e) {
+      Logger.debug(`读取ABI文件失败: ${abiPath}: ${e.message}`);
+    }
+  }
+  
+  throw new Error(`无法找到${contractName}合约的ABI`);
+}
+
+/**
+ * 直接创建合约实例
+ * @param {string} contractName - 合约名称
+ * @param {Object} options - 选项
+ */
+async function createContract(contractName, options = {}) {
+  const { keyType, address } = options;
+  
+  // 获取钱包
+  let wallet;
+  try {
+    wallet = await blockchainService.createWallet({ keyType });
+  } catch (walletErr) {
+    Logger.error(`创建钱包失败: ${walletErr.message}`);
+    throw new Error(`创建钱包失败: ${walletErr.message}`);
+  }
+  
+  // 获取合约地址
+  const contractAddress = address || ContractAddress.getContractAddress(contractName);
+  if (!contractAddress) {
+    throw new Error(`无法获取${contractName}合约地址`);
+  }
+  
+  // 获取ABI
+  const abi = await getContractABI(contractName);
+  
+  // 直接使用ethers.js创建合约实例
+  return new ethers.Contract(contractAddress, abi, wallet);
+}
 
 /**
  * 注册不动产并创建对应的代币
@@ -33,12 +106,12 @@ async function registerPropertyAndCreateToken(req, res, next) {
       }, 400);
     }
 
-    // 验证keyType是否有效
-    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+    // 验证keyType是否为admin
+    if (keyType !== 'admin') {
       return error(res, {
-        message: '无效的密钥类型，有效值为: admin, manager, operator',
-        code: 'INVALID_KEY_TYPE'
-      }, 400);
+        message: '注册房产并创建代币需要ADMIN_ROLE权限',
+        code: 'INSUFFICIENT_PERMISSIONS'
+      }, 403);
     }
 
     // 验证地址格式
@@ -49,53 +122,70 @@ async function registerPropertyAndCreateToken(req, res, next) {
       }, 400);
     }
 
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
-
-    // 注册不动产并创建代币
-    const tx = await blockchainService.callContractMethod(
-      facade,
-      'registerPropertyAndCreateToken',
-      [
+    // 创建合约实例
+    const realEstateFacade = await createContract('RealEstateFacade', { keyType });
+    
+    try {
+      // 直接调用合约方法
+      const tx = await realEstateFacade.registerPropertyAndCreateToken(
         propertyId,
         country,
         metadataURI,
         tokenName,
         tokenSymbol,
         initialSupply,
-        propertyTokenImplementation
-      ],
-      { gasLimit: 5000000 } // 为复杂操作提供足够的gas
-    );
-
-    // 等待交易完成
-    const receipt = await tx.wait();
-
-    // 从事件中获取propertyIdHash和tokenAddress
-    let propertyIdHash, tokenAddress;
-    for (const event of receipt.logs) {
-      try {
-        const parsedEvent = facade.interface.parseLog(event);
-        if (parsedEvent && parsedEvent.name === 'PropertyRegistered') {
-          propertyIdHash = parsedEvent.args.propertyIdHash;
-          tokenAddress = parsedEvent.args.tokenAddress;
-          break;
+        propertyTokenImplementation,
+        { gasLimit: 5000000 }
+      );
+      
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      // 从事件中提取信息
+      let propertyIdHash, tokenAddress;
+      
+      // 尝试从回执中获取事件信息
+      if (receipt.logs) {
+        const iface = new ethers.Interface(FACADE_ABI);
+        
+        for (const log of receipt.logs) {
+          try {
+            const parsedLog = iface.parseLog({
+              topics: log.topics,
+              data: log.data
+            });
+            
+            if (parsedLog && parsedLog.name === 'PropertyRegistered') {
+              propertyIdHash = parsedLog.args.propertyIdHash || parsedLog.args[0];
+              tokenAddress = parsedLog.args.tokenAddress || parsedLog.args[4];
+              break;
+            }
+          } catch (e) {
+            // 忽略解析错误，继续下一个日志
+          }
         }
-      } catch (e) {
-        // 忽略不能解析的事件
       }
+      
+      return success(res, {
+        txHash: receipt.hash,
+        propertyIdHash,
+        tokenAddress,
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber
+      });
+    } catch (txError) {
+      Logger.error(`交易失败: ${txError.message}`);
+      return error(res, {
+        message: `交易失败: ${txError.message}`,
+        code: 'TRANSACTION_FAILED'
+      }, 500);
     }
-
-    return success(res, {
-      txHash: receipt.hash,
-      propertyIdHash,
-      tokenAddress,
-      gasUsed: receipt.gasUsed.toString(),
-      blockNumber: receipt.blockNumber
-    });
   } catch (err) {
-    Logger.error('注册不动产并创建代币失败', { error: err });
-    return next(err);
+    Logger.error(`注册不动产并创建代币失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
@@ -134,43 +224,44 @@ async function updatePropertyStatus(req, res, next) {
       }, 400);
     }
 
-    // 验证keyType是否有效
-    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+    // 验证keyType
+    if (!['admin', 'manager'].includes(keyType)) {
       return error(res, {
-        message: '无效的密钥类型，有效值为: admin, manager, operator',
+        message: '无效的密钥类型，更新状态需要manager或admin权限',
         code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
-
-    // 获取当前状态以记录变更
-    let currentStatus;
+    // 创建合约实例
+    const realEstateFacade = await createContract('RealEstateFacade', { keyType });
+    
     try {
-      // 获取PropertyManager合约地址
-      const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
-      const propertyManager = await blockchainService.createContract('PropertyManager', { address: propertyManagerAddress });
-      currentStatus = await blockchainService.callContractMethod(propertyManager, 'getPropertyStatus', [propertyIdHash]);
-    } catch (err) {
-      Logger.warn(`无法获取不动产当前状态: ${propertyIdHash}`, { error: err.message });
+      // 直接调用合约方法
+      const tx = await realEstateFacade.updatePropertyStatus(propertyIdHash, status, { gasLimit: 500000 });
+      
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      return success(res, {
+        txHash: receipt.hash,
+        propertyIdHash,
+        newStatus: status.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber
+      });
+    } catch (txError) {
+      Logger.error(`交易失败: ${txError.message}`);
+      return error(res, {
+        message: `交易失败: ${txError.message}`,
+        code: 'TRANSACTION_FAILED'
+      }, 500);
     }
-
-    // 更新不动产状态
-    const tx = await blockchainService.callContractMethod(facade, 'updatePropertyStatus', [propertyIdHash, status]);
-    const receipt = await tx.wait();
-
-    return success(res, {
-      txHash: receipt.hash,
-      propertyIdHash,
-      previousStatus: currentStatus !== undefined ? currentStatus.toString() : undefined,
-      newStatus: status.toString(),
-      gasUsed: receipt.gasUsed.toString(),
-      blockNumber: receipt.blockNumber
-    });
   } catch (err) {
-    Logger.error(`更新不动产状态失败: ${req.body.propertyIdHash}`, { error: err });
-    return next(err);
+    Logger.error(`更新不动产状态失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
@@ -192,35 +283,38 @@ async function claimRewards(req, res, next) {
       }, 400);
     }
 
-    // 验证keyType是否有效
-    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
-      return error(res, {
-        message: '无效的密钥类型，有效值为: admin, manager, operator, user',
-        code: 'INVALID_KEY_TYPE'
-      }, 400);
-    }
-
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
-
-    // 获取钱包地址
+    // 创建合约实例和钱包
+    const realEstateFacade = await createContract('RealEstateFacade', { keyType });
     const wallet = await blockchainService.createWallet({ keyType });
     const account = await wallet.getAddress();
-
-    // 调用合约方法
-    const tx = await blockchainService.callContractMethod(facade, 'claimRewards', [distributionId]);
-    const receipt = await tx.wait();
-
-    return success(res, {
-      txHash: receipt.hash,
-      distributionId,
-      account,
-      gasUsed: receipt.gasUsed.toString(),
-      blockNumber: receipt.blockNumber
-    });
+    
+    try {
+      // 直接调用合约方法
+      const tx = await realEstateFacade.claimRewards(distributionId, { gasLimit: 500000 });
+      
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      return success(res, {
+        txHash: receipt.hash,
+        distributionId,
+        account,
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber
+      });
+    } catch (txError) {
+      Logger.error(`交易失败: ${txError.message}`);
+      return error(res, {
+        message: `交易失败: ${txError.message}`,
+        code: 'TRANSACTION_FAILED'
+      }, 500);
+    }
   } catch (err) {
-    Logger.error(`领取奖励失败: ${req.body.distributionId}`, { error: err });
-    return next(err);
+    Logger.error(`领取奖励失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
@@ -242,60 +336,45 @@ async function executeTrade(req, res, next) {
       }, 400);
     }
 
-    // 验证keyType是否有效
-    if (!['admin', 'manager', 'operator', 'user'].includes(keyType)) {
-      return error(res, {
-        message: '无效的密钥类型，有效值为: admin, manager, operator, user',
-        code: 'INVALID_KEY_TYPE'
-      }, 400);
-    }
-
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
-
-    // 获取交易信息
-    const { seller, token, amount, price } = await blockchainService.callContractMethod(
-      facade,
-      'getTradeInfo',
-      [orderId]
-    );
-
-    // 确保value不小于price
-    let finalValue;
-    if (inputValue === undefined) {
-      finalValue = price;
-    } else if (BigInt(inputValue) < BigInt(price)) {
-      return error(res, {
-        message: '提供的ETH不足以支付订单价格',
-        code: 'INSUFFICIENT_VALUE'
-      }, 400);
-    } else {
-      finalValue = inputValue;
-    }
-
-    // 执行交易
-    const tx = await blockchainService.callContractMethod(
-      facade,
-      'executeTrade',
-      [orderId],
-      { value: BigInt(finalValue) }
-    );
+    // 创建合约实例
+    const realEstateFacade = await createContract('RealEstateFacade', { keyType });
     
-    const receipt = await tx.wait();
-
-    return success(res, {
-      txHash: receipt.hash,
-      orderId: orderId.toString(),
-      seller,
-      token,
-      amount: amount.toString(),
-      price: price.toString(),
-      gasUsed: receipt.gasUsed.toString(),
-      blockNumber: receipt.blockNumber
-    });
+    try {
+      // 获取交易信息
+      const tradeInfo = await realEstateFacade.getTradeInfo(orderId);
+      const price = tradeInfo.price;
+      
+      // 设置交易金额
+      const value = inputValue || price;
+      
+      // 直接调用合约方法
+      const tx = await realEstateFacade.executeTrade(orderId, { 
+        value: BigInt(value),
+        gasLimit: 500000 
+      });
+      
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      return success(res, {
+        txHash: receipt.hash,
+        orderId: orderId.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber
+      });
+    } catch (txError) {
+      Logger.error(`交易失败: ${txError.message}`);
+      return error(res, {
+        message: `交易失败: ${txError.message}`,
+        code: 'TRANSACTION_FAILED'
+      }, 500);
+    }
   } catch (err) {
-    Logger.error(`执行交易失败: ${req.body.orderId}`, { error: err });
-    return next(err);
+    Logger.error(`执行交易失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
@@ -307,18 +386,24 @@ async function executeTrade(req, res, next) {
  */
 async function getVersion(req, res, next) {
   try {
-    // 获取RealEstateFacade合约实例
-    const facade = await blockchainService.createContract('RealEstateFacade');
+    // 创建只读合约实例
+    const provider = await blockchainService.getProvider();
+    const address = ContractAddress.getContractAddress('RealEstateFacade');
+    const abi = await getContractABI('RealEstateFacade');
+    const contract = new ethers.Contract(address, abi, provider);
     
-    // 获取版本信息
-    const version = await blockchainService.callContractMethod(facade, 'getVersion');
+    // 获取版本
+    const version = await contract.getVersion();
     
     return success(res, {
       version: version.toString()
     });
   } catch (err) {
-    Logger.error('获取RealEstateFacade合约版本失败', { error: err });
-    return next(err);
+    Logger.error(`获取合约版本失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
@@ -348,55 +433,53 @@ async function distributeRewards(req, res, next) {
       }, 400);
     }
 
-    // 验证keyType是否有效
-    if (!['admin', 'manager', 'operator'].includes(keyType)) {
+    // 只有manager和admin可以分配奖励
+    if (!['admin', 'manager'].includes(keyType)) {
       return error(res, {
-        message: '无效的密钥类型，有效值为: admin, manager, operator',
+        message: '分配奖励需要manager或admin权限',
         code: 'INVALID_KEY_TYPE'
       }, 400);
     }
 
-    // 获取RealEstateFacade合约实例（带钱包）
-    const facade = await blockchainService.createContract('RealEstateFacade', { keyType });
-
-    // 准备分配描述
+    // 创建合约实例
+    const realEstateFacade = await createContract('RealEstateFacade', { keyType });
     const rewardDescription = description || '收益分配';
-
-    // 分配奖励
-    const tx = await blockchainService.sendContractTransaction(
-      facade,
-      'distributeRewards',
-      [propertyIdHash, amount, rewardDescription],
-      { 
-        keyType,
-        value: amount // 发送相应金额的ETH
-      }
-    );
-
-    // 从事件中获取distributionId
-    let distributionId;
-    for (const event of tx.logs) {
-      try {
-        const parsedEvent = facade.interface.parseLog(event);
-        if (parsedEvent && parsedEvent.name === 'RewardsDistributed') {
-          distributionId = parsedEvent.args.distributionId.toString();
-          break;
+    
+    try {
+      // 直接调用合约方法
+      const tx = await realEstateFacade.distributeRewards(
+        propertyIdHash, 
+        amount, 
+        rewardDescription, 
+        { 
+          value: BigInt(amount),
+          gasLimit: 500000 
         }
-      } catch (e) {
-        // 忽略不能解析的事件
-      }
+      );
+      
+      // 等待交易确认
+      const receipt = await tx.wait();
+      
+      return success(res, {
+        txHash: receipt.hash,
+        propertyIdHash,
+        amount,
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber
+      });
+    } catch (txError) {
+      Logger.error(`交易失败: ${txError.message}`);
+      return error(res, {
+        message: `交易失败: ${txError.message}`,
+        code: 'TRANSACTION_FAILED'
+      }, 500);
     }
-
-    return success(res, {
-      txHash: tx.hash,
-      distributionId,
-      totalAmount: amount,
-      gasUsed: tx.gasUsed.toString(),
-      blockNumber: tx.blockNumber
-    });
   } catch (err) {
-    Logger.error(`分配奖励失败: ${req.body.propertyIdHash}`, { error: err });
-    return next(err);
+    Logger.error(`分配奖励失败: ${err.message}`, { error: err });
+    return error(res, {
+      message: `操作失败: ${err.message}`,
+      code: 'OPERATION_FAILED'
+    }, 500);
   }
 }
 
