@@ -20,10 +20,7 @@ class ContractAddress {
    * 合约名称别名映射
    * @private
    */
-  static _contractAliases = {
-    'RealEstateFacade': 'Facade',
-    'RealEstateSystem': 'System'
-  };
+  static _contractAliases = {};
 
   /**
    * 从环境变量获取合约地址
@@ -37,13 +34,18 @@ class ContractAddress {
         throw new ContractError('合约名称不能为空');
       }
       
+      Logger.debug(`尝试获取合约地址: ${contractName}`);
+      
       // 检查缓存
       if (this._cachedAddresses[contractName]) {
+        Logger.debug(`从缓存获取合约地址: ${contractName} -> ${this._cachedAddresses[contractName]}`);
         return this._cachedAddresses[contractName];
       }
 
       // 检查别名映射
       const aliasedName = this._contractAliases[contractName] || contractName;
+      
+      Logger.debug(`解析合约名称: ${contractName}` + (aliasedName !== contractName ? ` -> ${aliasedName}（别名）` : ''));
       
       // 尝试不同格式的环境变量名
       const possibleEnvVars = [
@@ -68,6 +70,8 @@ class ContractAddress {
         ] : [])
       ];
       
+      Logger.debug(`尝试以下环境变量获取地址: ${JSON.stringify(possibleEnvVars)}`);
+      
       // 尝试查找环境变量
       let address = null;
       for (const envVar of possibleEnvVars) {
@@ -80,21 +84,30 @@ class ContractAddress {
       
       // 验证地址是否存在且有效
       if (!address) {
+        Logger.warn(`找不到合约 ${contractName} 的地址，已尝试环境变量: ${JSON.stringify(possibleEnvVars)}`);
         throw new ContractError(`找不到合约 ${contractName} 的地址`);
       }
       
-      if (!Validation.isValidAddress(address)) {
-        throw new ContractError(`合约 ${contractName} 的地址格式无效: ${address}`);
+      try {
+        if (!Validation.isValidAddress(address)) {
+          Logger.warn(`合约 ${contractName} 的地址格式无效: ${address}`);
+          throw new ContractError(`合约 ${contractName} 的地址格式无效: ${address}`);
+        }
+      } catch (validationError) {
+        Logger.error(`验证地址失败: ${validationError.message}`, { address });
+        throw new ContractError(`验证合约地址失败: ${validationError.message}`);
       }
       
       // 保存到缓存
       this._cachedAddresses[contractName] = address;
+      Logger.debug(`已将合约 ${contractName} 地址存入缓存: ${address}`);
       
       return address;
     } catch (error) {
       if (error instanceof ContractError) {
         throw error;
       }
+      Logger.error(`获取合约地址失败: ${error.message}`, { contractName });
       throw new ContractError(`获取合约地址失败: ${error.message}`);
     }
   }
@@ -105,6 +118,7 @@ class ContractAddress {
    * @returns {Object} 合约地址映射
    */
   static getAddresses(contractNames) {
+    
     const addresses = {};
     
     for (const contractName of contractNames) {
@@ -125,6 +139,7 @@ class ContractAddress {
    * @param {string} address - 合约地址
    */
   static setAddress(contractName, address) {
+    
     if (!contractName) {
       throw new ContractError('合约名称不能为空');
     }
@@ -297,13 +312,14 @@ class ContractAddress {
    */
   static getAllAddresses() {
     const contractNames = [
-      'Facade', 'RealEstateFacade', 
-      'System', 'RealEstateSystem', 
+      'RealEstateSystem', 
+      'RealEstateFacade', 
       'RoleManager', 
       'PropertyManager', 
       'TradingManager', 
       'RewardManager', 
-      'PropertyToken'
+      'PropertyToken',
+      'Blockchain'
     ];
     
     const result = {
@@ -314,25 +330,35 @@ class ContractAddress {
     // 获取合约地址
     for (const name of contractNames) {
       try {
-        result.contracts[name] = this.getContractAddress(name);
+        const address = this.getContractAddress(name);
+        if (address && Validation.isValidAddress(address)) {
+          result.contracts[name] = address;
+        }
       } catch (error) {
         Logger.debug(`获取合约 ${name} 地址失败: ${error.message}`);
-        // 继续下一个，不抛出错误
+        // 确保即使失败，对象属性也会存在（为null）
+        result.contracts[name] = null;
       }
     }
     
     // 获取实现地址
     for (const name of contractNames) {
       try {
-        result.implementations[name] = this.getImplementationAddress(name);
+        const implAddress = this.getImplementationAddress(name);
+        if (implAddress && Validation.isValidAddress(implAddress)) {
+          result.implementations[name] = implAddress;
+        }
       } catch (error) {
         Logger.debug(`获取合约 ${name} 实现地址失败: ${error.message}`);
-        // 继续下一个，不抛出错误
+        // 确保即使失败，对象属性也会存在（为null）
+        result.implementations[name] = null;
       }
     }
     
     return result;
   }
 }
+
+
 
 module.exports = ContractAddress; 

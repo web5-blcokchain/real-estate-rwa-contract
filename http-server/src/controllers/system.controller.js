@@ -214,12 +214,14 @@ async function getSystemComponents(req, res, next) {
     }
     
     // 尝试获取其他组件地址
-    const componentNames = ['roleManager', 'propertyManager', 'tradingManager', 'rewardManager'];
+    const componentNames = ['roleManager', 'propertyManager', 'tradingManager', 'rewardManager', 'facade', 'blockchain'];
     const methodNameMap = {
       roleManager: 'getRoleManagerAddress',
       propertyManager: 'getPropertyManagerAddress', 
       tradingManager: 'getTradingManagerAddress',
-      rewardManager: 'getRewardManagerAddress'
+      rewardManager: 'getRewardManagerAddress',
+      facade: 'getFacadeAddress',
+      blockchain: 'getBlockchainAddress'
     };
     
     // 合约名称映射
@@ -227,7 +229,9 @@ async function getSystemComponents(req, res, next) {
       roleManager: 'RoleManager',
       propertyManager: 'PropertyManager',
       tradingManager: 'TradingManager',
-      rewardManager: 'RewardManager'
+      rewardManager: 'RewardManager',
+      facade: 'RealEstateFacade',
+      blockchain: 'Blockchain'
     };
     
     // 尝试从System合约获取各组件地址，失败则使用ContractAddress获取

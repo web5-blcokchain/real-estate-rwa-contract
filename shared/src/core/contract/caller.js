@@ -28,7 +28,7 @@ class ContractCaller {
       );
 
       // 验证参数类型
-      this._validateMethodArgs(contract, method, args);
+      ContractCaller._validateMethodArgs(contract, method, args);
 
       // 调用合约方法
       const result = await contract[method](...args);
