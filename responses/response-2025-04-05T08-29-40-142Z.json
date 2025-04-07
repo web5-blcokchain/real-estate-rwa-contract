@@ -1,8 +1,0 @@
-{
-  "success": false,
-  "error": {
-    "code": 2000,
-    "message": "Provider.getGasPrice is not a function"
-  },
-  "timestamp": "2025-04-05T08:29:40.140Z"
-}

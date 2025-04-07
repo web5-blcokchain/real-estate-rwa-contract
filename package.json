@@ -19,8 +19,8 @@
     "verify:mainnet": "hardhat run scripts/verify-deployment.js --network mainnet",
     "start:node": "hardhat node",
     "test:env": "node test-env.js",
-    "server:dev": "nodemon http-server/src/server.js",
-    "server:start": "node http-server/src/server.js",
+    "server:dev": "nodemon server/app.js",
+    "server:start": "node server/app.js",
     "test:api": "node test-api.js",
     "api": "node http-test.js"
   },
@@ -32,6 +32,7 @@
     "ethers": "^6.0.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
+    "morgan": "^1.10.0",
     "node-fetch": "^2.6.7",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
