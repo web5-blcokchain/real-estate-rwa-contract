@@ -136,13 +136,40 @@ class Wallet {
       keyType.toUpperCase()
     ];
 
-    for (const envVar of possibleEnvVars) {
-      if (process.env[envVar]) {
-        return process.env[envVar];
+    try {
+      for (const envVar of possibleEnvVars) {
+        if (process.env[envVar]) {
+          Logger.debug(`找到密钥环境变量: ${envVar}`);
+          // 格式化私钥
+          let privateKey = process.env[envVar].trim();
+          
+          // 确保私钥以0x开头
+          if (!privateKey.startsWith('0x')) {
+            privateKey = `0x${privateKey}`;
+          }
+          
+          // 验证私钥长度（应为66个字符，包括0x前缀）
+          if (privateKey.length !== 66) {
+            Logger.warn(`私钥格式不正确 (${envVar}): 长度 ${privateKey.length}，应为66`);
+            
+            // 尝试清理私钥（去除可能的引号或其他非法字符）
+            privateKey = privateKey.replace(/[^0-9a-fA-F]/g, '');
+            if (privateKey.length === 64) {
+              privateKey = `0x${privateKey}`;
+              Logger.debug(`已修复私钥格式: 长度现在为 ${privateKey.length}`);
+            }
+          }
+          
+          return privateKey;
+        }
       }
-    }
 
-    return null;
+      Logger.debug(`未找到${keyType}类型的私钥环境变量`);
+      return null;
+    } catch (error) {
+      Logger.error(`获取私钥时出错: ${error.message}`);
+      return null;
+    }
   }
 
   /**

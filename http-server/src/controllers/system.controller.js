@@ -1,9 +1,9 @@
 /**
  * 系统管理控制器
  */
-const { Logger, Validation } = require('../../../shared/src');
+const { Logger, Validation, Contract } = require('../../../shared/src');
 const blockchainService = require('../services/blockchainService');
-const { success, error, paginated } = require('../utils/responseFormatter');
+const { success, error, failure, paginated } = require('../utils/responseFormatter');
 const fs = require('fs');
 const path = require('path');
 
@@ -157,64 +157,159 @@ async function getVersionHistory(req, res, next) {
  */
 async function getSystemComponents(req, res, next) {
   try {
-    // 获取RealEstateFacade合约实例
-    const facade = await blockchainService.createContract('RealEstateFacade');
+    Logger.info('正在获取系统组件信息');
     
-    // 获取各个组件地址
-    const systemAddress = await blockchainService.callContractMethod(facade, 'system');
-    const roleManagerAddress = await blockchainService.callContractMethod(facade, 'roleManager');
-    const propertyManagerAddress = await blockchainService.callContractMethod(facade, 'propertyManager');
-    const tradingManagerAddress = await blockchainService.callContractMethod(facade, 'tradingManager');
-    const rewardManagerAddress = await blockchainService.callContractMethod(facade, 'rewardManager');
+    // 获取 RealEstateFacade 地址
+    let facadeAddress = null;
+    try {
+      // 尝试从环境变量获取Facade地址
+      facadeAddress = process.env.REALESTATEFACADE_ADDRESS || process.env.FACADE_ADDRESS || process.env.CONTRACT_REALESTATEFACADE;
+      Logger.debug(`从环境变量获取到Facade地址: ${facadeAddress}`);
+    } catch (error) {
+      Logger.warn(`无法获取Facade地址: ${error.message}`);
+    }
     
-    // 获取系统合约实例
-    const system = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
+    // 创建 RealEstateFacade 合约实例
+    let facadeContract = null;
+    try {
+      facadeContract = await blockchainService.createContract('RealEstateFacade', { address: facadeAddress });
+      Logger.debug(`已创建RealEstateFacade合约实例，地址: ${facadeContract.address}`);
+    } catch (error) {
+      Logger.error(`创建RealEstateFacade合约实例失败: ${error.message}`);
+    }
     
-    // 获取系统状态和版本
-    const status = await blockchainService.callContractMethod(system, 'getSystemStatus');
-    const version = await blockchainService.callContractMethod(system, 'getVersion');
+    // 默认组件对象
+    const components = {};
     
-    // 状态映射
-    const statusMap = {
-      0: 'UNINITIALIZED',
-      1: 'ACTIVE',
-      2: 'PAUSED',
-      3: 'LOCKED'
+    // 尝试从Facade获取System地址
+    let systemAddress = null;
+    try {
+      systemAddress = await blockchainService.callContractMethod(facadeContract, 'system');
+      Logger.debug(`从Facade获取System地址成功: ${systemAddress}`);
+      components.system = systemAddress;
+    } catch (error) {
+      Logger.warn(`无法从Facade获取System地址: ${error.message}`);
+      
+      // 尝试从环境变量获取System地址
+      try {
+        systemAddress = process.env.REALESTATESYSTEM_ADDRESS || process.env.SYSTEM_ADDRESS || process.env.CONTRACT_REALESTATESYSTEM;
+        if (systemAddress) {
+          Logger.debug(`从环境变量获取到System地址: ${systemAddress}`);
+          components.system = systemAddress;
+        }
+      } catch (envError) {
+        Logger.warn(`从环境变量获取System地址失败: ${envError.message}`);
+      }
+    }
+    
+    // 创建System合约实例
+    let systemContract = null;
+    if (systemAddress) {
+      try {
+        systemContract = await blockchainService.createContract('RealEstateSystem', { address: systemAddress });
+        Logger.debug(`已创建RealEstateSystem合约实例，地址: ${systemAddress}`);
+      } catch (error) {
+        Logger.error(`创建RealEstateSystem合约实例失败: ${error.message}`);
+      }
+    }
+    
+    // 尝试获取其他组件地址
+    const componentNames = ['roleManager', 'propertyManager', 'tradingManager', 'rewardManager'];
+    const methodNameMap = {
+      roleManager: 'getRoleManagerAddress',
+      propertyManager: 'getPropertyManagerAddress', 
+      tradingManager: 'getTradingManagerAddress',
+      rewardManager: 'getRewardManagerAddress'
     };
     
-    return success(res, {
-      system: {
-        address: systemAddress,
-        status: parseInt(status),
-        statusName: statusMap[status] || 'UNKNOWN',
-        version: parseInt(version)
-      },
-      components: {
-        facade: {
-          address: facade.address,
-          name: 'RealEstateFacade'
-        },
-        roleManager: {
-          address: roleManagerAddress,
-          name: 'RoleManager'
-        },
-        propertyManager: {
-          address: propertyManagerAddress,
-          name: 'PropertyManager'
-        },
-        tradingManager: {
-          address: tradingManagerAddress,
-          name: 'TradingManager'
-        },
-        rewardManager: {
-          address: rewardManagerAddress,
-          name: 'RewardManager'
+    // 环境变量名映射
+    const envNameMap = {
+      roleManager: ['ROLEMANAGER_ADDRESS', 'ROLE_MANAGER_ADDRESS', 'CONTRACT_ROLEMANAGER'],
+      propertyManager: ['PROPERTYMANAGER_ADDRESS', 'PROPERTY_MANAGER_ADDRESS', 'CONTRACT_PROPERTYMANAGER'],
+      tradingManager: ['TRADINGMANAGER_ADDRESS', 'TRADING_MANAGER_ADDRESS', 'CONTRACT_TRADINGMANAGER'],
+      rewardManager: ['REWARDMANAGER_ADDRESS', 'REWARD_MANAGER_ADDRESS', 'CONTRACT_REWARDMANAGER']
+    };
+    
+    // 尝试从System合约获取各组件地址，失败则从环境变量获取
+    for (const componentName of componentNames) {
+      try {
+        if (systemContract) {
+          const methodName = methodNameMap[componentName];
+          const address = await blockchainService.callContractMethod(systemContract, methodName);
+          Logger.debug(`从System获取${componentName}地址成功: ${address}`);
+          components[componentName] = address;
+        } else {
+          throw new Error('System合约实例不可用');
+        }
+      } catch (error) {
+        Logger.warn(`无法从System获取${componentName}地址: ${error.message}`);
+        
+        // 尝试从环境变量获取地址
+        try {
+          for (const envName of envNameMap[componentName]) {
+            if (process.env[envName]) {
+              components[componentName] = process.env[envName];
+              Logger.debug(`从环境变量${envName}获取到${componentName}地址: ${components[componentName]}`);
+              break;
+            }
+          }
+        } catch (envError) {
+          Logger.warn(`从环境变量获取${componentName}地址失败: ${envError.message}`);
         }
       }
-    });
-  } catch (err) {
-    Logger.error(`获取系统组件信息失败: ${err.message}`, { error: err });
-    return error(res, '获取系统组件信息失败', 500);
+    }
+    
+    // 获取系统状态和版本
+    let status = -1;
+    let version = '0.0.0';
+    
+    try {
+      if (systemContract) {
+        // 获取系统状态
+        status = await blockchainService.callContractMethod(systemContract, 'getSystemStatus');
+        Logger.debug(`获取系统状态成功: ${status}`);
+        
+        // 获取版本信息
+        version = await blockchainService.callContractMethod(systemContract, 'getVersion');
+        Logger.debug(`获取系统版本成功: ${version}`);
+      } else {
+        Logger.warn('System合约实例不可用，无法获取状态和版本');
+      }
+    } catch (error) {
+      Logger.warn(`获取系统状态或版本失败: ${error.message}`);
+    }
+    
+    // 状态名称映射
+    const statusNames = {
+      0: 'Unauthorized',
+      1: 'Deployed',
+      2: 'Initialized',
+      3: 'Active',
+      4: 'Paused',
+      5: 'Upgraded',
+      6: 'Deprecated'
+    };
+    
+    // 构建结果
+    const result = {
+      address: systemAddress || null,
+      status: Number(status),
+      statusName: statusNames[Number(status)] || 'Unknown',
+      version,
+      components: {}
+    };
+    
+    // 只添加有效的组件地址
+    for (const [key, value] of Object.entries(components)) {
+      if (value && typeof value === 'string' && value.startsWith('0x')) {
+        result.components[key] = value;
+      }
+    }
+    
+    return success(res, result);
+  } catch (error) {
+    Logger.error(`获取系统组件信息失败: ${error.message}`, { error });
+    return failure(res, error.message);
   }
 }
 

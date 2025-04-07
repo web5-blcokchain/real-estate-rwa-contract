@@ -301,6 +301,18 @@ class Validation {
   }
 
   /**
+   * 验证bytes32格式
+   * @param {string} bytes32 - bytes32哈希值
+   * @returns {boolean} 是否有效
+   */
+  static isValidBytes32(bytes32) {
+    if (!bytes32 || typeof bytes32 !== 'string') return false;
+    if (!bytes32.startsWith('0x')) return false;
+    if (bytes32.length !== 66) return false;
+    return /^0x[0-9a-fA-F]{64}$/.test(bytes32);
+  }
+
+  /**
    * 验证 Provider 实例
    * @param {Object} provider - Provider 实例
    * @returns {boolean} 是否有效

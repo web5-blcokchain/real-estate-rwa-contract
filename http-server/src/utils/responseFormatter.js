@@ -47,6 +47,25 @@ function error(res, err, statusCode = 400) {
 }
 
 /**
+ * 业务失败响应格式化
+ * @param {Object} res - Express响应对象
+ * @param {string} message - 失败消息
+ * @param {Object} details - 额外的失败详情
+ * @param {number} statusCode - HTTP状态码，默认400
+ * @returns {Object} 格式化后的响应
+ */
+function failure(res, message, details = null, statusCode = 400) {
+  return res.status(statusCode).json({
+    success: false,
+    failure: {
+      message: message || '操作失败',
+      details: details
+    },
+    timestamp: new Date().toISOString()
+  });
+}
+
+/**
  * 分页响应格式化
  * @param {Object} res - Express响应对象
  * @param {Array} items - 分页数据项
@@ -73,5 +92,6 @@ function paginated(res, items, pagination, statusCode = 200) {
 module.exports = {
   success,
   error,
+  failure,
   paginated
 }; 
