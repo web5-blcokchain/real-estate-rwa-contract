@@ -4,6 +4,7 @@ const Utils = require('../../../common/utils');
 const { ResponseUtils } = require('../../utils');
 const BaseController = require('../BaseController');
 const { ethers } = require('ethers');
+const { ContractUtils } = require('../../../common/blockchain');
 
 /**
  * 房产管理控制器
@@ -43,40 +44,61 @@ class PropertyManagerController extends BaseController {
             res,
             async () => {
                 try {
+                    console.log("[registerProperty] 准备获取合约实例...");
                     // 首先获取合约实例以检查钱包地址和角色
                     const contractAdmin = this.getContract('PropertyManager', 'admin');
+                    console.log("[registerProperty] 已获取admin合约实例");
+                    console.log("[registerProperty] contractAdmin:", contractAdmin);
+                    console.log("[registerProperty] contractAdmin.runner:", contractAdmin.runner);
                     const contractManager = this.getContract('PropertyManager', 'manager');
+                    console.log("[registerProperty] 已获取manager合约实例");
+                    console.log("[registerProperty] contractManager:", contractManager);
+                    console.log("[registerProperty] contractManager.runner:", contractManager.runner);
                     
-                    // 获取RoleManager合约实例检查角色
-                    const roleManager = await contractAdmin.roleManager();
-                    console.log("[registerProperty] 角色管理器地址:", roleManager);
-                    
+                    console.log("[registerProperty] 准备获取钱包地址...");
                     // 获取钱包地址
-                    const adminWallet = await contractAdmin.signer.getAddress();
-                    const managerWallet = await contractManager.signer.getAddress();
-                    console.log("[registerProperty] 管理员钱包地址:", adminWallet);
-                    console.log("[registerProperty] 管理者钱包地址:", managerWallet);
+                    const adminWallet = await contractAdmin.runner.getAddress();
+                    console.log("[registerProperty] 已获取admin钱包地址:", adminWallet);
+                    const managerWallet = await contractManager.runner.getAddress();
+                    console.log("[registerProperty] 已获取manager钱包地址:", managerWallet);
                     
-                    // 尝试获取MANAGER_ROLE常量
+                    // 尝试获取MANAGER_ROLE常量和检查权限
                     try {
-                        const managerRole = await contractAdmin.roleManager.MANAGER_ROLE();
+                        console.log("[registerProperty] 准备获取roleManager合约地址...");
+                        // 调用roleManager()函数获取roleManager合约地址
+                        const roleManagerAddress = await contractAdmin.roleManager();
+                        console.log("[registerProperty] 角色管理器地址:", roleManagerAddress);
+                        
+                        console.log("[registerProperty] 准备创建RoleManager合约实例...");
+                        // 使用RoleManager合约地址创建合约实例
+                        const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
+                        console.log("[registerProperty] 已创建RoleManager合约实例");
+                        
+                        console.log("[registerProperty] 准备获取MANAGER_ROLE常量...");
+                        const managerRole = await roleManagerContract.MANAGER_ROLE();
                         console.log("[registerProperty] MANAGER_ROLE:", managerRole);
                         
+                        console.log("[registerProperty] 准备检查钱包是否有MANAGER_ROLE...");
                         // 检查钱包是否有管理者角色
-                        const isManager = await contractAdmin.roleManager.hasRole(managerRole, managerWallet);
+                        const isManager = await roleManagerContract.hasRole(managerRole, managerWallet);
                         console.log("[registerProperty] 当前钱包是否有MANAGER_ROLE:", isManager);
                     } catch (error) {
                         console.log("[registerProperty] 获取MANAGER_ROLE失败:", error.message);
+                        console.log("[registerProperty] 错误堆栈:", error.stack);
                     }
                     
+                    console.log("[registerProperty] 准备使用manager角色获取合约实例...");
                     // 获取合约实例，使用manager角色
                     const contract = contractManager;
+                    console.log("[registerProperty] 已获取contract实例");
                     
+                    console.log("[registerProperty] 准备调用合约registerProperty方法...");
                     // 直接使用原始propertyId字符串，不做任何转换
                     console.log("[registerProperty] 调用合约 registerProperty，传入参数:", propertyId, country, metadataURI);
                     const tx = await contract.registerProperty(propertyId, country, metadataURI);
                     console.log("[registerProperty] 交易发送成功，返回的交易信息:", tx);
                     
+                    console.log("[registerProperty] 准备等待交易确认...");
                     // 等待交易确认
                     const receipt = await this.waitForTransaction(tx);
                     console.log("[registerProperty] 交易已确认，收据:", receipt);
