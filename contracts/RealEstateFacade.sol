@@ -38,7 +38,7 @@ contract RealEstateFacade is
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    
+     
     // System contracts
     RealEstateSystem public system;
     RoleManager public roleManager;

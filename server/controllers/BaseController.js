@@ -6,6 +6,18 @@ const { Logger, ContractUtils } = require('../../common');
 const { ResponseUtils } = require('../utils');
 
 class BaseController {
+  // 内部环境变量，用于测试脚本控制角色映射
+  static _roleOverrideMap = {};
+
+  /**
+   * 设置函数名到角色的映射，用于测试时重写默认角色
+   * @param {Object} map - 函数名到角色的映射对象
+   */
+  static setRoleOverrides(map) {
+    BaseController._roleOverrideMap = map || {};
+    Logger.debug('设置角色重写映射', { map: BaseController._roleOverrideMap });
+  }
+
   /**
    * 获取控制器名称
    * 默认通过类名推断
@@ -26,6 +38,20 @@ class BaseController {
     if (typeof contractName !== 'string' && !role) {
       role = contractName;
       contractName = null;
+    }
+
+    // 获取调用栈以确定调用者函数名
+    const stack = new Error().stack;
+    const callerFunction = stack.split('\n')[2]?.match(/at\s+(\w+)\s+/)?.[1];
+    
+    // 检查是否有针对当前函数的角色重写
+    if (callerFunction && BaseController._roleOverrideMap[callerFunction]) {
+      const overrideRole = BaseController._roleOverrideMap[callerFunction];
+      Logger.debug(`使用重写角色: ${callerFunction} -> ${overrideRole}`, { 
+        original: role, 
+        override: overrideRole 
+      });
+      role = overrideRole;
     }
 
     if (contractName) {

@@ -464,9 +464,24 @@ async function grantRoles(contracts) {
   
   // 初始化角色授权结果对象
   const roleResults = {
-    admin: { address: null, success: false, hash: null, alreadyHasRole: false },
-    manager: { address: null, success: false, hash: null, alreadyHasRole: false },
-    operator: { address: null, success: false, hash: null, alreadyHasRole: false }
+    admin: { 
+      address: null, 
+      success: { admin: false, manager: false, operator: false }, 
+      hash: { admin: null, manager: null, operator: null }, 
+      alreadyHasRole: { admin: false, manager: false, operator: false } 
+    },
+    manager: { 
+      address: null, 
+      success: { manager: false, operator: false }, 
+      hash: { manager: null, operator: null }, 
+      alreadyHasRole: { manager: false, operator: false } 
+    },
+    operator: { 
+      address: null, 
+      success: { operator: false }, 
+      hash: { operator: null }, 
+      alreadyHasRole: { operator: false } 
+    }
   };
   
   // 授予 ADMIN_ROLE
@@ -476,6 +491,7 @@ async function grantRoles(contracts) {
       const adminAddress = adminWallet.address;
       roleResults.admin.address = adminAddress;
       
+      // 为admin授予ADMIN_ROLE
       logger.info(`检查地址 ${adminAddress} 是否已有 ADMIN_ROLE...`);
       const hasAdminRole = await roleManager.hasRole(ADMIN_ROLE, adminAddress);
       
@@ -483,19 +499,53 @@ async function grantRoles(contracts) {
         logger.info(`授予 ADMIN_ROLE 给: ${adminAddress}`);
         const tx = await roleManager.grantRole(ADMIN_ROLE, adminAddress);
         await tx.wait();
-        roleResults.admin.success = true;
-        roleResults.admin.hash = tx.hash;
+        roleResults.admin.success.admin = true;
+        roleResults.admin.hash.admin = tx.hash;
         logger.info(`ADMIN_ROLE 授权成功, 交易哈希: ${tx.hash}`);
       } else {
-        roleResults.admin.alreadyHasRole = true;
-        roleResults.admin.success = true;
+        roleResults.admin.alreadyHasRole.admin = true;
+        roleResults.admin.success.admin = true;
         logger.info(`地址 ${adminAddress} 已有 ADMIN_ROLE, 无需再次授权`);
       }
+      
+      // 为admin授予MANAGER_ROLE
+      logger.info(`检查地址 ${adminAddress} 是否已有 MANAGER_ROLE...`);
+      const hasManagerRole = await roleManager.hasRole(MANAGER_ROLE, adminAddress);
+      
+      if (!hasManagerRole) {
+        logger.info(`授予 MANAGER_ROLE 给 admin: ${adminAddress}`);
+        const tx = await roleManager.grantRole(MANAGER_ROLE, adminAddress);
+        await tx.wait();
+        roleResults.admin.success.manager = true;
+        roleResults.admin.hash.manager = tx.hash;
+        logger.info(`MANAGER_ROLE 授予admin成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.admin.alreadyHasRole.manager = true;
+        roleResults.admin.success.manager = true;
+        logger.info(`admin地址 ${adminAddress} 已有 MANAGER_ROLE, 无需再次授权`);
+      }
+      
+      // 为admin授予OPERATOR_ROLE
+      logger.info(`检查地址 ${adminAddress} 是否已有 OPERATOR_ROLE...`);
+      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, adminAddress);
+      
+      if (!hasOperatorRole) {
+        logger.info(`授予 OPERATOR_ROLE 给 admin: ${adminAddress}`);
+        const tx = await roleManager.grantRole(OPERATOR_ROLE, adminAddress);
+        await tx.wait();
+        roleResults.admin.success.operator = true;
+        roleResults.admin.hash.operator = tx.hash;
+        logger.info(`OPERATOR_ROLE 授予admin成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.admin.alreadyHasRole.operator = true;
+        roleResults.admin.success.operator = true;
+        logger.info(`admin地址 ${adminAddress} 已有 OPERATOR_ROLE, 无需再次授权`);
+      }
     } catch (error) {
-      logger.error(`授予 ADMIN_ROLE 失败: ${error.message}`);
+      logger.error(`授予admin权限失败: ${error.message}`);
     }
   } else {
-    logger.warn("未找到 ADMIN_PRIVATE_KEY 环境变量, 跳过 ADMIN_ROLE 授权");
+    logger.warn("未找到 ADMIN_PRIVATE_KEY 环境变量, 跳过admin角色授权");
   }
   
   // 授予 MANAGER_ROLE
@@ -505,6 +555,7 @@ async function grantRoles(contracts) {
       const managerAddress = managerWallet.address;
       roleResults.manager.address = managerAddress;
       
+      // 为manager授予MANAGER_ROLE
       logger.info(`检查地址 ${managerAddress} 是否已有 MANAGER_ROLE...`);
       const hasManagerRole = await roleManager.hasRole(MANAGER_ROLE, managerAddress);
       
@@ -512,19 +563,36 @@ async function grantRoles(contracts) {
         logger.info(`授予 MANAGER_ROLE 给: ${managerAddress}`);
         const tx = await roleManager.grantRole(MANAGER_ROLE, managerAddress);
         await tx.wait();
-        roleResults.manager.success = true;
-        roleResults.manager.hash = tx.hash;
+        roleResults.manager.success.manager = true;
+        roleResults.manager.hash.manager = tx.hash;
         logger.info(`MANAGER_ROLE 授权成功, 交易哈希: ${tx.hash}`);
       } else {
-        roleResults.manager.alreadyHasRole = true;
-        roleResults.manager.success = true;
+        roleResults.manager.alreadyHasRole.manager = true;
+        roleResults.manager.success.manager = true;
         logger.info(`地址 ${managerAddress} 已有 MANAGER_ROLE, 无需再次授权`);
       }
+      
+      // 为manager授予OPERATOR_ROLE
+      logger.info(`检查地址 ${managerAddress} 是否已有 OPERATOR_ROLE...`);
+      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, managerAddress);
+      
+      if (!hasOperatorRole) {
+        logger.info(`授予 OPERATOR_ROLE 给 manager: ${managerAddress}`);
+        const tx = await roleManager.grantRole(OPERATOR_ROLE, managerAddress);
+        await tx.wait();
+        roleResults.manager.success.operator = true;
+        roleResults.manager.hash.operator = tx.hash;
+        logger.info(`OPERATOR_ROLE 授予manager成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.manager.alreadyHasRole.operator = true;
+        roleResults.manager.success.operator = true;
+        logger.info(`manager地址 ${managerAddress} 已有 OPERATOR_ROLE, 无需再次授权`);
+      }
     } catch (error) {
-      logger.error(`授予 MANAGER_ROLE 失败: ${error.message}`);
+      logger.error(`授予manager权限失败: ${error.message}`);
     }
   } else {
-    logger.warn("未找到 MANAGER_PRIVATE_KEY 环境变量, 跳过 MANAGER_ROLE 授权");
+    logger.warn("未找到 MANAGER_PRIVATE_KEY 环境变量, 跳过manager角色授权");
   }
   
   // 授予 OPERATOR_ROLE
@@ -541,19 +609,19 @@ async function grantRoles(contracts) {
         logger.info(`授予 OPERATOR_ROLE 给: ${operatorAddress}`);
         const tx = await roleManager.grantRole(OPERATOR_ROLE, operatorAddress);
         await tx.wait();
-        roleResults.operator.success = true;
-        roleResults.operator.hash = tx.hash;
+        roleResults.operator.success.operator = true;
+        roleResults.operator.hash.operator = tx.hash;
         logger.info(`OPERATOR_ROLE 授权成功, 交易哈希: ${tx.hash}`);
       } else {
-        roleResults.operator.alreadyHasRole = true;
-        roleResults.operator.success = true;
+        roleResults.operator.alreadyHasRole.operator = true;
+        roleResults.operator.success.operator = true;
         logger.info(`地址 ${operatorAddress} 已有 OPERATOR_ROLE, 无需再次授权`);
       }
     } catch (error) {
-      logger.error(`授予 OPERATOR_ROLE 失败: ${error.message}`);
+      logger.error(`授予operator权限失败: ${error.message}`);
     }
   } else {
-    logger.warn("未找到 OPERATOR_PRIVATE_KEY 环境变量, 跳过 OPERATOR_ROLE 授权");
+    logger.warn("未找到 OPERATOR_PRIVATE_KEY 环境变量, 跳过operator角色授权");
   }
   
   logger.info("角色授权完成");
@@ -605,37 +673,54 @@ function generateDeploymentReport(deploymentInfo) {
     reportContent += `
 ## 角色授权信息
 
-| 角色 | 地址 | 授权状态 | 交易哈希 |
-|------|------|----------|----------|
+| 角色 | 地址 | 授权角色 | 授权状态 | 交易哈希 |
+|------|------|----------|----------|----------|
 `;
     
     const roles = deploymentInfo.roleResults;
     
     // 添加管理员角色信息
     if (roles.admin.address) {
-      const adminStatus = roles.admin.alreadyHasRole ? "已授权(已有权限)" : 
-                          roles.admin.success ? "已授权(新授权)" : "授权失败";
-      reportContent += `| ADMIN_ROLE | ${roles.admin.address} | ${adminStatus} | ${roles.admin.hash || '无'} |\n`;
+      // Admin拥有ADMIN_ROLE
+      const adminStatus = roles.admin.alreadyHasRole.admin ? "已授权(已有权限)" : 
+                         roles.admin.success.admin ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Admin账户 | ${roles.admin.address} | ADMIN_ROLE | ${adminStatus} | ${roles.admin.hash.admin || '无'} |\n`;
+      
+      // Admin拥有MANAGER_ROLE
+      const adminManagerStatus = roles.admin.alreadyHasRole.manager ? "已授权(已有权限)" : 
+                                roles.admin.success.manager ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Admin账户 | ${roles.admin.address} | MANAGER_ROLE | ${adminManagerStatus} | ${roles.admin.hash.manager || '无'} |\n`;
+      
+      // Admin拥有OPERATOR_ROLE
+      const adminOperatorStatus = roles.admin.alreadyHasRole.operator ? "已授权(已有权限)" : 
+                                 roles.admin.success.operator ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Admin账户 | ${roles.admin.address} | OPERATOR_ROLE | ${adminOperatorStatus} | ${roles.admin.hash.operator || '无'} |\n`;
     } else {
-      reportContent += `| ADMIN_ROLE | 未设置 | 未执行 | 无 |\n`;
+      reportContent += `| Admin账户 | 未设置 | 所有角色 | 未执行 | 无 |\n`;
     }
     
     // 添加经理角色信息
     if (roles.manager.address) {
-      const managerStatus = roles.manager.alreadyHasRole ? "已授权(已有权限)" : 
-                            roles.manager.success ? "已授权(新授权)" : "授权失败";
-      reportContent += `| MANAGER_ROLE | ${roles.manager.address} | ${managerStatus} | ${roles.manager.hash || '无'} |\n`;
+      // Manager拥有MANAGER_ROLE
+      const managerStatus = roles.manager.alreadyHasRole.manager ? "已授权(已有权限)" : 
+                           roles.manager.success.manager ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Manager账户 | ${roles.manager.address} | MANAGER_ROLE | ${managerStatus} | ${roles.manager.hash.manager || '无'} |\n`;
+      
+      // Manager拥有OPERATOR_ROLE
+      const managerOperatorStatus = roles.manager.alreadyHasRole.operator ? "已授权(已有权限)" : 
+                                   roles.manager.success.operator ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Manager账户 | ${roles.manager.address} | OPERATOR_ROLE | ${managerOperatorStatus} | ${roles.manager.hash.operator || '无'} |\n`;
     } else {
-      reportContent += `| MANAGER_ROLE | 未设置 | 未执行 | 无 |\n`;
+      reportContent += `| Manager账户 | 未设置 | 相关角色 | 未执行 | 无 |\n`;
     }
     
     // 添加操作员角色信息
     if (roles.operator.address) {
-      const operatorStatus = roles.operator.alreadyHasRole ? "已授权(已有权限)" : 
-                             roles.operator.success ? "已授权(新授权)" : "授权失败";
-      reportContent += `| OPERATOR_ROLE | ${roles.operator.address} | ${operatorStatus} | ${roles.operator.hash || '无'} |\n`;
+      const operatorStatus = roles.operator.alreadyHasRole.operator ? "已授权(已有权限)" : 
+                            roles.operator.success.operator ? "已授权(新授权)" : "授权失败";
+      reportContent += `| Operator账户 | ${roles.operator.address} | OPERATOR_ROLE | ${operatorStatus} | ${roles.operator.hash.operator || '无'} |\n`;
     } else {
-      reportContent += `| OPERATOR_ROLE | 未设置 | 未执行 | 无 |\n`;
+      reportContent += `| Operator账户 | 未设置 | OPERATOR_ROLE | 未执行 | 无 |\n`;
     }
   }
   
