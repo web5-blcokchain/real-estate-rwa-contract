@@ -28,7 +28,17 @@ function log(title, message) {
   const separator = '='.repeat(50);
   console.log(`\n${separator}\n${title}\n${separator}`);
   if (message) {
-    console.log(typeof message === 'object' ? JSON.stringify(message, null, 2) : message);
+    // 添加BigInt序列化支持
+    const replacer = (key, value) => {
+      // 检查值是否是BigInt类型
+      if (typeof value === 'bigint') {
+        // 将BigInt转换为字符串
+        return value.toString();
+      }
+      return value;
+    };
+    
+    console.log(typeof message === 'object' ? JSON.stringify(message, replacer, 2) : message);
   }
 }
 
@@ -101,9 +111,10 @@ async function testRegisterProperty() {
   // 创建一个新的控制器实例
   const controller = new PropertyManagerController();
   
-  // 使用固定的 propertyId 而不是随机生成的
-  const propertyId = "PROP-TEST-001"; // 固定且简单的 propertyId
-  console.log("使用固定的 propertyId:", propertyId);
+  // 使用带有时间戳的动态propertyId，确保每次测试都是唯一的
+  const timestamp = Date.now();
+  const propertyId = `PROP-TEST-${timestamp}`; // 动态生成的propertyId
+  console.log("使用动态生成的 propertyId:", propertyId);
   console.log("propertyId length:", propertyId.length);
   console.log("propertyId type:", typeof propertyId);
   
