@@ -8,12 +8,29 @@ const EnvUtils = require('../env');
 const ProviderManager = require('./provider');
 
 /**
+ * 系统支持的角色类型
+ */
+const ROLES = {
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  OPERATOR: 'operator'
+};
+
+/**
  * 钱包管理类
  */
 class WalletManager {
   // 缓存Wallet实例
   static #defaultWallet = null;
   static #wallets = new Map();
+  
+  /**
+   * 获取系统支持的角色类型
+   * @returns {Object} 角色类型常量
+   */
+  static getRoles() {
+    return ROLES;
+  }
 
   /**
    * 获取默认Wallet实例
@@ -26,7 +43,7 @@ class WalletManager {
         const networkConfig = EnvUtils.getNetworkConfig();
         
         if (!networkConfig.privateKey || networkConfig.privateKey === '') {
-          throw new Error(`未配置网络[${networkConfig.name}]的私钥`);
+          throw new Error(`未配置网络[${networkConfig.name}]的默认私钥`);
         }
         
         // 获取默认Provider
@@ -43,6 +60,54 @@ class WalletManager {
       }
     }
     return this.#defaultWallet;
+  }
+  
+  /**
+   * 获取角色钱包实例
+   * @param {string} role - 角色名称（admin/manager/operator）
+   * @param {string} [networkName] - 网络名称，不传则使用当前网络
+   * @returns {ethers.Wallet} 角色钱包实例
+   */
+  static getRoleWallet(role, networkName) {
+    if (!role) {
+      throw new Error('角色名称不能为空');
+    }
+    
+    // 验证是否为有效角色
+    const validRoles = Object.values(ROLES);
+    if (!validRoles.includes(role)) {
+      throw new Error(`无效的角色名称: ${role}，有效角色: ${validRoles.join(', ')}`);
+    }
+    
+    const cacheKey = `role:${role}:${networkName || 'default'}`;
+    
+    if (!this.#wallets.has(cacheKey)) {
+      try {
+        // 获取指定网络配置
+        const networkConfig = EnvUtils.getNetworkConfig(networkName);
+        
+        if (!networkConfig.privateKeys || !networkConfig.privateKeys[role]) {
+          throw new Error(`未配置网络[${networkConfig.name}]中角色[${role}]的私钥`);
+        }
+        
+        // 获取Provider
+        const provider = networkName
+          ? ProviderManager.getNetworkProvider(networkName)
+          : ProviderManager.getDefaultProvider();
+          
+        Logger.debug(`初始化角色钱包: ${role}@${networkConfig.name}`);
+        
+        this.#wallets.set(cacheKey, new ethers.Wallet(networkConfig.privateKeys[role], provider));
+      } catch (error) {
+        Logger.error(`角色钱包[${role}@${networkName || 'default'}]初始化失败`, { 
+          error: error.message,
+          stack: error.stack
+        });
+        throw new Error(`角色钱包[${role}@${networkName || 'default'}]初始化失败: ${error.message}`);
+      }
+    }
+    
+    return this.#wallets.get(cacheKey);
   }
   
   /**
@@ -173,33 +238,65 @@ class WalletManager {
   
   /**
    * 重置特定Wallet
-   * @param {string} name - 钱包名称或网络名称
-   * @param {boolean} [isNetwork=false] - 是否为网络名称
+   * @param {string} name - 钱包名称、网络名称或角色名称
+   * @param {string} [type='custom'] - 类型：custom/network/role
    */
-  static resetWallet(name, isNetwork = false) {
+  static resetWallet(name, type = 'custom') {
     if (!name) {
       this.#defaultWallet = null;
       Logger.debug('已重置默认钱包');
       return;
     }
     
-    const cacheKey = isNetwork ? `network:${name}` : `custom:${name}`;
+    let cacheKey;
+    switch (type) {
+      case 'role':
+        // 重置所有网络下的该角色钱包
+        for (const key of this.#wallets.keys()) {
+          if (key.startsWith(`role:${name}:`)) {
+            this.#wallets.delete(key);
+            Logger.debug(`已重置角色钱包: ${key}`);
+          }
+        }
+        return;
+      case 'network':
+        cacheKey = `network:${name}`;
+        break;
+      case 'custom':
+      default:
+        cacheKey = `custom:${name}`;
+        break;
+    }
+    
     this.#wallets.delete(cacheKey);
     Logger.debug(`已重置钱包: ${cacheKey}`);
   }
   
   /**
    * 获取所有已初始化的Wallet名称
-   * @returns {Object} 包含networks和customs两个数组的对象
+   * @returns {Object} 包含roles、networks和customs三个数组的对象
    */
   static getWalletNames() {
     const result = {
+      roles: {},
       networks: [],
       customs: []
     };
     
     for (const key of this.#wallets.keys()) {
-      if (key.startsWith('network:')) {
+      if (key.startsWith('role:')) {
+        // 格式: role:roleName:networkName
+        const parts = key.split(':');
+        if (parts.length >= 3) {
+          const role = parts[1];
+          const network = parts[2] === 'default' ? 'default' : parts[2];
+          
+          if (!result.roles[role]) {
+            result.roles[role] = [];
+          }
+          result.roles[role].push(network);
+        }
+      } else if (key.startsWith('network:')) {
         result.networks.push(key.substring(8));
       } else if (key.startsWith('custom:')) {
         result.customs.push(key.substring(7));
@@ -211,23 +308,32 @@ class WalletManager {
   
   /**
    * 获取钱包地址
-   * @param {string} [name] - 钱包名称或网络名称
-   * @param {boolean} [isNetwork=false] - 是否为网络名称
+   * @param {string} [name] - 钱包名称、网络名称或角色名称
+   * @param {string} [type='custom'] - 类型：custom/network/role
    * @returns {string} 钱包地址
    */
-  static getAddress(name, isNetwork = false) {
+  static getAddress(name, type = 'custom') {
     try {
       let wallet;
       
       if (!name) {
         wallet = this.getDefaultWallet();
-      } else if (isNetwork) {
-        wallet = this.getNetworkWallet(name);
       } else {
-        // 尝试从缓存获取
-        const cacheKey = `custom:${name}`;
-        const cachedWallet = this.#wallets.get(cacheKey);
-        wallet = cachedWallet || this.getDefaultWallet();
+        switch (type) {
+          case 'role':
+            wallet = this.getRoleWallet(name);
+            break;
+          case 'network':
+            wallet = this.getNetworkWallet(name);
+            break;
+          case 'custom':
+          default:
+            // 尝试从缓存获取
+            const cacheKey = `custom:${name}`;
+            const cachedWallet = this.#wallets.get(cacheKey);
+            wallet = cachedWallet || this.getDefaultWallet();
+            break;
+        }
       }
       
       return wallet.address;

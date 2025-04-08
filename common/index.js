@@ -15,9 +15,6 @@ const Paths = require('./paths');
 // 环境工具
 const EnvUtils = require('./env');
 
-// 响应工具
-const ResponseUtils = require('./response');
-
 // 为向后兼容保留原始导出结构
 module.exports = {
   // 区块链工具
@@ -32,6 +29,5 @@ module.exports = {
   // 其他工具
   Logger,
   Paths,
-  EnvUtils,
-  ResponseUtils
+  EnvUtils
 }; 

@@ -41,7 +41,7 @@ const { ControllerFactory } = require('../../utils');
 router.post('/distribute',
   AuthMiddleware.validateApiKey,
   ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RewardController, 'distributeRewards')
+  ControllerFactory.getHandler(RewardController, 'distributeReward')
 );
 
 /**
@@ -70,7 +70,7 @@ router.post('/distribute',
 router.post('/claim',
   AuthMiddleware.validateApiKey,
   ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RewardController, 'claimRewards')
+  ControllerFactory.getHandler(RewardController, 'createReward')
 );
 
 /**
@@ -100,7 +100,7 @@ router.get('/pending/:propertyId/:account',
   AuthMiddleware.validateApiKey,
   ValidatorMiddleware.validateAddress('propertyId', 'params'),
   ValidatorMiddleware.validateAddress('account', 'params'),
-  ControllerFactory.getHandler(RewardController, 'getPendingRewards')
+  ControllerFactory.getHandler(RewardController, 'getAccountRewards')
 );
 
 /**
@@ -124,7 +124,7 @@ router.get('/pending/:propertyId/:account',
 router.get('/history/:propertyId',
   AuthMiddleware.validateApiKey,
   ValidatorMiddleware.validateAddress('propertyId', 'params'),
-  ControllerFactory.getHandler(RewardController, 'getRewardHistory')
+  ControllerFactory.getHandler(RewardController, 'getPropertyRewards')
 );
 
 module.exports = router; 

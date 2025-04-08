@@ -13,10 +13,10 @@ class TradingController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async executeTrade(req, res) {
-    const { contractAddress, tokenAddress, seller, buyer, amount, price } = req.body;
+    const { tokenAddress, seller, buyer, amount, price } = req.body;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, tokenAddress, seller, buyer, amount, price })) {
+    if (!this.validateRequired(res, { tokenAddress, seller, buyer, amount, price })) {
       return;
     }
 
@@ -29,7 +29,7 @@ class TradingController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('TradingManager', contractAddress);
+        const contract = this.getContract('TradingManager', 'admin');
         
         // 调用合约方法
         const tx = await contract.executeTrade(tokenAddress, seller, buyer, amount, price);
@@ -58,10 +58,10 @@ class TradingController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async batchExecuteTrade(req, res) {
-    const { contractAddress, trades } = req.body;
+    const { trades } = req.body;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, trades })) {
+    if (!this.validateRequired(res, { trades })) {
       return;
     }
 
@@ -87,7 +87,7 @@ class TradingController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('TradingManager', contractAddress);
+        const contract = this.getContract('TradingManager', 'admin');
         
         // 调用合约方法
         const tx = await contract.batchExecuteTrade(
@@ -118,11 +118,10 @@ class TradingController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getTradeHistory(req, res) {
-    const { contractAddress } = req.query;
     const { tokenAddress } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, tokenAddress })) {
+    if (!this.validateRequired(res, { tokenAddress })) {
       return;
     }
 
@@ -135,7 +134,7 @@ class TradingController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('TradingManager', contractAddress);
+        const contract = this.getContract('TradingManager', 'admin');
         
         // 调用合约方法
         const history = await contract.getTradeHistory(tokenAddress);

@@ -21,7 +21,6 @@
     "test:env": "node test-env.js",
     "server:dev": "nodemon server/app.js",
     "server:start": "node server/app.js",
-    "test:api": "node test-api.js",
     "api": "node http-test.js"
   },
   "dependencies": {

@@ -185,4 +185,23 @@ router.post('/rewards/claim',
   ControllerFactory.getHandler(RealEstateFacadeController, 'claimRewards')
 );
 
+/**
+ * @swagger
+ * /api/v1/core/real-estate-facade/test:
+ *   get:
+ *     summary: 测试接口
+ *     tags: [RealEstateFacade]
+ *     responses:
+ *       200:
+ *         description: 测试成功
+ */
+router.get('/test', (req, res) => {
+  // 这个接口不需要AuthMiddleware.validateApiKey
+  res.json({
+    status: 'success',
+    message: 'RealEstateFacade 测试接口可用',
+    timestamp: new Date().toISOString()
+  });
+});
+
 module.exports = router; 

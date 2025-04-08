@@ -3,7 +3,7 @@ const router = express.Router();
 const TradingController = require('../../controllers/core/TradingController');
 const AuthMiddleware = require('../../middleware/auth');
 const { apiRateLimit } = require('../../middleware/rate-limit');
-const { validateRequired, validateAddress } = require('../../middleware/validator');
+const ValidatorMiddleware = require('../../middleware/validator');
 const { ControllerFactory } = require('../../utils');
 
 /**
@@ -26,16 +26,12 @@ const { ControllerFactory } = require('../../utils');
  *           schema:
  *             type: object
  *             required:
- *               - contractAddress
  *               - tokenAddress
  *               - seller
  *               - buyer
  *               - amount
  *               - price
  *             properties:
- *               contractAddress:
- *                 type: string
- *                 description: 合约地址
  *               tokenAddress:
  *                 type: string
  *                 description: 代币地址
@@ -61,11 +57,10 @@ const { ControllerFactory } = require('../../utils');
  */
 router.post('/execute',
   apiRateLimit,
-  validateRequired(['contractAddress', 'tokenAddress', 'seller', 'buyer', 'amount', 'price']),
-  validateAddress('contractAddress'),
-  validateAddress('tokenAddress'),
-  validateAddress('seller'),
-  validateAddress('buyer'),
+  ValidatorMiddleware.validateRequired(['tokenAddress', 'seller', 'buyer', 'amount', 'price']),
+  ValidatorMiddleware.validateAddress('tokenAddress'),
+  ValidatorMiddleware.validateAddress('seller'),
+  ValidatorMiddleware.validateAddress('buyer'),
   ControllerFactory.getHandler(TradingController, 'executeTrade')
 );
 
@@ -82,12 +77,8 @@ router.post('/execute',
  *           schema:
  *             type: object
  *             required:
- *               - contractAddress
  *               - trades
  *             properties:
- *               contractAddress:
- *                 type: string
- *                 description: 合约地址
  *               trades:
  *                 type: array
  *                 items:
@@ -119,8 +110,7 @@ router.post('/execute',
  */
 router.post('/batch-execute',
   apiRateLimit,
-  validateRequired(['contractAddress', 'trades']),
-  validateAddress('contractAddress'),
+  ValidatorMiddleware.validateRequired(['trades']),
   ControllerFactory.getHandler(TradingController, 'batchExecuteTrade')
 );
 
@@ -137,12 +127,6 @@ router.post('/batch-execute',
  *         schema:
  *           type: string
  *         description: 代币地址
- *       - in: query
- *         name: contractAddress
- *         required: true
- *         schema:
- *           type: string
- *         description: 合约地址
  *     responses:
  *       200:
  *         description: 成功获取交易历史
@@ -153,9 +137,7 @@ router.post('/batch-execute',
  */
 router.get('/history/:tokenAddress',
   apiRateLimit,
-  validateRequired(['contractAddress'], 'query'),
-  validateAddress('contractAddress', 'query'),
-  validateAddress('tokenAddress', 'params'),
+  ValidatorMiddleware.validateAddress('tokenAddress', 'params'),
   ControllerFactory.getHandler(TradingController, 'getTradeHistory')
 );
 
@@ -206,8 +188,8 @@ router.get('/history/:tokenAddress',
  */
 router.get('/detail/:tokenAddress/:transactionHash', 
   AuthMiddleware.validateApiKey,
-  validateAddress('tokenAddress', 'params'),
-  ControllerFactory.getHandler(TradingController, 'getTradeDetail')
+  ValidatorMiddleware.validateAddress('tokenAddress', 'params'),
+  ControllerFactory.getHandler(TradingController, 'getTradeHistory')
 );
 
 module.exports = router; 

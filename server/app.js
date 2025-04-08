@@ -24,6 +24,55 @@ app.use(morgan('combined', {
   }
 }));
 
+// 请求记录中间件，帮助调试
+app.use((req, res, next) => {
+  console.log(`请求: ${req.method} ${req.url}`);
+  Logger.info(`请求: ${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    params: req.params
+  });
+  next();
+});
+
+// 添加根路由测试
+app.get('/', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'Welcome to Real Estate Tokenization API',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 添加API测试路由
+app.get('/api/test', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'API测试成功',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API Key 测试路由
+app.get('/api/auth-test', (req, res) => {
+  const apiKey = req.headers['x-api-key'];
+  const expectedApiKey = EnvUtils.getApiKey() || '123456';
+  
+  if (!apiKey || apiKey !== expectedApiKey) {
+    return res.status(401).json({
+      success: false,
+      error: '无效的API密钥',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  res.json({
+    success: true,
+    message: 'API Key 验证成功',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Swagger配置
 const swaggerOptions = {
   definition: {
@@ -49,6 +98,26 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // 路由
 app.use(routes);
 
+// 添加更详细的路由错误处理
+app.use((req, res, next) => {
+  Logger.warn(`未找到路由: ${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.body
+  });
+  
+  res.status(404).json({
+    success: false,
+    error: `未找到路由: ${req.method} ${req.url}`,
+    availableRoutes: {
+      root: '/',
+      apiTest: '/api/test',
+      authTest: '/api/auth-test'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 404处理
 app.use(ErrorMiddleware.handleNotFound);
 
@@ -61,6 +130,7 @@ app.set('port', PORT);
 
 // 启动服务器
 app.listen(PORT, () => {
+  console.log(`服务器已启动，端口：${PORT}`);
   Logger.info(`服务器已启动，端口：${PORT}`);
 });
 

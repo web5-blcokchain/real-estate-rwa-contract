@@ -23,5 +23,6 @@ module.exports = {
   validateAddresses: ValidatorMiddleware.validateAddresses,
   validateRequired: ValidatorMiddleware.validateRequired,
   validateNumbers: ValidatorMiddleware.validateNumbers,
+  validateNumber: ValidatorMiddleware.validateNumber,
   validate: ValidatorMiddleware.validate
 }; 

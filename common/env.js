@@ -23,8 +23,18 @@ const ENV_KEYS = {
   HOST: 'HOST',
   API_KEY: 'API_KEY',
   
+  // 角色私钥配置
+  ADMIN_PRIVATE_KEY: 'ADMIN_PRIVATE_KEY',
+  MANAGER_PRIVATE_KEY: 'MANAGER_PRIVATE_KEY',
+  OPERATOR_PRIVATE_KEY: 'OPERATOR_PRIVATE_KEY',
+  
   // 合约地址配置
-  REAL_ESTATE_FACADE_ADDRESS: 'REAL_ESTATE_FACADE_ADDRESS',
+  CONTRACT_REALESTATEFACADE_ADDRESS: 'CONTRACT_REALESTATEFACADE_ADDRESS',
+  CONTRACT_PROPERTYMANAGER_ADDRESS: 'CONTRACT_PROPERTYMANAGER_ADDRESS',
+  CONTRACT_PROPERTYTOKEN_ADDRESS: 'CONTRACT_PROPERTYTOKEN_ADDRESS',
+  CONTRACT_TRADING_ADDRESS: 'CONTRACT_TRADING_ADDRESS',
+  CONTRACT_REWARD_ADDRESS: 'CONTRACT_REWARD_ADDRESS',
+  CONTRACT_ROLE_ADDRESS: 'CONTRACT_ROLE_ADDRESS',
   
   // 日志配置
   LOG_LEVEL: 'LOG_LEVEL',
@@ -145,6 +155,12 @@ class EnvUtils {
   static getNetworkConfig(network) {
     const currentNetwork = network || this.getCurrentNetwork();
     
+    // 获取当前网络下的角色私钥
+    const adminPrivateKey = this.getString(ENV_KEYS.ADMIN_PRIVATE_KEY, '');
+    const managerPrivateKey = this.getString(ENV_KEYS.MANAGER_PRIVATE_KEY, '');
+    const operatorPrivateKey = this.getString(ENV_KEYS.OPERATOR_PRIVATE_KEY, '');
+    
+
     // 网络配置映射
     const networks = {
       // 本地开发网络
@@ -152,7 +168,14 @@ class EnvUtils {
         name: 'hardhat',
         chainId: 31337,
         rpcUrl: 'http://127.0.0.1:8545',
-        privateKey: this.getString('DEPLOYER_PRIVATE_KEY', ''), // hardhat默认账户私钥
+        // 为不同角色配置私钥
+        privateKeys: {
+          admin: adminPrivateKey || '', // hardhat默认账户0私钥
+          manager: managerPrivateKey || '', // hardhat默认账户1私钥
+          operator: operatorPrivateKey || '', // hardhat默认账户2私钥
+        },
+        // 默认角色的私钥（向后兼容）
+        privateKey: adminPrivateKey || '',
         explorer: ''
       },
       
@@ -160,7 +183,13 @@ class EnvUtils {
         name: 'localhost',
         chainId: 31337,
         rpcUrl: 'http://127.0.0.1:8545',
-        privateKey: this.getString('DEPLOYER_PRIVATE_KEY', ''), // hardhat默认账户私钥
+        // 为不同角色配置私钥
+        privateKeys: {
+          admin: adminPrivateKey || '',
+          manager: managerPrivateKey || '',
+          operator: operatorPrivateKey || '',
+        },
+        privateKey: adminPrivateKey || '',
         explorer: ''
       },
       
@@ -169,7 +198,13 @@ class EnvUtils {
         name: 'sepolia',
         chainId: 11155111,
         rpcUrl: this.getString('SEPOLIA_RPC_URL', 'https://rpc.sepolia.org'),
-        privateKey: this.getString('DEPLOYER_PRIVATE_KEY', ''),
+        // 为不同角色配置私钥
+        privateKeys: {
+          admin: adminPrivateKey || '',
+          manager: managerPrivateKey || '',
+          operator: operatorPrivateKey || '',
+        },
+        privateKey: adminPrivateKey || '',
         explorer: 'https://sepolia.etherscan.io'
       },
       
@@ -178,7 +213,13 @@ class EnvUtils {
         name: 'mainnet',
         chainId: 1,
         rpcUrl: this.getString('MAINNET_RPC_URL', 'https://mainnet.infura.io/v3/your-api-key'),
-        privateKey: this.getString('DEPLOYER_PRIVATE_KEY', ''),
+        // 为不同角色配置私钥
+        privateKeys: {
+          admin: adminPrivateKey || '',
+          manager: managerPrivateKey || '',
+          operator: operatorPrivateKey || '',
+        },
+        privateKey: adminPrivateKey || '',
         explorer: 'https://etherscan.io'
       }
     };
@@ -212,11 +253,26 @@ class EnvUtils {
   }
 
   /**
-   * 获取RealEstateFacade合约地址
+   * 获取合约地址
+   * @param {string} contractName - 合约名称，不含Controller后缀
    * @returns {string} 合约地址
    */
-  static getRealEstateFacadeAddress() {
-    return this.getString(ENV_KEYS.REAL_ESTATE_FACADE_ADDRESS, '');
+  static getContractAddress(contractName) {
+    if (!contractName) {
+      throw new Error('合约名称不能为空');
+    }
+    
+    // 转换为大写并移除非字母数字字符，用于构建环境变量键名
+    const normalizedName = contractName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const envKey = `CONTRACT_${normalizedName}_ADDRESS`;
+    
+    // 检查是否存在于ENV_KEYS中
+    const isDefinedKey = Object.values(ENV_KEYS).includes(envKey);
+    if (!isDefinedKey) {
+      Logger.warn(`合约地址环境变量 ${envKey} 未在ENV_KEYS中定义`);
+    }
+    
+    return this.getString(envKey, '');
   }
 
   /**

@@ -7,6 +7,47 @@ const { ResponseUtils } = require('../utils');
 
 class BaseController {
   /**
+   * 获取控制器名称
+   * 默认通过类名推断
+   * @returns {string} 控制器名称
+   */
+  get controllerName() {
+    return this.constructor.name;
+  }
+
+  /**
+   * 获取当前控制器对应的合约实例
+   * @param {string} [contractName] - 可选的合约名称，不提供则使用当前控制器名转换
+   * @param {string} [role='admin'] - 使用的角色（admin/manager/operator）
+   * @returns {ethers.Contract} 合约实例
+   */
+  getContract(contractName, role = 'admin') {
+    // 如果只传了一个参数且不是字符串，那么它可能是role
+    if (typeof contractName !== 'string' && !role) {
+      role = contractName;
+      contractName = null;
+    }
+
+    if (contractName) {
+      // 如果提供了合约名，则使用它
+      return ContractUtils.getContractForController(contractName, role);
+    } else {
+      // 否则使用控制器名称
+      return ContractUtils.getContractForController(this.controllerName, role);
+    }
+  }
+
+  /**
+   * 获取指定控制器对应的合约实例
+   * @param {string} controllerName - 控制器名称
+   * @param {string} [role='admin'] - 使用的角色（admin/manager/operator）
+   * @returns {ethers.Contract} 合约实例
+   */
+  getContractFor(controllerName, role = 'admin') {
+    return ContractUtils.getContractForController(controllerName, role);
+  }
+
+  /**
    * 处理合约方法调用并返回响应
    * @param {Object} res - 响应对象
    * @param {Function} asyncAction - 异步操作函数

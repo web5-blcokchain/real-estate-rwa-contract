@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const Logger = require('../logger');
 const Paths = require('../paths');
+const EnvUtils = require('../env');
 const AbiUtils = require('./abi');
 const ProviderManager = require('./provider');
 const WalletManager = require('./wallet');
@@ -15,6 +16,51 @@ const WalletManager = require('./wallet');
  * 合约工具类
  */
 class ContractUtils {
+  /**
+   * 获取合约实例（基于控制器和角色）
+   * @param {string} controllerName - 控制器名称
+   * @param {string} [role='admin'] - 角色名称
+   * @returns {ethers.Contract} 合约实例
+   */
+  static getContractForController(controllerName, role = 'admin') {
+    try {
+      if (!controllerName) {
+        throw new Error('控制器名称不能为空');
+      }
+      
+      // 从controllerName推断合约名称
+      const contractName = controllerName.replace(/Controller$/, '');
+      
+      // 从环境变量获取合约地址
+      const address = EnvUtils.getContractAddress(contractName);
+      
+      if (!address || address === '') {
+        throw new Error(`未找到${contractName}的合约地址配置`);
+      }
+      
+      // 获取ABI
+      const abi = AbiUtils.getAbi(contractName);
+      
+      // 根据角色获取钱包
+      const wallet = WalletManager.getRoleWallet(role);
+      
+      Logger.debug(`为控制器[${controllerName}]创建合约实例`, {
+        contractName,
+        contractAddress: address,
+        role
+      });
+      
+      return new ethers.Contract(address, abi, wallet);
+    } catch (error) {
+      Logger.error(`为控制器[${controllerName}]创建合约实例失败`, {
+        role,
+        error: error.message,
+        stack: error.stack
+      });
+      throw new Error(`为控制器[${controllerName}]创建合约实例失败: ${error.message}`);
+    }
+  }
+
   /**
    * 获取合约实例（使用默认钱包）
    * @param {string} contractName - 合约名称
@@ -35,6 +81,39 @@ class ContractUtils {
     } catch (error) {
       Logger.error(`获取合约实例失败: ${contractName}`, { 
         address: contractAddress,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 获取合约实例（使用指定角色）
+   * @param {string} contractName - 合约名称
+   * @param {string} contractAddress - 合约地址
+   * @param {string} role - 角色名称
+   * @returns {ethers.Contract} 合约实例
+   */
+  static getContractWithRole(contractName, contractAddress, role) {
+    try {
+      if (!contractName) {
+        throw new Error('合约名称不能为空');
+      }
+      if (!contractAddress) {
+        throw new Error('合约地址不能为空');
+      }
+      if (!role) {
+        throw new Error('角色名称不能为空');
+      }
+      
+      const abi = AbiUtils.getAbi(contractName);
+      const wallet = WalletManager.getRoleWallet(role);
+      
+      return new ethers.Contract(contractAddress, abi, wallet);
+    } catch (error) {
+      Logger.error(`获取合约实例失败: ${contractName}`, { 
+        address: contractAddress,
+        role,
         error: error.message
       });
       throw error;
@@ -66,7 +145,7 @@ class ContractUtils {
       let walletInstance;
       if (typeof wallet === 'string') {
         // 如果是字符串，视为钱包名称
-        walletInstance = WalletManager.getWallet(wallet);
+        walletInstance = WalletManager.getCustomWallet(wallet);
       } else if (wallet.privateKey) {
         // 如果是钱包实例
         walletInstance = wallet;
@@ -136,7 +215,7 @@ class ContractUtils {
       let providerInstance;
       if (typeof provider === 'string') {
         // 如果是字符串，视为Provider名称
-        providerInstance = ProviderManager.getProvider(provider);
+        providerInstance = ProviderManager.getNetworkProvider(provider);
       } else if (typeof provider.getBlockNumber === 'function') {
         // 如果是Provider实例
         providerInstance = provider;
@@ -268,7 +347,7 @@ class ContractUtils {
       if (!wallet) {
         walletInstance = WalletManager.getDefaultWallet();
       } else if (typeof wallet === 'string') {
-        walletInstance = WalletManager.getWallet(wallet);
+        walletInstance = WalletManager.getCustomWallet(wallet);
       } else {
         walletInstance = wallet;
       }

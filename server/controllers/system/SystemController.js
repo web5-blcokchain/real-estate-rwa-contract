@@ -1,4 +1,4 @@
-const { ContractUtils, EnvUtils } = require('../../../common');
+const { EnvUtils } = require('../../../common');
 const Logger = require('../../../common/logger');
 const Utils = require('../../../common/utils');
 const { ResponseUtils } = require('../../utils');
@@ -12,7 +12,7 @@ class SystemController extends BaseController {
   constructor() {
     super();
     // 初始化Provider，用于直接与链交互的方法
-    this.provider = new ethers.JsonRpcProvider(EnvUtils.getRpcUrl());
+    this.provider = new ethers.JsonRpcProvider(EnvUtils.getNetworkConfig().rpcUrl);
   }
 
   /**
@@ -21,18 +21,11 @@ class SystemController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getVersion(req, res) {
-    const { contractAddress } = req.query;
-    
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress })) {
-      return;
-    }
-
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateSystem', contractAddress);
+        const contract = this.getContractFor('RealEstateSystem', 'admin');
         
         // 调用合约方法
         const version = await contract.version();
@@ -40,7 +33,7 @@ class SystemController extends BaseController {
         return { version };
       },
       '获取系统版本成功',
-      { contractAddress },
+      {},
       '获取系统版本失败'
     );
   }
@@ -51,18 +44,11 @@ class SystemController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getContractAddresses(req, res) {
-    const { contractAddress } = req.query;
-    
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress })) {
-      return;
-    }
-
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateSystem', contractAddress);
+        const contract = this.getContractFor('RealEstateSystem', 'admin');
         
         // 调用合约方法
         const addresses = await contract.getContractAddresses();
@@ -70,7 +56,7 @@ class SystemController extends BaseController {
         return { addresses };
       },
       '获取合约地址成功',
-      { contractAddress },
+      {},
       '获取合约地址失败'
     );
   }
@@ -81,18 +67,11 @@ class SystemController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getContractRoles(req, res) {
-    const { contractAddress } = req.query;
-    
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress })) {
-      return;
-    }
-
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateSystem', contractAddress);
+        const contract = this.getContractFor('RealEstateSystem', 'admin');
         
         // 调用合约方法
         const roles = await contract.getContractRoles();
@@ -100,7 +79,7 @@ class SystemController extends BaseController {
         return { roles };
       },
       '获取合约角色成功',
-      { contractAddress },
+      {},
       '获取合约角色失败'
     );
   }
@@ -111,18 +90,11 @@ class SystemController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getContractConfig(req, res) {
-    const { contractAddress } = req.query;
-    
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress })) {
-      return;
-    }
-
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateSystem', contractAddress);
+        const contract = this.getContractFor('RealEstateSystem', 'admin');
         
         // 调用合约方法
         const config = await contract.getContractConfig();
@@ -130,7 +102,7 @@ class SystemController extends BaseController {
         return { config };
       },
       '获取合约配置成功',
-      { contractAddress },
+      {},
       '获取合约配置失败'
     );
   }

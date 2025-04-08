@@ -9,7 +9,9 @@ const BaseController = require('../BaseController');
 class HealthController extends BaseController {
   constructor() {
     super();
-    this.provider = new ethers.JsonRpcProvider(EnvUtils.getRpcUrl());
+    // 使用getNetworkConfig方法获取当前网络的rpcUrl
+    const networkConfig = EnvUtils.getNetworkConfig();
+    this.provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
   }
 
   /**

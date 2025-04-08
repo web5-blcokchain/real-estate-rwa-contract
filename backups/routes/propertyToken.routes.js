@@ -68,7 +68,7 @@ router.get('/balance/:address',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
     ValidatorMiddleware.validateAddress('address'),
-    ControllerFactory.getHandler(PropertyTokenController, 'getBalance')
+    ControllerFactory.getHandler(PropertyTokenController, 'getTokenBalance')
 );
 
 /**
@@ -97,7 +97,7 @@ router.get('/balance/:address',
 router.get('/:tokenId/owner',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyTokenController, 'getOwner')
+    ControllerFactory.getHandler(PropertyTokenController, 'getTokenInfo')
 );
 
 /**
@@ -126,7 +126,7 @@ router.get('/:tokenId/owner',
 router.get('/:tokenId/property-id',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyTokenController, 'getPropertyId')
+    ControllerFactory.getHandler(PropertyTokenController, 'getTokenInfo')
 );
 
 /**
@@ -155,7 +155,7 @@ router.get('/:tokenId/property-id',
 router.get('/:tokenId/property-id-hash',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyTokenController, 'getPropertyIdHash')
+    ControllerFactory.getHandler(PropertyTokenController, 'getTokenInfo')
 );
 
 /**
@@ -184,7 +184,7 @@ router.get('/:tokenId/property-id-hash',
 router.get('/:tokenId/property-type',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyTokenController, 'getPropertyType')
+    ControllerFactory.getHandler(PropertyTokenController, 'getTokenInfo')
 );
 
 module.exports = router; 

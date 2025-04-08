@@ -51,7 +51,7 @@ router.post('/register',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
     ValidatorMiddleware.validateAddress('owner'),
-    PropertyManagerController.registerProperty
+    ControllerFactory.getHandler(PropertyManagerController, 'registerProperty')
 );
 
 /**
@@ -89,7 +89,7 @@ router.post('/register',
 router.put('/update',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    PropertyManagerController.updateProperty
+    ControllerFactory.getHandler(PropertyManagerController, 'updatePropertyStatus')
 );
 
 /**
@@ -179,7 +179,7 @@ router.get('/:propertyId/status',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
     ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyStatus')
+    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
 );
 
 /**
@@ -209,7 +209,7 @@ router.get('/:propertyId/type',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
     ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyType')
+    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
 );
 
 /**
@@ -239,7 +239,7 @@ router.get('/:propertyId/value',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
     ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyValue')
+    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
 );
 
 /**
@@ -263,7 +263,7 @@ router.get('/:propertyId/value',
 router.get('/properties',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getAllProperties')
+    ControllerFactory.getHandler(PropertyManagerController, 'getOwnerProperties')
 );
 
 module.exports = router; 

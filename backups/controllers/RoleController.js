@@ -12,38 +12,33 @@ class RoleController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async grantRole(req, res) {
-    const { contractAddress, address, role } = req.body;
+    const { role, account } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, address, role })) {
+    if (!this.validateRequired(res, { role, account })) {
       return;
-    }
-
-    // 验证地址格式
-    if (!AddressUtils.isValid(address)) {
-      return ResponseUtils.sendError(res, '无效的地址格式', 400);
     }
 
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
         // 调用合约方法
-        const tx = await contract.grantRole(role, address);
+        const tx = await contract.grantRole(role, account);
         
         // 等待交易确认
         const receipt = await this.waitForTransaction(tx);
 
         return {
           transactionHash: receipt.hash,
-          address,
-          role
+          role,
+          account
         };
       },
       '角色授予成功',
-      { address, role },
+      { role, account },
       '角色授予失败'
     );
   }
@@ -54,53 +49,47 @@ class RoleController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async revokeRole(req, res) {
-    const { contractAddress, address, role } = req.body;
+    const { role, account } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, address, role })) {
+    if (!this.validateRequired(res, { role, account })) {
       return;
-    }
-
-    // 验证地址格式
-    if (!AddressUtils.isValid(address)) {
-      return ResponseUtils.sendError(res, '无效的地址格式', 400);
     }
 
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
         // 调用合约方法
-        const tx = await contract.revokeRole(role, address);
+        const tx = await contract.revokeRole(role, account);
         
         // 等待交易确认
         const receipt = await this.waitForTransaction(tx);
 
         return {
           transactionHash: receipt.hash,
-          address,
-          role
+          role,
+          account
         };
       },
       '角色撤销成功',
-      { address, role },
+      { role, account },
       '角色撤销失败'
     );
   }
 
   /**
-   * 检查角色
+   * 检查是否拥有角色
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async hasRole(req, res) {
-    const { contractAddress } = req.query;
-    const { address, role } = req.params;
+    const { role, account } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, address, role })) {
+    if (!this.validateRequired(res, { role, account })) {
       return;
     }
 
@@ -108,34 +97,33 @@ class RoleController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
         // 调用合约方法
-        const hasRole = await contract.hasRole(role, address);
+        const hasRole = await contract.hasRole(role, account);
 
         return {
-          address,
           role,
+          account,
           hasRole
         };
       },
-      '角色检查完成',
-      { address, role },
+      '角色检查成功',
+      { role, account },
       '角色检查失败'
     );
   }
 
   /**
-   * 获取角色管理员
+   * 获取角色的管理员角色
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async getRoleAdmin(req, res) {
-    const { contractAddress } = req.query;
-    const { role } = req.params;
+    const { roleId } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, role })) {
+    if (!this.validateRequired(res, { roleId })) {
       return;
     }
 
@@ -143,19 +131,19 @@ class RoleController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
         // 调用合约方法
-        const adminRole = await contract.getRoleAdmin(role);
+        const adminRole = await contract.getRoleAdmin(roleId);
 
         return {
-          role,
+          role: roleId,
           adminRole
         };
       },
-      '获取角色管理员成功',
-      { role },
-      '获取角色管理员失败'
+      '获取管理员角色成功',
+      { roleId },
+      '获取管理员角色失败'
     );
   }
 
@@ -165,11 +153,10 @@ class RoleController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getRoleMemberCount(req, res) {
-    const { contractAddress } = req.query;
     const { role } = req.params;
     
     // 验证参数
-    if (!this.validateRequired(res, { contractAddress, role })) {
+    if (!this.validateRequired(res, { role })) {
       return;
     }
 
@@ -177,14 +164,14 @@ class RoleController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
         // 调用合约方法
         const count = await contract.getRoleMemberCount(role);
 
         return {
           role,
-          count: count.toString()
+          count: count.toNumber()
         };
       },
       '获取角色成员数量成功',
@@ -199,32 +186,44 @@ class RoleController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getRoleMember(req, res) {
-    const { contractAddress } = req.query;
-    const { role, index } = req.params;
-    
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress, role, index })) {
-      return;
-    }
-
     await this.handleContractAction(
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RoleManager', contractAddress);
+        const contract = this.getContract('RoleManager', 'admin');
         
-        // 调用合约方法
-        const member = await contract.getRoleMember(role, parseInt(index));
+        // 获取所有角色
+        const roles = [
+          'DEFAULT_ADMIN_ROLE',
+          'MINTER_ROLE',
+          'PAUSER_ROLE',
+          'PROPERTY_MANAGER_ROLE',
+          'TRADING_MANAGER_ROLE',
+          'REWARD_MANAGER_ROLE'
+        ];
+        
+        // 获取每个角色的成员数量和成员
+        const roleData = await Promise.all(roles.map(async (role) => {
+          const count = await contract.getRoleMemberCount(role);
+          const members = [];
+          
+          for (let i = 0; i < count; i++) {
+            const member = await contract.getRoleMember(role, i);
+            members.push(member);
+          }
+          
+          return {
+            role,
+            count: count.toNumber(),
+            members
+          };
+        }));
 
-        return {
-          role,
-          index,
-          member
-        };
+        return roleData;
       },
-      '获取角色成员成功',
-      { role, index },
-      '获取角色成员失败'
+      '获取所有角色成员成功',
+      {},
+      '获取所有角色成员失败'
     );
   }
 }

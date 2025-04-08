@@ -13,7 +13,7 @@ class RealEstateFacadeController extends BaseController {
    */
   async registerPropertyAndCreateToken(req, res) {
     const { propertyId, propertyData, tokenData } = req.body;
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { propertyId, propertyData, tokenData, contractAddress })) {
@@ -24,7 +24,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const tx = await contract.registerPropertyAndCreateToken(
@@ -54,7 +54,7 @@ class RealEstateFacadeController extends BaseController {
    */
   async updatePropertyStatus(req, res) {
     const { propertyId, status } = req.body;
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { propertyId, status, contractAddress })) {
@@ -65,7 +65,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const tx = await contract.updatePropertyStatus(propertyId, status);
@@ -92,7 +92,7 @@ class RealEstateFacadeController extends BaseController {
    */
   async executeTrade(req, res) {
     const { propertyId, buyer, seller, price } = req.body;
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { propertyId, buyer, seller, price, contractAddress })) {
@@ -108,7 +108,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const tx = await contract.executeTrade(
@@ -142,7 +142,7 @@ class RealEstateFacadeController extends BaseController {
    */
   async distributeRewards(req, res) {
     const { propertyId, rewards } = req.body;
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { propertyId, rewards, contractAddress })) {
@@ -153,7 +153,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const tx = await contract.distributeRewards(propertyId, rewards);
@@ -179,7 +179,7 @@ class RealEstateFacadeController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async getVersion(req, res) {
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { contractAddress })) {
@@ -190,7 +190,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const version = await contract.getVersion();
@@ -210,7 +210,7 @@ class RealEstateFacadeController extends BaseController {
    */
   async claimRewards(req, res) {
     const { propertyId, holder } = req.body;
-    const contractAddress = EnvUtils.getRealEstateFacadeAddress();
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
     
     // 验证参数
     if (!this.validateRequired(res, { propertyId, holder, contractAddress })) {
@@ -226,7 +226,7 @@ class RealEstateFacadeController extends BaseController {
       res,
       async () => {
         // 获取合约实例
-        const contract = ContractUtils.getContract('RealEstateFacade', contractAddress);
+        const contract = this.getContract('RealEstateFacade', 'admin');
 
         // 调用合约方法
         const tx = await contract.claimRewards(propertyId, holder);

@@ -130,6 +130,42 @@ class ValidatorMiddleware {
   }
 
   /**
+   * 验证单个数值参数
+   * @param {string} paramName - 参数名
+   * @param {string} [location='body'] - 参数位置 (body, query, params)
+   * @param {Object} [options] - 可选配置 {min, max, required}
+   * @returns {Function} Express中间件
+   */
+  static validateNumber(paramName, location = 'body', options = {}) {
+    return (req, res, next) => {
+      const value = req[location][paramName];
+      
+      if (value === undefined) {
+        if (options.required) {
+          return ResponseUtils.sendError(res, `缺少必要数值参数: ${paramName}`, 400);
+        }
+        return next();
+      }
+      
+      const numValue = Number(value);
+      
+      if (isNaN(numValue)) {
+        return ResponseUtils.sendError(res, `参数必须为数值: ${paramName}`, 400);
+      }
+      
+      if (options.min !== undefined && numValue < options.min) {
+        return ResponseUtils.sendError(res, `参数值必须大于等于 ${options.min}: ${paramName}`, 400);
+      }
+      
+      if (options.max !== undefined && numValue > options.max) {
+        return ResponseUtils.sendError(res, `参数值必须小于等于 ${options.max}: ${paramName}`, 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
    * 角色相关请求验证
    * @returns {Function} Express中间件
    */

@@ -1,4 +1,4 @@
-const { ContractUtils, AddressUtils } = require('../../../common');
+const { AddressUtils } = require('../../../common');
 const Logger = require('../../../common/logger');
 const Utils = require('../../../common/utils');
 const { ResponseUtils } = require('../../utils');
@@ -14,38 +14,32 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async registerProperty(req, res) {
-        const { contractAddress, propertyDetails, initialOwner } = req.body;
+        const { propertyDetails } = req.body;
         
         // 验证参数
-        if (!this.validateRequired(res, { contractAddress, propertyDetails, initialOwner })) {
+        if (!this.validateRequired(res, { propertyDetails })) {
             return;
-        }
-
-        // 验证地址格式
-        if (!AddressUtils.isValid(initialOwner)) {
-            return ResponseUtils.sendError(res, '无效的地址格式', 400);
         }
 
         await this.handleContractAction(
             res,
             async () => {
                 // 获取合约实例
-                const contract = ContractUtils.getContract('PropertyManager', contractAddress);
+                const contract = this.getContract('admin');
                 
-                // 调用合约方法
-                const tx = await contract.registerProperty(propertyDetails, initialOwner);
+                // 调用合约方法 - 根据实际ABI移除 initialOwner 参数
+                const tx = await contract.registerProperty(propertyDetails);
                 
                 // 等待交易确认
                 const receipt = await this.waitForTransaction(tx);
 
                 return {
                     transactionHash: receipt.hash,
-                    propertyDetails,
-                    initialOwner
+                    propertyDetails
                 };
             },
             '房产注册成功',
-            { propertyDetails, initialOwner },
+            { propertyDetails },
             '房产注册失败'
         );
     }
@@ -56,11 +50,10 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async getPropertyInfo(req, res) {
-        const { contractAddress } = req.query;
         const { propertyId } = req.params;
         
         // 验证参数
-        if (!this.validateRequired(res, { contractAddress, propertyId })) {
+        if (!this.validateRequired(res, { propertyId })) {
             return;
         }
 
@@ -68,7 +61,7 @@ class PropertyManagerController extends BaseController {
             res,
             async () => {
                 // 获取合约实例
-                const contract = ContractUtils.getContract('PropertyManager', contractAddress);
+                const contract = this.getContract('admin');
                 
                 // 调用合约方法
                 const propertyInfo = await contract.getPropertyInfo(propertyId);
@@ -90,18 +83,18 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async updatePropertyStatus(req, res) {
-        const { contractAddress, propertyId, newStatus } = req.body;
+        const { propertyId, newStatus } = req.body;
         
         // 验证参数
-        if (!this.validateRequired(res, { contractAddress, propertyId, newStatus })) {
+        if (!this.validateRequired(res, { propertyId, newStatus })) {
             return;
         }
 
         await this.handleContractAction(
             res,
             async () => {
-                // 获取合约实例
-                const contract = ContractUtils.getContract('PropertyManager', contractAddress);
+                // 获取合约实例，需要管理者权限
+                const contract = this.getContract('manager');
                 
                 // 调用合约方法
                 const tx = await contract.updatePropertyStatus(propertyId, newStatus);
@@ -127,10 +120,10 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async transferPropertyOwnership(req, res) {
-        const { contractAddress, propertyId, newOwner } = req.body;
+        const { propertyId, newOwner } = req.body;
         
         // 验证参数
-        if (!this.validateRequired(res, { contractAddress, propertyId, newOwner })) {
+        if (!this.validateRequired(res, { propertyId, newOwner })) {
             return;
         }
 
@@ -142,8 +135,8 @@ class PropertyManagerController extends BaseController {
         await this.handleContractAction(
             res,
             async () => {
-                // 获取合约实例
-                const contract = ContractUtils.getContract('PropertyManager', contractAddress);
+                // 获取合约实例，使用管理员权限
+                const contract = this.getContract('admin');
                 
                 // 调用合约方法
                 const tx = await contract.transferPropertyOwnership(propertyId, newOwner);
@@ -169,11 +162,10 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async getOwnerProperties(req, res) {
-        const { contractAddress } = req.query;
         const { owner } = req.params;
         
         // 验证参数
-        if (!this.validateRequired(res, { contractAddress, owner })) {
+        if (!this.validateRequired(res, { owner })) {
             return;
         }
 
@@ -186,7 +178,7 @@ class PropertyManagerController extends BaseController {
             res,
             async () => {
                 // 获取合约实例
-                const contract = ContractUtils.getContract('PropertyManager', contractAddress);
+                const contract = this.getContract('admin');
                 
                 // 调用合约方法
                 const properties = await contract.getOwnerProperties(owner);
@@ -208,36 +200,31 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async getPropertyDetails(req, res) {
-        try {
-            const { contractAddress } = req.query;
-            const { propertyId } = req.params;
-            
-            // 验证参数
-            if (!contractAddress || !propertyId) {
-                return res.status(400).json({
-                    success: false,
-                    error: '缺少必要参数'
-                });
-            }
+        const { propertyId } = req.params;
+        
+        // 验证参数
+        if (!this.validateRequired(res, { propertyId })) {
+            return;
+        }
 
-            // 获取合约实例
-            const contract = ContractUtils.getContract('PropertyManager', contractAddress);
-            
-            // 调用合约方法
-            const property = await contract.getPropertyDetails(propertyId);
+        await this.handleContractAction(
+            res,
+            async () => {
+                // 获取合约实例
+                const contract = this.getContract('admin');
+                
+                // 调用合约方法
+                const property = await contract.getPropertyDetails(propertyId);
 
-            // 返回结果
-            res.json({
-                success: true,
-                data: {
+                return {
                     propertyId,
                     details: property
-                }
-            });
-        } catch (error) {
-            Logger.error('获取房产详情失败', error);
-            res.status(500).json(Utils.handleContractError(error));
-        }
+                };
+            },
+            '获取房产详情成功',
+            { propertyId },
+            '获取房产详情失败'
+        );
     }
 
     /**
@@ -246,54 +233,40 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async setPropertyToken(req, res) {
-        try {
-            const { contractAddress, propertyId, tokenAddress } = req.body;
-            
-            // 验证参数
-            if (!contractAddress || !propertyId || !tokenAddress) {
-                return res.status(400).json({
-                    success: false,
-                    error: '缺少必要参数'
-                });
-            }
+        const { propertyId, tokenAddress } = req.body;
+        
+        // 验证参数
+        if (!this.validateRequired(res, { propertyId, tokenAddress })) {
+            return;
+        }
 
-            // 验证地址格式
-            if (!AddressUtils.isValid(tokenAddress)) {
-                return res.status(400).json({
-                    success: false,
-                    error: '无效的地址格式'
-                });
-            }
+        // 验证地址格式
+        if (!AddressUtils.isValid(tokenAddress)) {
+            return ResponseUtils.sendError(res, '无效的地址格式', 400);
+        }
 
-            // 获取合约实例
-            const contract = ContractUtils.getContract('PropertyManager', contractAddress);
-            
-            // 调用合约方法
-            const tx = await contract.setPropertyToken(propertyId, tokenAddress);
-            
-            // 等待交易确认
-            const receipt = await Utils.waitForTransaction(tx);
+        await this.handleContractAction(
+            res,
+            async () => {
+                // 获取合约实例，使用管理员权限
+                const contract = this.getContract('admin');
+                
+                // 调用合约方法
+                const tx = await contract.setPropertyToken(propertyId, tokenAddress);
+                
+                // 等待交易确认
+                const receipt = await this.waitForTransaction(tx);
 
-            // 记录日志
-            Logger.info('房产代币设置成功', {
-                propertyId,
-                tokenAddress,
-                transactionHash: receipt.hash
-            });
-
-            // 返回结果
-            res.json({
-                success: true,
-                data: {
+                return {
                     transactionHash: receipt.hash,
                     propertyId,
                     tokenAddress
-                }
-            });
-        } catch (error) {
-            Logger.error('房产代币设置失败', error);
-            res.status(500).json(Utils.handleContractError(error));
-        }
+                };
+            },
+            '房产代币设置成功',
+            { propertyId, tokenAddress },
+            '房产代币设置失败'
+        );
     }
 
     /**
@@ -302,36 +275,31 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async getPropertyToken(req, res) {
-        try {
-            const { contractAddress } = req.query;
-            const { propertyId } = req.params;
-            
-            // 验证参数
-            if (!contractAddress || !propertyId) {
-                return res.status(400).json({
-                    success: false,
-                    error: '缺少必要参数'
-                });
-            }
+        const { propertyId } = req.params;
+        
+        // 验证参数
+        if (!this.validateRequired(res, { propertyId })) {
+            return;
+        }
 
-            // 获取合约实例
-            const contract = ContractUtils.getContract('PropertyManager', contractAddress);
-            
-            // 调用合约方法
-            const tokenAddress = await contract.getPropertyToken(propertyId);
+        await this.handleContractAction(
+            res,
+            async () => {
+                // 获取合约实例
+                const contract = this.getContract('admin');
+                
+                // 调用合约方法
+                const tokenAddress = await contract.getPropertyToken(propertyId);
 
-            // 返回结果
-            res.json({
-                success: true,
-                data: {
+                return {
                     propertyId,
                     tokenAddress
-                }
-            });
-        } catch (error) {
-            Logger.error('获取房产代币失败', error);
-            res.status(500).json(Utils.handleContractError(error));
-        }
+                };
+            },
+            '获取房产代币成功',
+            { propertyId },
+            '获取房产代币失败'
+        );
     }
 
     /**
@@ -340,45 +308,37 @@ class PropertyManagerController extends BaseController {
      * @param {Object} res - 响应对象
      */
     async verifyPropertyOwnership(req, res) {
-        try {
-            const { contractAddress } = req.query;
-            const { propertyId, owner } = req.params;
-            
-            // 验证参数
-            if (!contractAddress || !propertyId || !owner) {
-                return res.status(400).json({
-                    success: false,
-                    error: '缺少必要参数'
-                });
-            }
+        const { propertyId, owner } = req.params;
+        
+        // 验证参数
+        if (!this.validateRequired(res, { propertyId, owner })) {
+            return;
+        }
 
-            // 验证地址格式
-            if (!AddressUtils.isValid(owner)) {
-                return res.status(400).json({
-                    success: false,
-                    error: '无效的地址格式'
-                });
-            }
+        // 验证地址格式
+        if (!AddressUtils.isValid(owner)) {
+            return ResponseUtils.sendError(res, '无效的地址格式', 400);
+        }
 
-            // 获取合约实例
-            const contract = ContractUtils.getContract('PropertyManager', contractAddress);
-            
-            // 调用合约方法
-            const isOwner = await contract.verifyPropertyOwnership(propertyId, owner);
+        await this.handleContractAction(
+            res,
+            async () => {
+                // 获取合约实例
+                const contract = this.getContract('admin');
+                
+                // 调用合约方法
+                const isOwner = await contract.verifyPropertyOwnership(propertyId, owner);
 
-            // 返回结果
-            res.json({
-                success: true,
-                data: {
+                return {
                     propertyId,
                     owner,
                     isOwner
-                }
-            });
-        } catch (error) {
-            Logger.error('验证房产所有权失败', error);
-            res.status(500).json(Utils.handleContractError(error));
-        }
+                };
+            },
+            '验证房产所有权成功',
+            { propertyId, owner },
+            '验证房产所有权失败'
+        );
     }
 }
 
