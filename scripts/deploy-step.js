@@ -265,6 +265,38 @@ function updateEnvFile(deploymentInfo, implementations) {
   updatedContent += `\n\n# 以下是合约部署后自动生成的地址信息（由scripts/deploy-step.js于${new Date().toISOString()}更新）
 # 这些地址是部署期间自动写入的，无需手动修改
 
+# 角色地址信息（由私钥派生）
+`;
+
+  // 添加角色地址（如果有）
+  if (process.env.ADMIN_PRIVATE_KEY) {
+    try {
+      const adminWallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY);
+      updatedContent += `ADMIN_ADDRESS=${adminWallet.address}\n`;
+    } catch (error) {
+      logger.error(`获取ADMIN_ADDRESS失败: ${error.message}`);
+    }
+  }
+  
+  if (process.env.MANAGER_PRIVATE_KEY) {
+    try {
+      const managerWallet = new ethers.Wallet(process.env.MANAGER_PRIVATE_KEY);
+      updatedContent += `MANAGER_ADDRESS=${managerWallet.address}\n`;
+    } catch (error) {
+      logger.error(`获取MANAGER_ADDRESS失败: ${error.message}`);
+    }
+  }
+  
+  if (process.env.OPERATOR_PRIVATE_KEY) {
+    try {
+      const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY);
+      updatedContent += `OPERATOR_ADDRESS=${operatorWallet.address}\n`;
+    } catch (error) {
+      logger.error(`获取OPERATOR_ADDRESS失败: ${error.message}`);
+    }
+  }
+  
+  updatedContent += `
 # 代币合约地址
 CONTRACT_SIMPLEERC20_ADDRESS=${deploymentInfo.contracts.SimpleERC20}
 
@@ -365,8 +397,12 @@ async function main() {
       deploymentInfo.verificationError = verifyError.message;
     }
     
+    // 授予角色权限
+    const roleResults = await grantRoles(contracts);
+    deploymentInfo.roleResults = roleResults;
+    
     // 生成部署报告
-    generateDeploymentReport(deploymentInfo);
+    const reportPath = generateDeploymentReport(deploymentInfo);
     
     logger.info("部署成功，所有合约和配置已就绪");
   } catch (error) {
@@ -412,6 +448,119 @@ async function getImplementationAddresses(deploymentInfo) {
 }
 
 /**
+ * 授予角色权限
+ * @param {Object} contracts - 已部署的合约对象
+ * @returns {Object} - 角色授权结果
+ */
+async function grantRoles(contracts) {
+  logger.info("开始授予角色权限...");
+  
+  const roleManager = contracts.roleManager;
+  
+  // 获取角色常量
+  const ADMIN_ROLE = await roleManager.ADMIN_ROLE();
+  const MANAGER_ROLE = await roleManager.MANAGER_ROLE();
+  const OPERATOR_ROLE = await roleManager.OPERATOR_ROLE();
+  
+  // 初始化角色授权结果对象
+  const roleResults = {
+    admin: { address: null, success: false, hash: null, alreadyHasRole: false },
+    manager: { address: null, success: false, hash: null, alreadyHasRole: false },
+    operator: { address: null, success: false, hash: null, alreadyHasRole: false }
+  };
+  
+  // 授予 ADMIN_ROLE
+  if (process.env.ADMIN_PRIVATE_KEY) {
+    try {
+      const adminWallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY);
+      const adminAddress = adminWallet.address;
+      roleResults.admin.address = adminAddress;
+      
+      logger.info(`检查地址 ${adminAddress} 是否已有 ADMIN_ROLE...`);
+      const hasAdminRole = await roleManager.hasRole(ADMIN_ROLE, adminAddress);
+      
+      if (!hasAdminRole) {
+        logger.info(`授予 ADMIN_ROLE 给: ${adminAddress}`);
+        const tx = await roleManager.grantRole(ADMIN_ROLE, adminAddress);
+        await tx.wait();
+        roleResults.admin.success = true;
+        roleResults.admin.hash = tx.hash;
+        logger.info(`ADMIN_ROLE 授权成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.admin.alreadyHasRole = true;
+        roleResults.admin.success = true;
+        logger.info(`地址 ${adminAddress} 已有 ADMIN_ROLE, 无需再次授权`);
+      }
+    } catch (error) {
+      logger.error(`授予 ADMIN_ROLE 失败: ${error.message}`);
+    }
+  } else {
+    logger.warn("未找到 ADMIN_PRIVATE_KEY 环境变量, 跳过 ADMIN_ROLE 授权");
+  }
+  
+  // 授予 MANAGER_ROLE
+  if (process.env.MANAGER_PRIVATE_KEY) {
+    try {
+      const managerWallet = new ethers.Wallet(process.env.MANAGER_PRIVATE_KEY);
+      const managerAddress = managerWallet.address;
+      roleResults.manager.address = managerAddress;
+      
+      logger.info(`检查地址 ${managerAddress} 是否已有 MANAGER_ROLE...`);
+      const hasManagerRole = await roleManager.hasRole(MANAGER_ROLE, managerAddress);
+      
+      if (!hasManagerRole) {
+        logger.info(`授予 MANAGER_ROLE 给: ${managerAddress}`);
+        const tx = await roleManager.grantRole(MANAGER_ROLE, managerAddress);
+        await tx.wait();
+        roleResults.manager.success = true;
+        roleResults.manager.hash = tx.hash;
+        logger.info(`MANAGER_ROLE 授权成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.manager.alreadyHasRole = true;
+        roleResults.manager.success = true;
+        logger.info(`地址 ${managerAddress} 已有 MANAGER_ROLE, 无需再次授权`);
+      }
+    } catch (error) {
+      logger.error(`授予 MANAGER_ROLE 失败: ${error.message}`);
+    }
+  } else {
+    logger.warn("未找到 MANAGER_PRIVATE_KEY 环境变量, 跳过 MANAGER_ROLE 授权");
+  }
+  
+  // 授予 OPERATOR_ROLE
+  if (process.env.OPERATOR_PRIVATE_KEY) {
+    try {
+      const operatorWallet = new ethers.Wallet(process.env.OPERATOR_PRIVATE_KEY);
+      const operatorAddress = operatorWallet.address;
+      roleResults.operator.address = operatorAddress;
+      
+      logger.info(`检查地址 ${operatorAddress} 是否已有 OPERATOR_ROLE...`);
+      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, operatorAddress);
+      
+      if (!hasOperatorRole) {
+        logger.info(`授予 OPERATOR_ROLE 给: ${operatorAddress}`);
+        const tx = await roleManager.grantRole(OPERATOR_ROLE, operatorAddress);
+        await tx.wait();
+        roleResults.operator.success = true;
+        roleResults.operator.hash = tx.hash;
+        logger.info(`OPERATOR_ROLE 授权成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.operator.alreadyHasRole = true;
+        roleResults.operator.success = true;
+        logger.info(`地址 ${operatorAddress} 已有 OPERATOR_ROLE, 无需再次授权`);
+      }
+    } catch (error) {
+      logger.error(`授予 OPERATOR_ROLE 失败: ${error.message}`);
+    }
+  } else {
+    logger.warn("未找到 OPERATOR_PRIVATE_KEY 环境变量, 跳过 OPERATOR_ROLE 授权");
+  }
+  
+  logger.info("角色授权完成");
+  return roleResults;
+}
+
+/**
  * 生成部署报告
  */
 function generateDeploymentReport(deploymentInfo) {
@@ -448,6 +597,45 @@ function generateDeploymentReport(deploymentInfo) {
       reportContent += `| ${name} | ${address} | ${deploymentInfo.implementations[name]} |\n`;
     } else {
       reportContent += `| ${name} | ${address} | 未获取 |\n`;
+    }
+  }
+  
+  // 添加角色授权信息
+  if (deploymentInfo.roleResults) {
+    reportContent += `
+## 角色授权信息
+
+| 角色 | 地址 | 授权状态 | 交易哈希 |
+|------|------|----------|----------|
+`;
+    
+    const roles = deploymentInfo.roleResults;
+    
+    // 添加管理员角色信息
+    if (roles.admin.address) {
+      const adminStatus = roles.admin.alreadyHasRole ? "已授权(已有权限)" : 
+                          roles.admin.success ? "已授权(新授权)" : "授权失败";
+      reportContent += `| ADMIN_ROLE | ${roles.admin.address} | ${adminStatus} | ${roles.admin.hash || '无'} |\n`;
+    } else {
+      reportContent += `| ADMIN_ROLE | 未设置 | 未执行 | 无 |\n`;
+    }
+    
+    // 添加经理角色信息
+    if (roles.manager.address) {
+      const managerStatus = roles.manager.alreadyHasRole ? "已授权(已有权限)" : 
+                            roles.manager.success ? "已授权(新授权)" : "授权失败";
+      reportContent += `| MANAGER_ROLE | ${roles.manager.address} | ${managerStatus} | ${roles.manager.hash || '无'} |\n`;
+    } else {
+      reportContent += `| MANAGER_ROLE | 未设置 | 未执行 | 无 |\n`;
+    }
+    
+    // 添加操作员角色信息
+    if (roles.operator.address) {
+      const operatorStatus = roles.operator.alreadyHasRole ? "已授权(已有权限)" : 
+                             roles.operator.success ? "已授权(新授权)" : "授权失败";
+      reportContent += `| OPERATOR_ROLE | ${roles.operator.address} | ${operatorStatus} | ${roles.operator.hash || '无'} |\n`;
+    } else {
+      reportContent += `| OPERATOR_ROLE | 未设置 | 未执行 | 无 |\n`;
     }
   }
   
