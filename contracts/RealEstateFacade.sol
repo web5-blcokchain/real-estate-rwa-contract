@@ -204,7 +204,9 @@ contract RealEstateFacade is
         
         // 注册房产
         propertyManager.registerProperty(propertyId, country, metadataURI);
-        bytes32 propertyIdHash = propertyManager.propertyIdToHash(propertyId);
+        
+        // 直接计算哈希值，不使用已移除的propertyIdToHash
+        bytes32 propertyIdHash = keccak256(abi.encodePacked(propertyId));
         
         // 部署代理合约
         bytes memory initData = abi.encodeWithSelector(
@@ -229,7 +231,7 @@ contract RealEstateFacade is
         address tokenAddress = address(proxy);
         
         // 注册代币和房产的关联
-        propertyManager.registerTokenForProperty(propertyIdHash, tokenAddress);
+        propertyManager.registerTokenForProperty(propertyId, tokenAddress);
         
         emit PropertyRegistered(
             propertyIdHash,
@@ -308,7 +310,7 @@ contract RealEstateFacade is
      * @dev 创建奖励分配
      */
     function createDistribution(
-        bytes32 propertyIdHash,
+        string memory propertyId,
         uint256 amount,
         string memory description,
         bool applyFees,
@@ -321,8 +323,11 @@ contract RealEstateFacade is
         nonReentrant 
         returns (uint256 distributionId) 
     {
+        // 计算hash用于内部兼容性
+        bytes32 propertyIdHash = keccak256(abi.encodePacked(propertyId));
+        
         // 1. 获取房产代币
-        address tokenAddress = propertyManager.propertyTokens(propertyIdHash);
+        address tokenAddress = propertyManager.propertyTokens(propertyId);
         require(tokenAddress != address(0), "Property token not found");
         
         // 2. 创建分配
@@ -345,7 +350,7 @@ contract RealEstateFacade is
      * @dev 更新房产状态
      */
     function updatePropertyStatus(
-        bytes32 propertyIdHash,
+        string memory propertyId,
         PropertyManager.PropertyStatus newStatus
     ) 
         external 
@@ -354,10 +359,13 @@ contract RealEstateFacade is
         onlyManager 
     {
         // 1. 获取当前状态
-        uint8 oldStatus = uint8(propertyManager.getPropertyStatus(propertyIdHash));
+        uint8 oldStatus = uint8(propertyManager.getPropertyStatus(propertyId));
         
         // 2. 更新状态
-        propertyManager.updatePropertyStatus(propertyIdHash, newStatus);
+        propertyManager.updatePropertyStatus(propertyId, newStatus);
+        
+        // 计算hash用于事件
+        bytes32 propertyIdHash = keccak256(abi.encodePacked(propertyId));
         
         emit PropertyStatusUpdated(propertyIdHash, oldStatus, uint8(newStatus));
     }

@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const PropertyManagerController = require('../../controllers/core/PropertyManagerController');
 const AuthMiddleware = require('../../middleware/auth');
 const ValidatorMiddleware = require('../../middleware/validator');
 const { ControllerFactory } = require('../../utils');
@@ -61,13 +60,48 @@ router.get('/auth-test',
  * @swagger
  * /api/v1/core/property-manager/properties:
  *   get:
- *     summary: Get all properties
+ *     summary: 获取房产列表（分页）
  *     tags: [Property Manager]
  *     security:
  *       - ApiKeyAuth: []
  *     parameters:
  *       - in: query
- *         name: contractAddress
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *         description: 分页起始位置（默认0）
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: 每页数量（默认10，最大100）
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: integer
+ *         description: 可选的状态筛选（0=未注册, 1=待审批, 2=已批准, 3=已拒绝, 4=已下架）
+ *     responses:
+ *       200:
+ *         description: 房产列表获取成功
+ *       400:
+ *         description: 参数错误
+ */
+router.get('/properties',
+    AuthMiddleware.validateApiKey,
+    ControllerFactory.getHandler('PropertyManagerController', 'getProperties')
+);
+
+/**
+ * @swagger
+ * /api/v1/core/property-manager/properties/{owner}:
+ *   get:
+ *     summary: Get all properties for an owner
+ *     tags: [Property Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: owner
  *         required: true
  *         schema:
  *           type: string
@@ -75,10 +109,10 @@ router.get('/auth-test',
  *       200:
  *         description: Properties retrieved successfully
  */
-router.get('/properties',
+router.get('/properties/:owner',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getOwnerProperties')
+    ValidatorMiddleware.validateAddress('owner', 'params'),
+    ControllerFactory.getHandler('PropertyManagerController', 'getOwnerProperties')
 );
 
 /**
@@ -96,38 +130,39 @@ router.get('/properties',
  *           schema:
  *             type: object
  *             required:
- *               - propertyId
- *               - propertyType
- *               - value
- *               - owner
- *               - contractAddress
+ *               - propertyDetails
  *             properties:
- *               propertyId:
- *                 type: string
- *               propertyType:
- *                 type: string
- *               value:
- *                 type: string
- *               owner:
- *                 type: string
- *               contractAddress:
- *                 type: string
+ *               propertyDetails:
+ *                 type: object
+ *                 required:
+ *                   - propertyId
+ *                   - propertyType
+ *                   - value
+ *                   - owner
+ *                 properties:
+ *                   propertyId:
+ *                     type: string
+ *                   propertyType:
+ *                     type: integer
+ *                   value:
+ *                     type: string
+ *                   owner:
+ *                     type: string
  *     responses:
  *       200:
  *         description: Property registered successfully
  */
 router.post('/register',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('owner'),
-    ControllerFactory.getHandler(PropertyManagerController, 'registerProperty')
+    ValidatorMiddleware.validateAddress('propertyDetails.owner'),
+    ControllerFactory.getHandler('PropertyManagerController', 'registerProperty')
 );
 
 /**
  * @swagger
- * /api/v1/core/property-manager/update:
+ * /api/v1/core/property-manager/update-status:
  *   put:
- *     summary: Update property information
+ *     summary: Update property status
  *     tags: [Property Manager]
  *     security:
  *       - ApiKeyAuth: []
@@ -139,29 +174,86 @@ router.post('/register',
  *             type: object
  *             required:
  *               - propertyId
- *               - propertyType
- *               - value
- *               - contractAddress
+ *               - newStatus
  *             properties:
  *               propertyId:
  *                 type: string
- *               propertyType:
+ *               newStatus:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Property status updated successfully
+ */
+router.put('/update-status',
+    AuthMiddleware.validateApiKey,
+    ControllerFactory.getHandler('PropertyManagerController', 'updatePropertyStatus')
+);
+
+/**
+ * @swagger
+ * /api/v1/core/property-manager/transfer-ownership:
+ *   post:
+ *     summary: Transfer property ownership
+ *     tags: [Property Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - newOwner
+ *             properties:
+ *               propertyId:
  *                 type: string
- *               value:
- *                 type: string
- *               contractAddress:
+ *               newOwner:
  *                 type: string
  *     responses:
  *       200:
- *         description: Property updated successfully
+ *         description: Property ownership transferred successfully
  */
-router.put('/update',
+router.post('/transfer-ownership',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ControllerFactory.getHandler(PropertyManagerController, 'updatePropertyStatus')
+    ValidatorMiddleware.validateAddress('newOwner'),
+    ControllerFactory.getHandler('PropertyManagerController', 'transferPropertyOwnership')
 );
 
-// 现在放置所有带通配符的路由
+/**
+ * @swagger
+ * /api/v1/core/property-manager/set-token:
+ *   post:
+ *     summary: Set property token
+ *     tags: [Property Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - propertyId
+ *               - tokenAddress
+ *             properties:
+ *               propertyId:
+ *                 type: string
+ *               tokenAddress:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Property token set successfully
+ */
+router.post('/set-token',
+    AuthMiddleware.validateApiKey,
+    ValidatorMiddleware.validateAddress('tokenAddress'),
+    ControllerFactory.getHandler('PropertyManagerController', 'setPropertyToken')
+);
+
+// 路由带通配符的路由
 
 /**
  * @swagger
@@ -177,20 +269,36 @@ router.put('/update',
  *         required: true
  *         schema:
  *           type: string
- *       - in: query
- *         name: contractAddress
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
  *         description: Property information retrieved successfully
  */
 router.get('/:propertyId',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
+    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyInfo')
+);
+
+/**
+ * @swagger
+ * /api/v1/core/property-manager/{propertyId}/details:
+ *   get:
+ *     summary: Get property detailed information
+ *     tags: [Property Manager]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Property details retrieved successfully
+ */
+router.get('/:propertyId/details',
+    AuthMiddleware.validateApiKey,
+    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyDetails')
 );
 
 /**
@@ -207,27 +315,20 @@ router.get('/:propertyId',
  *         required: true
  *         schema:
  *           type: string
- *       - in: query
- *         name: contractAddress
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
  *         description: Property token information retrieved successfully
  */
 router.get('/:propertyId/token',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyToken')
+    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyToken')
 );
 
 /**
  * @swagger
- * /api/v1/core/property-manager/{propertyId}/status:
+ * /api/v1/core/property-manager/verify-ownership/{propertyId}/{owner}:
  *   get:
- *     summary: Get property status
+ *     summary: Verify property ownership
  *     tags: [Property Manager]
  *     security:
  *       - ApiKeyAuth: []
@@ -237,80 +338,19 @@ router.get('/:propertyId/token',
  *         required: true
  *         schema:
  *           type: string
- *       - in: query
- *         name: contractAddress
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Property status retrieved successfully
- */
-router.get('/:propertyId/status',
-    AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
-);
-
-/**
- * @swagger
- * /api/v1/core/property-manager/{propertyId}/type:
- *   get:
- *     summary: Get property type
- *     tags: [Property Manager]
- *     security:
- *       - ApiKeyAuth: []
- *     parameters:
  *       - in: path
- *         name: propertyId
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: contractAddress
+ *         name: owner
  *         required: true
  *         schema:
  *           type: string
  *     responses:
  *       200:
- *         description: Property type retrieved successfully
+ *         description: Property ownership verification result
  */
-router.get('/:propertyId/type',
+router.get('/verify-ownership/:propertyId/:owner',
     AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
-);
-
-/**
- * @swagger
- * /api/v1/core/property-manager/{propertyId}/value:
- *   get:
- *     summary: Get property value
- *     tags: [Property Manager]
- *     security:
- *       - ApiKeyAuth: []
- *     parameters:
- *       - in: path
- *         name: propertyId
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: contractAddress
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Property value retrieved successfully
- */
-router.get('/:propertyId/value',
-    AuthMiddleware.validateApiKey,
-    ValidatorMiddleware.validateAddress('contractAddress'),
-    ValidatorMiddleware.validateAddress('propertyId', 'params'),
-    ControllerFactory.getHandler(PropertyManagerController, 'getPropertyInfo')
+    ValidatorMiddleware.validateAddress('owner', 'params'),
+    ControllerFactory.getHandler('PropertyManagerController', 'verifyPropertyOwnership')
 );
 
 module.exports = router; 
