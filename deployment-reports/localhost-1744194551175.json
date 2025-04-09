@@ -1,0 +1,33 @@
+{
+  "timestamp": "2025-04-09T10:29:11.174Z",
+  "network": "localhost",
+  "contracts": {
+    "RealEstateSystem": {
+      "address": "0x512F7469BcC83089497506b5df64c6E246B39925",
+      "implementation": "0xCace1b78160AE76398F486c8a18044da0d66d86D"
+    },
+    "PropertyManager": {
+      "address": "0x9fD16eA9E31233279975D99D5e8Fc91dd214c7Da",
+      "implementation": "0x457cCf29090fe5A24c19c1bc95F492168C0EaFdb"
+    },
+    "TradingManager": {
+      "address": "0xCBBe2A5c3A22BE749D5DDF24e9534f98951983e2",
+      "implementation": "0x02b0B4EFd909240FCB2Eb5FAe060dC60D112E3a4"
+    },
+    "RewardManager": {
+      "address": "0x987e855776C03A4682639eEb14e65b3089EE6310",
+      "implementation": "0xefc1aB2475ACb7E60499Efb171D173be19928a05"
+    },
+    "PropertyToken": {
+      "address": "0x2c8ED11fd7A058096F2e5828799c68BE88744E2F",
+      "implementation": "0x63fea6E447F120B8Faf85B53cdaD8348e645D80E"
+    },
+    "SimpleERC20": {
+      "address": "0x7580708993de7CA120E957A62f26A5dDD4b3D8aC"
+    },
+    "RealEstateFacade": {
+      "address": "0x75c68e69775fA3E9DD38eA32E554f6BF259C1135",
+      "implementation": "0x38A70c040CA5F5439ad52d0e821063b0EC0B52b6"
+    }
+  }
+}
