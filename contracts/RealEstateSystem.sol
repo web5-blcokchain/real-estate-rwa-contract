@@ -5,62 +5,50 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "./RoleManager.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "./utils/RoleConstants.sol";
 import "./PropertyManager.sol"; 
 import "./TradingManager.sol";
 import "./RewardManager.sol";
 
 /**
  * @title RealEstateSystem
- * @dev 不动产系统管理合约，负责系统状态和组件管理
+ * @dev 系统核心合约，管理系统状态和权限
  */
 contract RealEstateSystem is 
     Initializable, 
-    UUPSUpgradeable, 
+    AccessControlUpgradeable, 
     ReentrancyGuardUpgradeable,
+    UUPSUpgradeable,
     PausableUpgradeable {
     
-    // 系统状态枚举
-    enum SystemStatus {
-        NotInitialized,  // 0
-        Active,          // 1
-        Paused,          // 2
-        Terminated       // 3
-    }
+    // 版本控制
+    uint8 private constant VERSION = 1;
     
-    // 版本历史记录结构体
-    struct VersionHistory {
-        uint8 version;
-        uint256 timestamp;
-        string description;
-    }
-    
-    // 系统组件
-    RoleManager public roleManager;
-    PropertyManager public propertyManager;
-    TradingManager public tradingManager;
-    RewardManager public rewardManager;
+    // 紧急模式状态
+    bool public emergencyMode;
     
     // 系统状态
-    SystemStatus public status;
+    enum SystemStatus {
+        Inactive,   // 系统尚未激活
+        Testing,    // 测试阶段
+        Active,     // 正常运行
+        Suspended,  // 暂停运行
+        Upgrading   // 升级维护中
+    }
     
-    // 版本控制
-    uint8 public version;
+    // 当前系统状态
+    SystemStatus public systemStatus;
+
+    // 授权合约地址
+    mapping(address => bool) public authorizedContracts;
     
-    // 版本历史记录数组
-    VersionHistory[] public versionHistory;
-    
-    // 事件定义
-    event SystemInitialized(
-        address indexed deployer,
-        address indexed roleManager,
-        address indexed propertyManager,
-        address tradingManager,
-        address rewardManager
-    );
+    // 事件
     event SystemStatusChanged(SystemStatus oldStatus, SystemStatus newStatus);
-    event ComponentUpdated(string indexed componentName, address indexed oldAddress, address indexed newAddress);
-    event VersionUpdated(uint8 oldVersion, uint8 newVersion, string description);
+    event EmergencyModeChanged(bool enabled);
+    event SystemAdminChanged(address indexed oldAdmin, address indexed newAdmin);
+    event SystemInitialized(address indexed deployer);
+    event ContractAuthorized(address indexed contractAddress, bool status);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -68,188 +56,187 @@ contract RealEstateSystem is
     }
     
     /**
-     * @dev 初始化系统
+     * @dev 初始化函数
      */
-    function initialize(
-        address _roleManager,
-        address _propertyManager,
-        address payable _tradingManager,
-        address payable _rewardManager
-    ) public initializer {
-        __UUPSUpgradeable_init();
+    function initialize(address admin) public initializer {
+        __AccessControl_init();
         __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
         __Pausable_init();
         
-        roleManager = RoleManager(_roleManager);
-        propertyManager = PropertyManager(_propertyManager);
-        tradingManager = TradingManager(_tradingManager);
-        rewardManager = RewardManager(_rewardManager);
+        _setupRole(DEFAULT_ADMIN_ROLE, admin);
+        _setupRole(RoleConstants.ADMIN_ROLE, admin);
+        _setupRole(RoleConstants.MANAGER_ROLE, admin);
+        _setupRole(RoleConstants.OPERATOR_ROLE, admin);
+        _setupRole(RoleConstants.PAUSER_ROLE, admin);
+        _setupRole(RoleConstants.UPGRADER_ROLE, admin);
         
-        status = SystemStatus.Active;
-        version = 1; // 初始版本
+        systemStatus = SystemStatus.Inactive;
+        emergencyMode = false;
         
-        // 记录初始版本
-        versionHistory.push(VersionHistory({
-            version: 1,
-            timestamp: block.timestamp,
-            description: "Initial version"
-        }));
-        
-        emit SystemInitialized(
-            msg.sender,
-            _roleManager,
-            _propertyManager,
-            _tradingManager,
-            _rewardManager
-        );
+        emit SystemInitialized(admin);
     }
     
     /**
-     * @dev 修饰器：只有ADMIN角色可以调用
+     * @dev 设置系统状态
      */
-    modifier onlyAdmin() {
-        require(roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：系统必须处于活动状态
-     */
-    modifier whenSystemActive() {
-        require(status == SystemStatus.Active, "System not active");
-        _;
-    }
-    
-    /**
-     * @dev 更新系统状态
-     */
-    function updateSystemStatus(SystemStatus _newStatus) public onlyAdmin {
-        require(_newStatus != SystemStatus.NotInitialized, "Cannot set to NotInitialized");
+    function setSystemStatus(SystemStatus newStatus) 
+        external 
+        onlyRole(RoleConstants.ADMIN_ROLE) 
+    {
+        SystemStatus oldStatus = systemStatus;
+        systemStatus = newStatus;
         
-        SystemStatus oldStatus = status;
-        status = _newStatus;
-        
-        // 同步暂停状态
-        if (_newStatus == SystemStatus.Paused && !paused()) {
+        if (newStatus == SystemStatus.Suspended) {
             _pause();
-        } else if (_newStatus == SystemStatus.Active && paused()) {
+        } else if (oldStatus == SystemStatus.Suspended && newStatus == SystemStatus.Active) {
             _unpause();
         }
         
-        emit SystemStatusChanged(oldStatus, _newStatus);
+        emit SystemStatusChanged(oldStatus, newStatus);
     }
     
     /**
-     * @dev 更新版本
+     * @dev 激活紧急模式
      */
-    function updateVersion(uint8 _newVersion, string memory _description) external onlyAdmin {
-        require(_newVersion > version, "New version must be greater than current");
-        
-        uint8 oldVersion = version;
-        version = _newVersion;
-        
-        versionHistory.push(VersionHistory({
-            version: _newVersion,
-            timestamp: block.timestamp,
-            description: _description
-        }));
-        
-        emit VersionUpdated(oldVersion, _newVersion, _description);
-    }
-    
-    /**
-     * @dev 更新角色管理器
-     */
-    function updateRoleManager(address _newRoleManager) external onlyAdmin whenSystemActive {
-        require(_newRoleManager != address(0), "Zero address not allowed");  // 添加零地址检查
-        address oldAddress = address(roleManager);
-        roleManager = RoleManager(_newRoleManager);
-        emit ComponentUpdated("RoleManager", oldAddress, _newRoleManager);
-    }
-    
-    /**
-     * @dev 更新房产管理器
-     */
-    function updatePropertyManager(address _newPropertyManager) external onlyAdmin whenSystemActive {
-        require(_newPropertyManager != address(0), "Zero address not allowed");
-        address oldAddress = address(propertyManager);
-        propertyManager = PropertyManager(_newPropertyManager);
-        emit ComponentUpdated("PropertyManager", oldAddress, _newPropertyManager);
-    }
-    
-    /**
-     * @dev 更新交易管理器
-     */
-    function updateTradingManager(address payable _newTradingManager) external onlyAdmin whenSystemActive {
-        require(_newTradingManager != address(0), "Zero address not allowed");
-        address oldAddress = address(tradingManager);
-        tradingManager = TradingManager(payable(_newTradingManager));
-        emit ComponentUpdated("TradingManager", oldAddress, _newTradingManager);
-    }
-    
-    /**
-     * @dev 更新奖励管理器
-     */
-    function updateRewardManager(address payable _newRewardManager) external onlyAdmin whenSystemActive {
-        require(_newRewardManager != address(0), "Zero address not allowed");
-        address oldAddress = address(rewardManager);
-        rewardManager = RewardManager(payable(_newRewardManager));
-        emit ComponentUpdated("RewardManager", oldAddress, _newRewardManager);
-    }
-    
-    /**
-     * @dev 暂停系统
-     */
-    function pause() external onlyAdmin {
+    function activateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE) {
+        require(!emergencyMode, "Emergency mode already active");
+        emergencyMode = true;
         _pause();
-        updateSystemStatus(SystemStatus.Paused);
+        emit EmergencyModeChanged(true);
     }
     
     /**
-     * @dev 恢复系统
+     * @dev 取消激活紧急模式
      */
-    function unpause() external onlyAdmin {
+    function deactivateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE) {
+        require(emergencyMode, "Emergency mode not active");
+        emergencyMode = false;
         _unpause();
-        updateSystemStatus(SystemStatus.Active);
+        emit EmergencyModeChanged(false);
+    }
+    
+    /**
+     * @dev 转移管理员权限到新地址
+     */
+    function transferAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE) {
+        require(newAdmin != address(0), "New admin is zero address");
+        
+        // 授予新管理员所有角色
+        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        _setupRole(RoleConstants.ADMIN_ROLE, newAdmin);
+        _setupRole(RoleConstants.MANAGER_ROLE, newAdmin);
+        _setupRole(RoleConstants.OPERATOR_ROLE, newAdmin);
+        _setupRole(RoleConstants.PAUSER_ROLE, newAdmin);
+        _setupRole(RoleConstants.UPGRADER_ROLE, newAdmin);
+        
+        emit SystemAdminChanged(msg.sender, newAdmin);
+    }
+    
+    /**
+     * @dev 转移管理员权限并撤销当前管理员权限
+     */
+    function transferAndRenounceAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE) {
+        require(newAdmin != address(0), "New admin is zero address");
+        
+        // 授予新管理员所有角色
+        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        _setupRole(RoleConstants.ADMIN_ROLE, newAdmin);
+        _setupRole(RoleConstants.MANAGER_ROLE, newAdmin);
+        _setupRole(RoleConstants.OPERATOR_ROLE, newAdmin);
+        _setupRole(RoleConstants.PAUSER_ROLE, newAdmin);
+        _setupRole(RoleConstants.UPGRADER_ROLE, newAdmin);
+        
+        // 撤销当前管理员的角色
+        renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        renounceRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        renounceRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        renounceRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        renounceRole(RoleConstants.PAUSER_ROLE, msg.sender);
+        renounceRole(RoleConstants.UPGRADER_ROLE, msg.sender);
+        
+        emit SystemAdminChanged(msg.sender, newAdmin);
+    }
+
+    /**
+     * @dev 授权合约调用
+     */
+    function setContractAuthorization(address contractAddress, bool authorized) external onlyRole(RoleConstants.ADMIN_ROLE) {
+        authorizedContracts[contractAddress] = authorized;
+        emit ContractAuthorized(contractAddress, authorized);
+    }
+
+    /**
+     * @dev 检查地址是否有特定角色 - 供其他合约调用
+     * @param role 角色
+     * @param account 账户地址
+     * @return 是否有该角色
+     */
+    function checkRole(bytes32 role, address account) external view returns (bool) {
+        return hasRole(role, account);
+    }
+
+    /**
+     * @dev 验证地址是否有特定角色 - 失败则revert
+     * @param role 角色
+     * @param account 账户地址
+     */
+    function validateRole(bytes32 role, address account) external view {
+        require(hasRole(role, account), "Account does not have required role");
     }
     
     /**
      * @dev 获取系统状态
      */
     function getSystemStatus() external view returns (SystemStatus) {
-        if (status == SystemStatus.Terminated) {
-            return SystemStatus.Terminated;
-        } else if (paused()) {
-            return SystemStatus.Paused;
-        } else {
-            return status;
+        return systemStatus;
+    }
+    
+    /**
+     * @dev 获取版本号
+     */
+    function getVersion() external pure returns (uint8) {
+        return VERSION;
+    }
+    
+    /**
+     * @dev 授权升级合约的实现
+     */
+    function _authorizeUpgrade(address newImplementation) 
+        internal 
+        override 
+        onlyRole(RoleConstants.UPGRADER_ROLE) 
+    {
+        require(!emergencyMode, "Emergency mode active");
+    }
+    
+    /**
+     * @dev 批量授予地址特定角色
+     */
+    function batchGrantRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            grantRole(role, accounts[i]);
         }
     }
     
     /**
-     * @dev 获取版本历史记录数量
+     * @dev 批量撤销地址的特定角色
      */
-    function getVersionHistoryCount() external view returns (uint256) {
-        return versionHistory.length;
+    function batchRevokeRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            revokeRole(role, accounts[i]);
+        }
     }
-    
+
     /**
-     * @dev 获取系统版本
+     * @dev 检查授权合约或角色 - 供其他合约调用
+     * @param authorizedList 授权合约映射
+     * @param sender 调用者地址
+     * @return 是否有授权
      */
-    function getVersion() external view returns (uint8) {
-        return version;
+    function checkAuthorization(mapping(address => bool) storage authorizedList, address sender) internal view returns (bool) {
+        return authorizedList[sender] || 
+               hasRole(RoleConstants.ADMIN_ROLE, sender) ||
+               hasRole(RoleConstants.MANAGER_ROLE, sender);
     }
-    
-    /**
-     * @dev 授权升级函数
-     */
-    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
-        require(!roleManager.emergencyMode(), "Emergency mode active");
-    }
-    
-    /**
-     * @dev This empty reserved space is put in place to allow future versions to add new
-     * variables without shifting down storage in the inheritance chain.
-     */
-    uint256[45] private __gap;
 } 

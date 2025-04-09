@@ -116,22 +116,22 @@ class RealEstateFacadeController extends BaseController {
         const managerAddress = await managerWallet.getAddress();
         console.log("[registerPropertyAndCreateToken] manager钱包地址:", managerAddress);
         
-        // 获取RoleManager和检查权限
+        // 获取系统合约和检查权限
         try {
-          console.log("[registerPropertyAndCreateToken] 获取RoleManager合约...");
-          const roleManagerAddress = await adminContract.roleManager();
-          console.log("[registerPropertyAndCreateToken] RoleManager地址:", roleManagerAddress);
+          console.log("[registerPropertyAndCreateToken] 获取System合约进行角色检查...");
+          const systemAddress = await adminContract.system();
+          console.log("[registerPropertyAndCreateToken] System地址:", systemAddress);
           
           const { ContractUtils } = require('../../../common/blockchain');
-          const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
+          const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
           
-          const managerRole = await roleManagerContract.MANAGER_ROLE();
+          const managerRole = await systemContract.MANAGER_ROLE();
           console.log("[registerPropertyAndCreateToken] MANAGER_ROLE:", managerRole);
           
-          const isAdminManager = await roleManagerContract.hasRole(managerRole, adminAddress);
+          const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
           console.log("[registerPropertyAndCreateToken] admin钱包是否有MANAGER_ROLE:", isAdminManager);
           
-          const isManagerRole = await roleManagerContract.hasRole(managerRole, managerAddress);
+          const isManagerRole = await systemContract.hasRole(managerRole, managerAddress);
           console.log("[registerPropertyAndCreateToken] manager钱包是否有MANAGER_ROLE:", isManagerRole);
         } catch (error) {
           console.log("[registerPropertyAndCreateToken] 检查权限时出错:", error.message);
@@ -237,22 +237,22 @@ class RealEstateFacadeController extends BaseController {
           const managerAddress = await managerWallet.getAddress();
           console.log("[updatePropertyStatus] manager钱包地址:", managerAddress);
           
-          // 获取RoleManager和检查权限
+          // 获取系统合约和检查权限
           try {
-            console.log("[updatePropertyStatus] 获取RoleManager合约...");
-            const roleManagerAddress = await adminContract.roleManager();
-            console.log("[updatePropertyStatus] RoleManager地址:", roleManagerAddress);
+            console.log("[updatePropertyStatus] 获取System合约进行角色检查...");
+            const systemAddress = await adminContract.system();
+            console.log("[updatePropertyStatus] System地址:", systemAddress);
             
             const { ContractUtils } = require('../../../common/blockchain');
-            const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
+            const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
             
-            const managerRole = await roleManagerContract.MANAGER_ROLE();
+            const managerRole = await systemContract.MANAGER_ROLE();
             console.log("[updatePropertyStatus] MANAGER_ROLE:", managerRole);
             
-            const isAdminManager = await roleManagerContract.hasRole(managerRole, adminAddress);
+            const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
             console.log("[updatePropertyStatus] admin钱包是否有MANAGER_ROLE:", isAdminManager);
             
-            const isManagerRole = await roleManagerContract.hasRole(managerRole, managerAddress);
+            const isManagerRole = await systemContract.hasRole(managerRole, managerAddress);
             console.log("[updatePropertyStatus] manager钱包是否有MANAGER_ROLE:", isManagerRole);
           } catch (error) {
             console.log("[updatePropertyStatus] 检查权限时出错:", error.message);

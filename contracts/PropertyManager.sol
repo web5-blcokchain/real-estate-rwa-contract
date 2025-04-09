@@ -5,7 +5,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "./RoleManager.sol";
+import "./utils/RoleConstants.sol";
+import "./RealEstateSystem.sol";
 
 /**
  * @title PropertyManager
@@ -20,8 +21,8 @@ contract PropertyManager is
     // 版本控制 - 使用uint8节省gas
     uint8 public version;
     
-    // 角色管理器
-    RoleManager public roleManager;
+    // 系统合约引用
+    RealEstateSystem public system;
     
     // 房产状态 - 用uint8表示，节省gas
     enum PropertyStatus {
@@ -66,10 +67,50 @@ contract PropertyManager is
     // 事件 - 简化事件结构，使用非索引字符串
     event PropertyRegistered(string propertyId, string country, string metadataURI);
     event PropertyStatusUpdated(string propertyId, uint8 oldStatus, uint8 newStatus);
-    event PropertyManagerInitialized(address indexed deployer, address indexed roleManager, uint8 version);
+    event PropertyManagerInitialized(address indexed deployer, address indexed system, uint8 version);
     event TokenRegistered(string propertyId, address indexed tokenAddress);
     event ContractAuthorized(address indexed contractAddress, bool status);
     event PropertyOwnershipTransferred(string propertyId, address oldOwner, address newOwner);
+    
+    /**
+     * @dev 修饰器：只有ADMIN角色可以调用
+     */
+    modifier onlyAdmin() {
+        require(system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender), "Not admin");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有MANAGER角色可以调用
+     */
+    modifier onlyManager() {
+        require(system.checkRole(RoleConstants.MANAGER_ROLE, msg.sender), "Not manager");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有OPERATOR角色可以调用
+     */
+    modifier onlyOperator() {
+        require(system.checkRole(RoleConstants.OPERATOR_ROLE, msg.sender), "Not operator");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有UPGRADER角色可以调用
+     */
+    modifier onlyUpgrader() {
+        require(system.checkRole(RoleConstants.UPGRADER_ROLE, msg.sender), "Not upgrader");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有PAUSER角色可以调用
+     */
+    modifier onlyPauser() {
+        require(system.checkRole(RoleConstants.PAUSER_ROLE, msg.sender), "Not pauser");
+        _;
+    }
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -79,41 +120,34 @@ contract PropertyManager is
     /**
      * @dev 初始化函数
      */
-    function initialize(address _roleManager) public initializer {
+    function initialize(address _systemAddress) public initializer {
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Pausable_init();
         
-        roleManager = RoleManager(_roleManager);
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
         version = 1;
         
-        emit PropertyManagerInitialized(msg.sender, _roleManager, version);
+        emit PropertyManagerInitialized(msg.sender, _systemAddress, version);
     }
     
     /**
-     * @dev 修饰器：只有ADMIN角色可以调用
+     * @dev 设置系统合约
      */
-    modifier onlyAdmin() {
-        require(roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有MANAGER角色可以调用
-     */
-    modifier onlyManager() {
-        require(roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender), "Not manager");
-        _;
+    function setSystem(address _systemAddress) external onlyAdmin {
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
     }
     
     /**
      * @dev 修饰器：只有授权合约或管理员可以调用
      */
-    modifier onlyAuthorized() {
+    modifier onlyAuthorizedLocal() {
         require(
             authorizedContracts[msg.sender] || 
-            roleManager.hasRole(roleManager.ADMIN_ROLE(), msg.sender) ||
-            roleManager.hasRole(roleManager.MANAGER_ROLE(), msg.sender),
+            system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender) ||
+            system.checkRole(RoleConstants.MANAGER_ROLE, msg.sender),
             "Not authorized"
         );
         _;
@@ -136,7 +170,7 @@ contract PropertyManager is
         string memory metadataURI
     )
         external 
-        onlyManager 
+        onlyManager
         whenNotPaused 
         nonReentrant 
     {
@@ -162,7 +196,7 @@ contract PropertyManager is
      */
     function updatePropertyStatus(string memory propertyId, PropertyStatus newStatus) 
         external 
-        onlyManager 
+        onlyManager
         whenNotPaused
     {
         require(_properties[propertyId].exists, "Property not exist");
@@ -201,7 +235,7 @@ contract PropertyManager is
      */
     function registerTokenForProperty(string memory propertyId, address tokenAddress) 
         external 
-        onlyAuthorized
+        onlyAuthorizedLocal
         whenNotPaused
     {
         require(_properties[propertyId].exists, "Property not exist");
@@ -356,11 +390,10 @@ contract PropertyManager is
     }
     
     /**
-     * @dev 授权升级合约的实现
+     * @dev Authorizes an upgrade
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
-        // 确保角色管理器不在紧急模式
-        require(!RoleManager(roleManager).emergencyMode(), "Emergency mode active");
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {
+        require(!system.emergencyMode(), "Emergency mode active");
     }
     
     /**
@@ -390,7 +423,7 @@ contract PropertyManager is
      */
     function transferPropertyOwnership(string memory propertyId, address newOwner) 
         external 
-        onlyManager 
+        onlyManager
         whenNotPaused 
         nonReentrant 
     {
@@ -427,16 +460,5 @@ contract PropertyManager is
                 break;
             }
         }
-    }
-    
-    /**
-     * @dev 获取特定所有者的所有房产列表
-     */
-    function getOwnerProperties(address owner) 
-        external 
-        view 
-        returns (string[] memory) 
-    {
-        return ownerProperties[owner];
     }
 } 

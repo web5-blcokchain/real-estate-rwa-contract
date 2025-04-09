@@ -44,7 +44,6 @@ function getDeploymentInfo() {
       network: process.env.BLOCKCHAIN_NETWORK || 'localhost',
       timestamp: new Date().toISOString(),
       contracts: {
-        RoleManager: getAddressFromEnv('RoleManager'),
         PropertyManager: getAddressFromEnv('PropertyManager'),
         TradingManager: getAddressFromEnv('TradingManager'),
         RewardManager: getAddressFromEnv('RewardManager'),
@@ -69,8 +68,10 @@ function getDeploymentInfo() {
 
 /**
  * 验证RealEstateFacade与子模块连接
+ * @param {Object} facadeContract - 可选的Facade合约实例
+ * @returns {Object} 验证结果
  */
-async function verifyFacadeConnections() {
+async function verifyFacadeConnections(facadeContract = null) {
   try {
     logger.info("开始验证RealEstateFacade合约与子模块的连接...");
     
@@ -82,7 +83,8 @@ async function verifyFacadeConnections() {
     logger.info("部署合约地址: ", contracts);
     
     // 创建RealEstateFacade合约实例
-    const realEstateFacade = await ethers.getContractAt("RealEstateFacade", contracts.RealEstateFacade);
+    const realEstateFacade = facadeContract || 
+      await ethers.getContractAt("RealEstateFacade", contracts.RealEstateFacade);
     
     // 验证System连接
     const systemAddress = await realEstateFacade.system();
@@ -93,17 +95,6 @@ async function verifyFacadeConnections() {
       logger.info("✅ System连接验证成功");
     } else {
       logger.error("❌ System连接验证失败");
-    }
-    
-    // 验证RoleManager连接
-    const roleManagerAddress = await realEstateFacade.roleManager();
-    logger.info(`当前RoleManager地址: ${roleManagerAddress}`);
-    logger.info(`预期RoleManager地址: ${contracts.RoleManager}`);
-    const roleManagerConnected = roleManagerAddress.toLowerCase() === contracts.RoleManager.toLowerCase();
-    if (roleManagerConnected) {
-      logger.info("✅ RoleManager连接验证成功");
-    } else {
-      logger.error("❌ RoleManager连接验证失败");
     }
     
     // 验证PropertyManager连接
@@ -140,7 +131,7 @@ async function verifyFacadeConnections() {
     }
     
     // 总体验证结果
-    const allConnected = systemConnected && roleManagerConnected && propertyManagerConnected && 
+    const allConnected = systemConnected && propertyManagerConnected && 
                          tradingManagerConnected && rewardManagerConnected;
     
     if (allConnected) {
@@ -154,7 +145,6 @@ async function verifyFacadeConnections() {
       success: allConnected,
       connections: {
         system: systemConnected,
-        roleManager: roleManagerConnected,
         propertyManager: propertyManagerConnected,
         tradingManager: tradingManagerConnected,
         rewardManager: rewardManagerConnected

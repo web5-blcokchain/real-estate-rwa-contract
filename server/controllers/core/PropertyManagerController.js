@@ -64,23 +64,18 @@ class PropertyManagerController extends BaseController {
                     
                     // 尝试获取MANAGER_ROLE常量和检查权限
                     try {
-                        console.log("[registerProperty] 准备获取roleManager合约地址...");
-                        // 调用roleManager()函数获取roleManager合约地址
-                        const roleManagerAddress = await contractAdmin.roleManager();
-                        console.log("[registerProperty] 角色管理器地址:", roleManagerAddress);
-                        
-                        console.log("[registerProperty] 准备创建RoleManager合约实例...");
-                        // 使用RoleManager合约地址创建合约实例
-                        const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
-                        console.log("[registerProperty] 已创建RoleManager合约实例");
+                        console.log("[registerProperty] 获取系统合约实例用于角色检查...");
+                        // 使用System合约进行角色检查（不再使用RoleManager）
+                        const systemContract = this.getContract('RealEstateSystem', 'admin');
+                        console.log("[registerProperty] 已获取系统合约实例");
                         
                         console.log("[registerProperty] 准备获取MANAGER_ROLE常量...");
-                        const managerRole = await roleManagerContract.MANAGER_ROLE();
+                        const managerRole = await systemContract.MANAGER_ROLE();
                         console.log("[registerProperty] MANAGER_ROLE:", managerRole);
                         
                         console.log("[registerProperty] 准备检查钱包是否有MANAGER_ROLE...");
                         // 检查钱包是否有管理者角色
-                        const isManager = await roleManagerContract.hasRole(managerRole, managerWallet);
+                        const isManager = await systemContract.hasRole(managerRole, managerWallet);
                         console.log("[registerProperty] 当前钱包是否有MANAGER_ROLE:", isManager);
                     } catch (error) {
                         console.log("[registerProperty] 获取MANAGER_ROLE失败:", error.message);

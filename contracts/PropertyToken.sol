@@ -7,8 +7,8 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "./RoleManager.sol";
+import "./utils/RoleConstants.sol";
+import "./RealEstateSystem.sol";
 import "./utils/SafeMath.sol";
 
 contract PropertyToken is 
@@ -17,19 +17,12 @@ contract PropertyToken is
     ERC20Upgradeable,
     ERC20BurnableUpgradeable,
     ERC20SnapshotUpgradeable,
-    PausableUpgradeable,
-    AccessControlUpgradeable {
+    PausableUpgradeable {
 
     using SafeMath for uint256;
 
     // Version control - using uint8 to save gas
     uint8 private constant VERSION = 1;
-
-    // Role definitions
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     // Property ID hash
     bytes32 public propertyIdHash;
@@ -37,17 +30,49 @@ contract PropertyToken is
     // Maximum supply
     uint256 public maxSupply;
 
-    // Role manager contract
-    RoleManager public roleManager;
-
     // Blacklist mapping
     mapping(address => bool) public blacklisted;
+
+    // System contract reference
+    RealEstateSystem public system;
 
     // Events
     event Blacklisted(address indexed account);
     event UnBlacklisted(address indexed account);
     event MaxSupplyUpdated(uint256 newMaxSupply);
     event SnapshotCreated(uint256 snapshotId);
+
+    /**
+     * @dev 修饰器：只有ADMIN角色可以调用
+     */
+    modifier onlyAdmin() {
+        require(system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender), "Not admin");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有OPERATOR角色可以调用
+     */
+    modifier onlyOperator() {
+        require(system.checkRole(RoleConstants.OPERATOR_ROLE, msg.sender), "Not operator");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有UPGRADER角色可以调用
+     */
+    modifier onlyUpgrader() {
+        require(system.checkRole(RoleConstants.UPGRADER_ROLE, msg.sender), "Not upgrader");
+        _;
+    }
+    
+    /**
+     * @dev 修饰器：只有PAUSER角色可以调用
+     */
+    modifier onlyPauser() {
+        require(system.checkRole(RoleConstants.PAUSER_ROLE, msg.sender), "Not pauser");
+        _;
+    }
 
     /**
      * @dev Initializes the contract with property details and initial supply
@@ -58,25 +83,20 @@ contract PropertyToken is
         string memory _symbol,
         uint256 _initialSupply,
         address _admin,
-        address _roleManager
+        address _systemAddress
     ) public initializer {
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
         __ERC20Snapshot_init();
         __Pausable_init();
-        __AccessControl_init();
         __UUPSUpgradeable_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(ADMIN_ROLE, _admin);
-        _grantRole(OPERATOR_ROLE, _admin);
-        _grantRole(PAUSER_ROLE, _admin);
-        _grantRole(UPGRADER_ROLE, _admin);
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
 
         propertyIdHash = _propertyIdHash;
         uint256 defaultMaxSupply = 1000000000;
         maxSupply = defaultMaxSupply.mul(10**decimals()); // Default 1 billion tokens
-        roleManager = RoleManager(_roleManager);
 
         if (_initialSupply > 0) {
             _mint(_admin, _initialSupply);
@@ -86,7 +106,7 @@ contract PropertyToken is
     /**
      * @dev Creates a snapshot of the current token balances
      */
-    function snapshot() external onlyRole(OPERATOR_ROLE) returns (uint256) {
+    function snapshot() external onlyOperator returns (uint256) {
         uint256 snapshotId = _snapshot();
         emit SnapshotCreated(snapshotId);
         return snapshotId;
@@ -95,7 +115,7 @@ contract PropertyToken is
     /**
      * @dev Updates the maximum supply of tokens
      */
-    function updateMaxSupply(uint256 _newMaxSupply) external onlyRole(ADMIN_ROLE) {
+    function updateMaxSupply(uint256 _newMaxSupply) external onlyAdmin {
         require(_newMaxSupply >= totalSupply(), "New max supply must be >= current total supply");
         maxSupply = _newMaxSupply;
         emit MaxSupplyUpdated(_newMaxSupply);
@@ -104,7 +124,7 @@ contract PropertyToken is
     /**
      * @dev Adds an account to the blacklist
      */
-    function blacklist(address _account) external onlyRole(ADMIN_ROLE) {
+    function blacklist(address _account) external onlyAdmin {
         require(!blacklisted[_account], "Account already blacklisted");
         blacklisted[_account] = true;
         emit Blacklisted(_account);
@@ -113,7 +133,7 @@ contract PropertyToken is
     /**
      * @dev Removes an account from the blacklist
      */
-    function unBlacklist(address _account) external onlyRole(ADMIN_ROLE) {
+    function unBlacklist(address _account) external onlyAdmin {
         require(blacklisted[_account], "Account not blacklisted");
         blacklisted[_account] = false;
         emit UnBlacklisted(_account);
@@ -122,14 +142,14 @@ contract PropertyToken is
     /**
      * @dev Pauses token transfers
      */
-    function pause() external onlyRole(PAUSER_ROLE) {
+    function pause() external onlyPauser {
         _pause();
     }
 
     /**
      * @dev Unpauses token transfers
      */
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    function unpause() external onlyPauser {
         _unpause();
     }
 
@@ -149,8 +169,8 @@ contract PropertyToken is
     /**
      * @dev Function that should revert when msg.sender is not authorized to upgrade the contract
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {
-        require(!RoleManager(roleManager).emergencyMode(), "Emergency mode active");
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {
+        require(!system.emergencyMode(), "Emergency mode active");
     }
 
     /**

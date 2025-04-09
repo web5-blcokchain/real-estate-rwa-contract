@@ -239,20 +239,62 @@ async function testRegisterPropertyAndCreateToken() {
       const adminAddress = await adminWallet.getAddress();
       console.log("admin合约使用的钱包地址:", adminAddress);
       
-      // 尝试获取RoleManager合约
-      const roleManagerAddress = await contractAdmin.roleManager();
-      console.log("RoleManager合约地址:", roleManagerAddress);
+      // 尝试获取RealEstateFacade合约和System合约，检查权限
+      try {
+        // 创建一个临时控制器获取合约实例
+        const tempController = new RealEstateFacadeController();
+        
+        // 获取RealEstateFacade合约实例
+        const adminContract = tempController.getContract('RealEstateFacade', 'admin');
+        const managerContract = tempController.getContract('RealEstateFacade', 'manager');
+        
+        log('合约地址信息', {
+          RealEstateFacade: await adminContract.getAddress()
+        });
+        
+        // 尝试获取system地址并检查权限
+        try {
+          const systemAddress = await adminContract.system();
+          log('System合约地址', systemAddress);
+          
+          // 创建System合约实例
+          const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
+          
+          // 获取角色常量
+          const managerRole = await systemContract.MANAGER_ROLE();
+          log('MANAGER_ROLE值', managerRole);
+          
+          // 检查各钱包是否有MANAGER_ROLE
+          const adminAddress = await adminWallet.getAddress();
+          const managerAddress = await managerWallet.getAddress();
+          
+          const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
+          const isManagerHasRole = await systemContract.hasRole(managerRole, managerAddress);
+          
+          log('权限检查结果', {
+            'admin钱包有MANAGER_ROLE': isAdminManager,
+            'manager钱包有MANAGER_ROLE': isManagerHasRole
+          });
+          
+          // 检查Admin角色
+          const adminRole = await systemContract.ADMIN_ROLE();
+          const isAdminHasAdminRole = await systemContract.hasRole(adminRole, adminAddress);
+          const isManagerHasAdminRole = await systemContract.hasRole(adminRole, managerAddress);
+          
+          log('更多权限检查结果', {
+            'admin钱包有ADMIN_ROLE': isAdminHasAdminRole,
+            'manager钱包有ADMIN_ROLE': isManagerHasAdminRole
+          });
+        } catch (error) {
+          log('权限检查失败:', error.message);
+        }
+      } catch (error) {
+        log('获取合约信息失败', {
+          error: error.message,
+          stack: error.stack
+        });
+      }
       
-      const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
-      console.log("创建RoleManager合约实例成功");
-      
-      const managerRole = await roleManagerContract.MANAGER_ROLE();
-      console.log("MANAGER_ROLE:", managerRole);
-      
-      const hasRole = await roleManagerContract.hasRole(managerRole, adminAddress);
-      console.log("admin钱包是否有MANAGER_ROLE:", hasRole);
-      
-      console.log("以下是注册房产的操作:");
     } catch (error) {
       console.log("检查合约和权限时出错:", error.message);
       console.log("错误堆栈:", error.stack);
@@ -663,7 +705,7 @@ async function main() {
       operator: await operatorWallet.getAddress()
     });
 
-    // 尝试获取RealEstateFacade合约和RoleManager合约，检查权限
+    // 尝试获取RealEstateFacade合约和System合约，检查权限
     try {
       // 创建一个临时控制器获取合约实例
       const tempController = new RealEstateFacadeController();
@@ -676,24 +718,24 @@ async function main() {
         RealEstateFacade: await adminContract.getAddress()
       });
       
-      // 尝试获取roleManager地址并检查权限
+      // 尝试获取system地址并检查权限
       try {
-        const roleManagerAddress = await adminContract.roleManager();
-        log('RoleManager地址', roleManagerAddress);
+        const systemAddress = await adminContract.system();
+        log('System合约地址', systemAddress);
         
-        // 创建RoleManager合约实例
-        const roleManagerContract = ContractUtils.getContractWithRole('RoleManager', roleManagerAddress, 'admin');
+        // 创建System合约实例
+        const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
         
-        // 获取MANAGER_ROLE常量
-        const managerRole = await roleManagerContract.MANAGER_ROLE();
+        // 获取角色常量
+        const managerRole = await systemContract.MANAGER_ROLE();
         log('MANAGER_ROLE值', managerRole);
         
         // 检查各钱包是否有MANAGER_ROLE
         const adminAddress = await adminWallet.getAddress();
         const managerAddress = await managerWallet.getAddress();
         
-        const isAdminManager = await roleManagerContract.hasRole(managerRole, adminAddress);
-        const isManagerHasRole = await roleManagerContract.hasRole(managerRole, managerAddress);
+        const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
+        const isManagerHasRole = await systemContract.hasRole(managerRole, managerAddress);
         
         log('权限检查结果', {
           'admin钱包有MANAGER_ROLE': isAdminManager,
@@ -701,20 +743,16 @@ async function main() {
         });
         
         // 检查Admin角色
-        const adminRole = await roleManagerContract.DEFAULT_ADMIN_ROLE();
-        const isAdminHasAdminRole = await roleManagerContract.hasRole(adminRole, adminAddress);
-        const isManagerHasAdminRole = await roleManagerContract.hasRole(adminRole, managerAddress);
+        const adminRole = await systemContract.ADMIN_ROLE();
+        const isAdminHasAdminRole = await systemContract.hasRole(adminRole, adminAddress);
+        const isManagerHasAdminRole = await systemContract.hasRole(adminRole, managerAddress);
         
-        log('Admin权限检查结果', {
-          'admin钱包有DEFAULT_ADMIN_ROLE': isAdminHasAdminRole,
-          'manager钱包有DEFAULT_ADMIN_ROLE': isManagerHasAdminRole
+        log('更多权限检查结果', {
+          'admin钱包有ADMIN_ROLE': isAdminHasAdminRole,
+          'manager钱包有ADMIN_ROLE': isManagerHasAdminRole
         });
-        
       } catch (error) {
-        log('获取角色信息失败', {
-          error: error.message,
-          stack: error.stack
-        });
+        log('权限检查失败:', error.message);
       }
       
     } catch (error) {

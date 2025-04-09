@@ -87,20 +87,10 @@ async function deploySystemStep(signer) {
   // 获取合约初始化参数
   const initParams = getContractInitParams();
   
-  // 部署 RoleManager
-  logger.info("Deploying RoleManager...");
-  const RoleManager = await ethers.getContractFactory("RoleManager");
-  const roleManager = await upgrades.deployProxy(RoleManager, [signer.address], {
-    kind: "uups",
-  });
-  await roleManager.waitForDeployment();
-  const roleManagerAddress = await roleManager.getAddress();
-  logger.info("RoleManager deployed at:", roleManagerAddress);
-  
   // 部署 PropertyManager
   logger.info("Deploying PropertyManager...");
   const PropertyManager = await ethers.getContractFactory("PropertyManager");
-  const propertyManager = await upgrades.deployProxy(PropertyManager, [roleManagerAddress], {
+  const propertyManager = await upgrades.deployProxy(PropertyManager, [signer.address], {
     kind: "uups",
   });
   await propertyManager.waitForDeployment();
@@ -110,7 +100,7 @@ async function deploySystemStep(signer) {
   // 部署 TradingManager
   logger.info("Deploying TradingManager...");
   const TradingManager = await ethers.getContractFactory("TradingManager");
-  const tradingManager = await upgrades.deployProxy(TradingManager, [roleManagerAddress], {
+  const tradingManager = await upgrades.deployProxy(TradingManager, [signer.address], {
     kind: "uups",
   });
   await tradingManager.waitForDeployment();
@@ -148,7 +138,7 @@ async function deploySystemStep(signer) {
   logger.info("Deploying RewardManager...");
   const RewardManager = await ethers.getContractFactory("RewardManager");
   const rewardManager = await upgrades.deployProxy(RewardManager, [
-    roleManagerAddress,
+    signer.address,
     initParams.reward.platformFeeRate,
     initParams.reward.maintenanceFeeRate,
     initParams.reward.rewardFeeReceiver,
@@ -169,7 +159,7 @@ async function deploySystemStep(signer) {
     initParams.tokenFactory.symbol,
     ethers.parseEther(initParams.tokenFactory.initialSupply.toString()),
     signer.address,
-    roleManagerAddress
+    null // No more roleManager parameter
   ], {
     kind: "uups",
   });
@@ -181,7 +171,7 @@ async function deploySystemStep(signer) {
   logger.info("Deploying System...");
   const System = await ethers.getContractFactory("RealEstateSystem");
   const system = await upgrades.deployProxy(System, [
-    roleManagerAddress,
+    signer.address,  // Now deployer is the default admin
     propertyManagerAddress,
     tradingManagerAddress,
     rewardManagerAddress
@@ -192,12 +182,23 @@ async function deploySystemStep(signer) {
   const systemAddress = await system.getAddress();
   logger.info("System deployed at:", systemAddress);
   
+  // 更新所有合约的系统地址
+  logger.info("Updating system address in all contracts...");
+  tx = await propertyManager.setSystem(systemAddress);
+  await tx.wait();
+  
+  tx = await tradingManager.setSystem(systemAddress);
+  await tx.wait();
+  
+  tx = await rewardManager.setSystem(systemAddress);
+  await tx.wait();
+  
   // 部署 Facade
   logger.info("Deploying RealEstateFacade...");
   const RealEstateFacade = await ethers.getContractFactory("RealEstateFacade");
   const realEstateFacade = await upgrades.deployProxy(RealEstateFacade, [
     systemAddress,
-    roleManagerAddress,
+    signer.address, // Now deployer is the default admin instead of roleManager
     propertyManagerAddress,
     tradingManagerAddress,
     rewardManagerAddress
@@ -209,7 +210,6 @@ async function deploySystemStep(signer) {
   logger.info("RealEstateFacade deployed at:", realEstateFacadeAddress);
   
   return {
-    roleManager,
     propertyManager,
     tradingManager,
     rewardManager,
@@ -252,7 +252,6 @@ function updateEnvFile(deploymentInfo, implementations) {
   // 合约名称映射关系，使用完整名称作为环境变量
   const contractFullNames = {
     'SimpleERC20': 'SimpleERC20',
-    'RoleManager': 'RoleManager',
     'PropertyManager': 'PropertyManager',
     'TradingManager': 'TradingManager',
     'RewardManager': 'RewardManager',
@@ -342,59 +341,57 @@ CONTRACT_SIMPLEERC20_ADDRESS=${deploymentInfo.contracts.SimpleERC20}
 
 async function main() {
   try {
-    // 获取部署者账户
-    const [deployer] = await ethers.getSigners();
-    logger.info("Deploying contracts with the account:", deployer.address);
-
-    // 部署测试代币
-    const testToken = await deployTestToken(deployer);
-
-    // 部署系统合约
-    const contracts = await deploySystemStep(deployer);
-
-    // 创建部署信息对象，带有正确的合约地址字符串
+    logger.info("开始部署不动产系统...");
+    
     const deploymentInfo = {
-      network: hre.network.name,
       timestamp: new Date().toISOString(),
-      deployer: deployer.address,
-      contracts: {
-        SimpleERC20: await testToken.getAddress(),
-        RoleManager: await contracts.roleManager.getAddress(),
-        PropertyManager: await contracts.propertyManager.getAddress(),
-        TradingManager: await contracts.tradingManager.getAddress(),
-        RewardManager: await contracts.rewardManager.getAddress(),
-        PropertyToken: await contracts.propertyToken.getAddress(),
-        System: await contracts.system.getAddress(),
-        RealEstateFacade: await contracts.realEstateFacade.getAddress()
-      },
-      systemStatus: "1",
-      deployMethod: "step-by-step"
+      network: hre.network.name,
+      deployer: await hre.ethers.provider.getSigner().getAddress(),
+      contracts: {},
+      initializationParams: getContractInitParams(),
+      systemStatus: "未知",
     };
-
+    
+    // 获取部署账户
+    const [deployer] = await ethers.getSigners();
+    logger.info("部署账户地址:", deployer.address);
+    
+    // 部署系统
+    const contracts = await deploySystemStep(deployer);
+    
+    // 记录合约地址
+    deploymentInfo.contracts = {
+      PropertyManager: await contracts.propertyManager.getAddress(),
+      TradingManager: await contracts.tradingManager.getAddress(),
+      RewardManager: await contracts.rewardManager.getAddress(),
+      PropertyToken: await contracts.propertyToken.getAddress(),
+      RealEstateSystem: await contracts.system.getAddress(),
+      RealEstateFacade: await contracts.realEstateFacade.getAddress()
+    };
+    
+    // 检查系统状态
+    const emergencyMode = await contracts.system.emergencyMode();
+    deploymentInfo.systemStatus = emergencyMode ? "紧急模式" : "正常模式";
+    
     // 获取实现合约地址
     const implementations = await getImplementationAddresses(deploymentInfo);
-
-    // 更新部署信息，添加实现地址
     deploymentInfo.implementations = implementations;
-
+    
+    // 部署测试代币
+    const testToken = await deployTestToken(deployer);
+    deploymentInfo.contracts.SimpleERC20 = await testToken.getAddress();
+    
     // 更新.env文件
     updateEnvFile(deploymentInfo, implementations);
     
-    // 验证RealEstateFacade合约与子模块的连接
-    logger.info("验证RealEstateFacade合约与子模块的连接...");
+    // 验证Facade与各组件之间的连接
     try {
-      const verificationResult = await verifyFacadeConnections();
-      
+      logger.info("验证Facade与各组件之间的连接");
+      const verificationResult = await verifyFacadeConnections(contracts.realEstateFacade);
       deploymentInfo.verificationResult = verificationResult;
-      
-      if (verificationResult.success) {
-        logger.info("所有组件连接验证成功!");
-      } else {
-        logger.warn("组件连接验证失败，请检查部署日志和合约状态");
-      }
-    } catch (verifyError) {
-      logger.error("验证过程失败:", verifyError);
-      deploymentInfo.verificationError = verifyError.message;
+    } catch (error) {
+      logger.error("验证连接失败:", error.message);
+      deploymentInfo.verificationError = error.message;
     }
     
     // 授予角色权限
@@ -455,20 +452,13 @@ async function getImplementationAddresses(deploymentInfo) {
 async function grantRoles(contracts) {
   logger.info("开始授予角色权限...");
   
-  const roleManager = contracts.roleManager;
-  
-  // 获取角色常量
-  const ADMIN_ROLE = await roleManager.ADMIN_ROLE();
-  const MANAGER_ROLE = await roleManager.MANAGER_ROLE();
-  const OPERATOR_ROLE = await roleManager.OPERATOR_ROLE();
-  
   // 初始化角色授权结果对象
   const roleResults = {
     admin: { 
       address: null, 
-      success: { admin: false, manager: false, operator: false }, 
-      hash: { admin: null, manager: null, operator: null }, 
-      alreadyHasRole: { admin: false, manager: false, operator: false } 
+      success: { admin: false, manager: false, operator: false, pauser: false, upgrader: false }, 
+      hash: { admin: null, manager: null, operator: null, pauser: null, upgrader: null }, 
+      alreadyHasRole: { admin: false, manager: false, operator: false, pauser: false, upgrader: false } 
     },
     manager: { 
       address: null, 
@@ -484,6 +474,16 @@ async function grantRoles(contracts) {
     }
   };
   
+  // Get the system contract for role checks
+  const system = contracts.system;
+  
+  // Get role constants from the System contract
+  const ADMIN_ROLE = await system.ADMIN_ROLE();
+  const MANAGER_ROLE = await system.MANAGER_ROLE();
+  const OPERATOR_ROLE = await system.OPERATOR_ROLE();
+  const PAUSER_ROLE = await system.PAUSER_ROLE();
+  const UPGRADER_ROLE = await system.UPGRADER_ROLE();
+  
   // 授予 ADMIN_ROLE
   if (process.env.ADMIN_PRIVATE_KEY) {
     try {
@@ -493,11 +493,11 @@ async function grantRoles(contracts) {
       
       // 为admin授予ADMIN_ROLE
       logger.info(`检查地址 ${adminAddress} 是否已有 ADMIN_ROLE...`);
-      const hasAdminRole = await roleManager.hasRole(ADMIN_ROLE, adminAddress);
+      const hasAdminRole = await system.hasRole(ADMIN_ROLE, adminAddress);
       
       if (!hasAdminRole) {
         logger.info(`授予 ADMIN_ROLE 给: ${adminAddress}`);
-        const tx = await roleManager.grantRole(ADMIN_ROLE, adminAddress);
+        const tx = await system.grantRole(ADMIN_ROLE, adminAddress);
         await tx.wait();
         roleResults.admin.success.admin = true;
         roleResults.admin.hash.admin = tx.hash;
@@ -510,11 +510,11 @@ async function grantRoles(contracts) {
       
       // 为admin授予MANAGER_ROLE
       logger.info(`检查地址 ${adminAddress} 是否已有 MANAGER_ROLE...`);
-      const hasManagerRole = await roleManager.hasRole(MANAGER_ROLE, adminAddress);
+      const hasManagerRole = await system.hasRole(MANAGER_ROLE, adminAddress);
       
       if (!hasManagerRole) {
         logger.info(`授予 MANAGER_ROLE 给 admin: ${adminAddress}`);
-        const tx = await roleManager.grantRole(MANAGER_ROLE, adminAddress);
+        const tx = await system.grantRole(MANAGER_ROLE, adminAddress);
         await tx.wait();
         roleResults.admin.success.manager = true;
         roleResults.admin.hash.manager = tx.hash;
@@ -527,11 +527,11 @@ async function grantRoles(contracts) {
       
       // 为admin授予OPERATOR_ROLE
       logger.info(`检查地址 ${adminAddress} 是否已有 OPERATOR_ROLE...`);
-      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, adminAddress);
+      const hasOperatorRole = await system.hasRole(OPERATOR_ROLE, adminAddress);
       
       if (!hasOperatorRole) {
         logger.info(`授予 OPERATOR_ROLE 给 admin: ${adminAddress}`);
-        const tx = await roleManager.grantRole(OPERATOR_ROLE, adminAddress);
+        const tx = await system.grantRole(OPERATOR_ROLE, adminAddress);
         await tx.wait();
         roleResults.admin.success.operator = true;
         roleResults.admin.hash.operator = tx.hash;
@@ -540,6 +540,40 @@ async function grantRoles(contracts) {
         roleResults.admin.alreadyHasRole.operator = true;
         roleResults.admin.success.operator = true;
         logger.info(`admin地址 ${adminAddress} 已有 OPERATOR_ROLE, 无需再次授权`);
+      }
+      
+      // 为admin授予PAUSER_ROLE
+      logger.info(`检查地址 ${adminAddress} 是否已有 PAUSER_ROLE...`);
+      const hasPauserRole = await system.hasRole(PAUSER_ROLE, adminAddress);
+      
+      if (!hasPauserRole) {
+        logger.info(`授予 PAUSER_ROLE 给 admin: ${adminAddress}`);
+        const tx = await system.grantRole(PAUSER_ROLE, adminAddress);
+        await tx.wait();
+        roleResults.admin.success.pauser = true;
+        roleResults.admin.hash.pauser = tx.hash;
+        logger.info(`PAUSER_ROLE 授予admin成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.admin.alreadyHasRole.pauser = true;
+        roleResults.admin.success.pauser = true;
+        logger.info(`admin地址 ${adminAddress} 已有 PAUSER_ROLE, 无需再次授权`);
+      }
+      
+      // 为admin授予UPGRADER_ROLE
+      logger.info(`检查地址 ${adminAddress} 是否已有 UPGRADER_ROLE...`);
+      const hasUpgraderRole = await system.hasRole(UPGRADER_ROLE, adminAddress);
+      
+      if (!hasUpgraderRole) {
+        logger.info(`授予 UPGRADER_ROLE 给 admin: ${adminAddress}`);
+        const tx = await system.grantRole(UPGRADER_ROLE, adminAddress);
+        await tx.wait();
+        roleResults.admin.success.upgrader = true;
+        roleResults.admin.hash.upgrader = tx.hash;
+        logger.info(`UPGRADER_ROLE 授予admin成功, 交易哈希: ${tx.hash}`);
+      } else {
+        roleResults.admin.alreadyHasRole.upgrader = true;
+        roleResults.admin.success.upgrader = true;
+        logger.info(`admin地址 ${adminAddress} 已有 UPGRADER_ROLE, 无需再次授权`);
       }
     } catch (error) {
       logger.error(`授予admin权限失败: ${error.message}`);
@@ -557,11 +591,11 @@ async function grantRoles(contracts) {
       
       // 为manager授予MANAGER_ROLE
       logger.info(`检查地址 ${managerAddress} 是否已有 MANAGER_ROLE...`);
-      const hasManagerRole = await roleManager.hasRole(MANAGER_ROLE, managerAddress);
+      const hasManagerRole = await system.hasRole(MANAGER_ROLE, managerAddress);
       
       if (!hasManagerRole) {
         logger.info(`授予 MANAGER_ROLE 给: ${managerAddress}`);
-        const tx = await roleManager.grantRole(MANAGER_ROLE, managerAddress);
+        const tx = await system.grantRole(MANAGER_ROLE, managerAddress);
         await tx.wait();
         roleResults.manager.success.manager = true;
         roleResults.manager.hash.manager = tx.hash;
@@ -574,11 +608,11 @@ async function grantRoles(contracts) {
       
       // 为manager授予OPERATOR_ROLE
       logger.info(`检查地址 ${managerAddress} 是否已有 OPERATOR_ROLE...`);
-      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, managerAddress);
+      const hasOperatorRole = await system.hasRole(OPERATOR_ROLE, managerAddress);
       
       if (!hasOperatorRole) {
         logger.info(`授予 OPERATOR_ROLE 给 manager: ${managerAddress}`);
-        const tx = await roleManager.grantRole(OPERATOR_ROLE, managerAddress);
+        const tx = await system.grantRole(OPERATOR_ROLE, managerAddress);
         await tx.wait();
         roleResults.manager.success.operator = true;
         roleResults.manager.hash.operator = tx.hash;
@@ -603,11 +637,11 @@ async function grantRoles(contracts) {
       roleResults.operator.address = operatorAddress;
       
       logger.info(`检查地址 ${operatorAddress} 是否已有 OPERATOR_ROLE...`);
-      const hasOperatorRole = await roleManager.hasRole(OPERATOR_ROLE, operatorAddress);
+      const hasOperatorRole = await system.hasRole(OPERATOR_ROLE, operatorAddress);
       
       if (!hasOperatorRole) {
         logger.info(`授予 OPERATOR_ROLE 给: ${operatorAddress}`);
-        const tx = await roleManager.grantRole(OPERATOR_ROLE, operatorAddress);
+        const tx = await system.grantRole(OPERATOR_ROLE, operatorAddress);
         await tx.wait();
         roleResults.operator.success.operator = true;
         roleResults.operator.hash.operator = tx.hash;
