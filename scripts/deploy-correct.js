@@ -24,6 +24,22 @@ function generateDeploymentReport(contracts) {
 - 网络: ${network}
 - 部署账户: ${contracts.deployerAddress}
 
+## 角色账户信息
+### 管理员账户
+- 地址: ${contracts.adminAddress}
+- 角色: ADMIN_ROLE
+- 权限: 系统最高权限，可管理所有角色和系统状态
+
+### 经理账户
+- 地址: ${contracts.managerAddress}
+- 角色: MANAGER_ROLE
+- 权限: 可管理合约日常运营，包括资产注册、交易管理等
+
+### 操作员账户
+- 地址: ${contracts.operatorAddress}
+- 角色: OPERATOR_ROLE
+- 权限: 可执行具体业务操作，如创建订单、执行交易等
+
 ## 部署方法
 本次部署采用 UUPS 可升级代理模式，所有核心合约均通过代理合约部署，支持后续升级。部署过程分为以下步骤：
 1. 部署 RealEstateSystem 系统合约
@@ -34,6 +50,7 @@ function generateDeploymentReport(contracts) {
 6. 部署 RealEstateFacade 门面合约
 7. 配置交易参数
 8. 激活系统
+9. 设置角色权限
 
 ## 合约详情
 
@@ -42,18 +59,24 @@ function generateDeploymentReport(contracts) {
 - 实现地址: ${contracts.systemImplementation}
 - 功能: 系统核心合约，负责权限管理和系统状态控制
 - 权限: 拥有 ADMIN_ROLE、MANAGER_ROLE、OPERATOR_ROLE 等角色管理权限
+- 角色分配:
+  - ADMIN_ROLE: ${contracts.adminAddress}
+  - MANAGER_ROLE: ${contracts.managerAddress}
+  - OPERATOR_ROLE: ${contracts.operatorAddress}
 
 ### 2. PropertyManager
 - 地址: ${contracts.propertyManagerAddress}
 - 实现地址: ${contracts.propertyManagerImplementation}
 - 功能: 管理房地产资产，包括资产注册、状态更新等
 - 权限: 需要 MANAGER_ROLE 权限
+- 授权账户: ${contracts.managerAddress}
 
 ### 3. TradingManager
 - 地址: ${contracts.tradingManagerAddress}
 - 实现地址: ${contracts.tradingManagerImplementation}
 - 功能: 管理代币交易，包括订单创建、执行等
 - 权限: 需要 MANAGER_ROLE 权限
+- 授权账户: ${contracts.managerAddress}
 - 交易参数:
   - 最大交易金额: 1000 ETH
   - 最小交易金额: 0.01 ETH
@@ -65,12 +88,14 @@ function generateDeploymentReport(contracts) {
 - 实现地址: ${contracts.rewardManagerImplementation}
 - 功能: 管理奖励分配，包括收益分配、奖励发放等
 - 权限: 需要 MANAGER_ROLE 权限
+- 授权账户: ${contracts.managerAddress}
 
 ### 5. PropertyToken
 - 地址: ${contracts.propertyTokenAddress}
 - 实现地址: ${contracts.propertyTokenImplementation}
 - 功能: 房地产代币合约，实现 ERC20 标准
 - 权限: 需要 MANAGER_ROLE 权限
+- 授权账户: ${contracts.managerAddress}
 - 代币信息:
   - 名称: Test Property Token
   - 符号: TPT
@@ -89,11 +114,29 @@ function generateDeploymentReport(contracts) {
 - 实现地址: ${contracts.realEstateFacadeImplementation}
 - 功能: 系统门面合约，提供统一的接口访问
 - 权限: 需要 MANAGER_ROLE 权限
+- 授权账户: ${contracts.managerAddress}
 
 ## 权限说明
-- ADMIN_ROLE: 系统管理员，拥有最高权限
-- MANAGER_ROLE: 合约管理员，负责日常运营
-- OPERATOR_ROLE: 操作员，执行具体业务操作
+### 角色定义
+1. ADMIN_ROLE
+   - 权限级别: 最高
+   - 主要职责: 系统管理、角色分配、合约升级
+   - 持有账户: ${contracts.adminAddress}
+
+2. MANAGER_ROLE
+   - 权限级别: 高
+   - 主要职责: 合约管理、参数配置、资产注册
+   - 持有账户: ${contracts.managerAddress}
+
+3. OPERATOR_ROLE
+   - 权限级别: 中
+   - 主要职责: 业务操作、订单处理、交易执行
+   - 持有账户: ${contracts.operatorAddress}
+
+### 权限验证结果
+- 管理员权限: 已授予 ${contracts.adminAddress}
+- 经理权限: 已授予 ${contracts.managerAddress}
+- 操作员权限: 已授予 ${contracts.operatorAddress}
 
 ## 系统状态
 - 当前状态: Active
@@ -105,9 +148,10 @@ function generateDeploymentReport(contracts) {
 2. 部署后请妥善保管管理员私钥
 3. 建议定期备份环境变量文件
 4. 如需升级合约，请遵循升级流程
+5. 角色权限变更需通过管理员账户操作
 
 ## 环境变量
-所有合约地址已更新至 .env 文件，并已创建备份文件。
+所有合约地址和角色账户已更新至 .env 文件，并已创建备份文件。
 `;
   
   // 确保部署报告目录存在
@@ -252,10 +296,28 @@ async function deploy() {
     const [deployer] = await ethers.getSigners();
     logger.info(`部署账户: ${deployer.address}`);
     
+    // 从环境变量读取角色账户
+    const adminPrivateKey = process.env.ADMIN_PRIVATE_KEY;
+    const managerPrivateKey = process.env.MANAGER_PRIVATE_KEY;
+    const operatorPrivateKey = process.env.OPERATOR_PRIVATE_KEY;
+    
+    if (!adminPrivateKey || !managerPrivateKey || !operatorPrivateKey) {
+      throw new Error("请在 .env 文件中设置 ADMIN_PRIVATE_KEY, MANAGER_PRIVATE_KEY 和 OPERATOR_PRIVATE_KEY");
+    }
+    
+    // 创建角色账户
+    const adminSigner = new ethers.Wallet(adminPrivateKey, ethers.provider);
+    const managerSigner = new ethers.Wallet(managerPrivateKey, ethers.provider);
+    const operatorSigner = new ethers.Wallet(operatorPrivateKey, ethers.provider);
+    
+    logger.info(`管理员账户: ${adminSigner.address}`);
+    logger.info(`经理账户: ${managerSigner.address}`);
+    logger.info(`操作员账户: ${operatorSigner.address}`);
+    
     // 1. 首先部署 System 合约
     logger.info("步骤1: 部署 RealEstateSystem...");
     const System = await ethers.getContractFactory("RealEstateSystem");
-    const system = await upgrades.deployProxy(System, [deployer.address], {
+    const system = await upgrades.deployProxy(System, [adminSigner.address], {
       kind: "uups",
       unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto"]
     });
@@ -396,6 +458,34 @@ async function deploy() {
     await tx.wait();
     logger.info("系统已激活");
     
+    // 在部署完成后，设置角色权限
+    logger.info("设置角色权限...");
+    
+    // 获取角色常量
+    const ADMIN_ROLE = ethers.keccak256(ethers.toUtf8Bytes("ADMIN_ROLE"));
+    const MANAGER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MANAGER_ROLE"));
+    const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("OPERATOR_ROLE"));
+    
+    // 授予 MANAGER_ROLE
+    tx = await system.connect(adminSigner).grantRole(MANAGER_ROLE, managerSigner.address);
+    await tx.wait();
+    logger.info(`已授予 ${managerSigner.address} MANAGER_ROLE 权限`);
+    
+    // 授予 OPERATOR_ROLE
+    tx = await system.connect(adminSigner).grantRole(OPERATOR_ROLE, operatorSigner.address);
+    await tx.wait();
+    logger.info(`已授予 ${operatorSigner.address} OPERATOR_ROLE 权限`);
+    
+    // 验证角色权限
+    const isAdmin = await system.hasRole(ADMIN_ROLE, adminSigner.address);
+    const isManager = await system.hasRole(MANAGER_ROLE, managerSigner.address);
+    const isOperator = await system.hasRole(OPERATOR_ROLE, operatorSigner.address);
+    
+    logger.info("角色权限验证结果:");
+    logger.info(`- 管理员权限: ${isAdmin ? "已授予" : "未授予"}`);
+    logger.info(`- 经理权限: ${isManager ? "已授予" : "未授予"}`);
+    logger.info(`- 操作员权限: ${isOperator ? "已授予" : "未授予"}`);
+    
     // 输出所有合约地址
     logger.info("== 合约地址摘要 ==");
     logger.info(`RealEstateSystem: ${systemAddress}`);
@@ -428,7 +518,10 @@ async function deploy() {
       rewardManagerImplementation,
       propertyTokenImplementation,
       realEstateFacadeImplementation,
-      deployerAddress: deployer.address
+      deployerAddress: deployer.address,
+      adminAddress: adminSigner.address,
+      managerAddress: managerSigner.address,
+      operatorAddress: operatorSigner.address
     };
     
     await verifyDeployment(contracts);
