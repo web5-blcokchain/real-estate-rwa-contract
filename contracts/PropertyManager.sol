@@ -11,6 +11,10 @@ import "./RealEstateSystem.sol";
 /**
  * @title PropertyManager
  * @dev 优化的房产管理合约，提高存储效率和安全性
+ * 权限说明：
+ * - ADMIN: 最高权限，包含所有权限
+ * - MANAGER: 管理权限，包含OPERATOR权限
+ * - OPERATOR: 基础操作权限
  */
 contract PropertyManager is 
     Initializable, 
@@ -55,62 +59,39 @@ contract PropertyManager is
     // 房产到代币地址的映射
     mapping(string => address) public propertyTokens;
     
-    // 授权合约
-    mapping(address => bool) public authorizedContracts;
-    
     // 房产所有者映射
     mapping(string => address) public propertyOwners;
     
     // 所有者拥有的房产列表
     mapping(address => string[]) public ownerProperties;
     
-    // 事件 - 简化事件结构，使用非索引字符串
-    event PropertyRegistered(string propertyId, string country, string metadataURI);
-    event PropertyStatusUpdated(string propertyId, uint8 oldStatus, uint8 newStatus);
-    event PropertyManagerInitialized(address indexed deployer, address indexed system, uint8 version);
-    event TokenRegistered(string propertyId, address indexed tokenAddress);
-    event ContractAuthorized(address indexed contractAddress, bool status);
-    event PropertyOwnershipTransferred(string propertyId, address oldOwner, address newOwner);
-    
-    /**
-     * @dev 修饰器：只有ADMIN角色可以调用
-     */
-    modifier onlyAdmin() {
-        require(system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有MANAGER角色可以调用
-     */
-    modifier onlyManager() {
-        require(system.checkRole(RoleConstants.MANAGER_ROLE, msg.sender), "Not manager");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有OPERATOR角色可以调用
-     */
-    modifier onlyOperator() {
-        require(system.checkRole(RoleConstants.OPERATOR_ROLE, msg.sender), "Not operator");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有UPGRADER角色可以调用
-     */
-    modifier onlyUpgrader() {
-        require(system.checkRole(RoleConstants.UPGRADER_ROLE, msg.sender), "Not upgrader");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有PAUSER角色可以调用
-     */
-    modifier onlyPauser() {
-        require(system.checkRole(RoleConstants.PAUSER_ROLE, msg.sender), "Not pauser");
-        _;
-    }
+    // 事件 - 优化事件定义
+    event PropertyRegistered(
+        string indexed propertyId,
+        string country,
+        string metadataURI,
+        uint40 registrationTime
+    );
+    event PropertyStatusUpdated(
+        string indexed propertyId,
+        uint8 oldStatus,
+        uint8 newStatus,
+        uint40 updateTime
+    );
+    event PropertyManagerInitialized(
+        address indexed deployer,
+        address indexed system,
+        uint8 version
+    );
+    event TokenRegistered(
+        string indexed propertyId,
+        address indexed tokenAddress
+    );
+    event PropertyOwnershipTransferred(
+        string indexed propertyId,
+        address indexed oldOwner,
+        address indexed newOwner
+    );
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -118,69 +99,38 @@ contract PropertyManager is
     }
     
     /**
-     * @dev 初始化函数
+     * @dev 初始化函数 - 需要ADMIN权限
      */
     function initialize(address _systemAddress) public initializer {
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
+        
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Pausable_init();
         
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
         version = 1;
         
         emit PropertyManagerInitialized(msg.sender, _systemAddress, version);
     }
     
     /**
-     * @dev 设置系统合约
-     */
-    function setSystem(address _systemAddress) external onlyAdmin {
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
-    }
-    
-    /**
-     * @dev 修饰器：只有授权合约或管理员可以调用
-     */
-    modifier onlyAuthorizedLocal() {
-        require(
-            authorizedContracts[msg.sender] || 
-            system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender) ||
-            system.checkRole(RoleConstants.MANAGER_ROLE, msg.sender),
-            "Not authorized"
-        );
-        _;
-    }
-    
-    /**
-     * @dev 授权合约调用
-     */
-    function setContractAuthorization(address contractAddress, bool authorized) external onlyAdmin {
-        authorizedContracts[contractAddress] = authorized;
-        emit ContractAuthorized(contractAddress, authorized);
-    }
-    
-    /**
-     * @dev 注册新房产
+     * @dev 注册新房产 - 需要OPERATOR权限
      */
     function registerProperty(
         string memory propertyId,
         string memory country,
         string memory metadataURI
-    )
-        external 
-        onlyManager
-        whenNotPaused 
-        nonReentrant 
-    {
-        require(bytes(propertyId).length > 0, "Property ID empty");
-        require(!_properties[propertyId].exists, "Already registered");
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        require(!_properties[propertyId].exists, "Property already exists");
         
+        uint40 registrationTime = uint40(block.timestamp);
         _properties[propertyId] = Property({
             propertyId: propertyId,
             status: uint8(PropertyStatus.Pending),
-            registrationTime: uint40(block.timestamp),
+            registrationTime: registrationTime,
             exists: true,
             country: country,
             metadataURI: metadataURI
@@ -188,23 +138,68 @@ contract PropertyManager is
         
         allPropertyIds.push(propertyId);
         
-        emit PropertyRegistered(propertyId, country, metadataURI);
+        emit PropertyRegistered(propertyId, country, metadataURI, registrationTime);
     }
     
     /**
-     * @dev 更新房产状态
+     * @dev 更新房产状态 - 需要MANAGER权限
      */
-    function updatePropertyStatus(string memory propertyId, PropertyStatus newStatus) 
-        external 
-        onlyManager
-        whenNotPaused
-    {
+    function updatePropertyStatus(
+        string memory propertyId,
+        PropertyStatus status
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
         require(_properties[propertyId].exists, "Property not exist");
         
         uint8 oldStatus = _properties[propertyId].status;
-        _properties[propertyId].status = uint8(newStatus);
+        _properties[propertyId].status = uint8(status);
         
-        emit PropertyStatusUpdated(propertyId, oldStatus, uint8(newStatus));
+        emit PropertyStatusUpdated(
+            propertyId,
+            oldStatus,
+            uint8(status),
+            uint40(block.timestamp)
+        );
+    }
+    
+    /**
+     * @dev 更新房产元数据 - 需要OPERATOR权限
+     */
+    function updatePropertyMetadata(
+        string memory propertyId,
+        string memory country,
+        string memory metadataURI
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        require(_properties[propertyId].exists, "Property not exist");
+        
+        _properties[propertyId].country = country;
+        _properties[propertyId].metadataURI = metadataURI;
+    }
+    
+    /**
+     * @dev 获取房产信息
+     */
+    function getProperty(string memory propertyId) 
+        external 
+        view 
+        returns (
+            string memory,
+            uint8,
+            uint40,
+            string memory,
+            string memory
+        ) 
+    {
+        require(_properties[propertyId].exists, "Property not exist");
+        Property memory property = _properties[propertyId];
+        return (
+            property.propertyId,
+            property.status,
+            property.registrationTime,
+            property.country,
+            property.metadataURI
+        );
     }
     
     /**
@@ -231,13 +226,13 @@ contract PropertyManager is
     }
     
     /**
-     * @dev 注册代币地址
+     * @dev 注册代币地址 - 需要OPERATOR权限
      */
     function registerTokenForProperty(string memory propertyId, address tokenAddress) 
         external 
-        onlyAuthorizedLocal
         whenNotPaused
     {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
         require(_properties[propertyId].exists, "Property not exist");
         require(tokenAddress != address(0), "Invalid token address");
         require(propertyTokens[propertyId] == address(0), "Token already registered");
@@ -264,7 +259,10 @@ contract PropertyManager is
      * @return countries 国家数组
      * @return tokenAddresses 代币地址数组
      */
-    function getPropertiesPaginated(uint256 offset, uint256 limit) 
+    function getPropertiesPaginated(
+        uint256 offset,
+        uint256 limit
+    ) 
         external 
         view 
         returns (
@@ -275,33 +273,28 @@ contract PropertyManager is
             address[] memory tokenAddresses
         ) 
     {
-        // 获取总房产数量
         totalCount = allPropertyIds.length;
         
-        // 检查边界条件
         if (offset >= totalCount) {
-            // 如果偏移量超出范围，返回空数组
             return (totalCount, new string[](0), new uint8[](0), new string[](0), new address[](0));
         }
         
-        // 计算实际返回的记录数
-        uint256 actualLimit = limit;
-        if (offset + limit > totalCount) {
-            actualLimit = totalCount - offset;
+        uint256 end = offset + limit;
+        if (end > totalCount) {
+            end = totalCount;
         }
         
-        // 初始化返回数组
-        ids = new string[](actualLimit);
-        statuses = new uint8[](actualLimit);
-        countries = new string[](actualLimit);
-        tokenAddresses = new address[](actualLimit);
+        uint256 resultCount = end - offset;
+        ids = new string[](resultCount);
+        statuses = new uint8[](resultCount);
+        countries = new string[](resultCount);
+        tokenAddresses = new address[](resultCount);
         
-        // 填充返回数据
-        for (uint256 i = 0; i < actualLimit; i++) {
+        for (uint256 i = 0; i < resultCount; i++) {
             string memory propertyId = allPropertyIds[offset + i];
-            Property storage property = _properties[propertyId];
+            Property memory property = _properties[propertyId];
             
-            ids[i] = propertyId;
+            ids[i] = property.propertyId;
             statuses[i] = property.status;
             countries[i] = property.country;
             tokenAddresses[i] = propertyTokens[propertyId];
@@ -311,154 +304,78 @@ contract PropertyManager is
     }
     
     /**
-     * @notice Gets a list of property ids with matching status
-     * @param status The status to filter by
-     * @return matchingIds Array of property ids with the given status
-     * @return tokenAddresses Array of token addresses for the matching properties
+     * @dev 暂停合约 - 需要ADMIN权限
      */
-    function getPropertiesByStatus(uint8 status) public view returns (string[] memory matchingIds, address[] memory tokenAddresses) {
-        // 找出所有匹配状态的房产
-        string[] memory tempIds = new string[](allPropertyIds.length);
-        uint256 count = 0;
-
-        for (uint256 i = 0; i < allPropertyIds.length; i++) {
-            string memory propertyId = allPropertyIds[i];
-            if (_properties[propertyId].status == status) {
-                tempIds[count] = propertyId;
-                count++;
-            }
-        }
-
-        // 创建结果数组
-        matchingIds = new string[](count);
-        tokenAddresses = new address[](count);
-
-        // 填充结果数组
-        for (uint256 i = 0; i < count; i++) {
-            matchingIds[i] = tempIds[i];
-            tokenAddresses[i] = propertyTokens[tempIds[i]];
-        }
-
-        return (matchingIds, tokenAddresses);
-    }
-    
-    /**
-     * @dev 获取房产详情
-     * @param propertyId 房产ID
-     * @return status 房产状态
-     * @return registrationTime 注册时间
-     * @return country 国家
-     * @return metadataURI 元数据URI
-     * @return tokenAddress 代币地址
-     */
-    function getPropertyDetails(string memory propertyId) 
-        external 
-        view 
-        returns (
-            PropertyStatus status,
-            uint40 registrationTime,
-            string memory country,
-            string memory metadataURI,
-            address tokenAddress
-        )
-    {
-        require(_properties[propertyId].exists, "Property not exist");
-        
-        Property storage property = _properties[propertyId];
-        
-        return (
-            PropertyStatus(property.status),
-            property.registrationTime,
-            property.country,
-            property.metadataURI,
-            propertyTokens[propertyId]
-        );
-    }
-    
-    /**
-     * @dev 暂停合约
-     */
-    function pause() external onlyAdmin {
+    function pause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _pause();
     }
     
     /**
-     * @dev 恢复合约
+     * @dev 恢复合约 - 需要ADMIN权限
      */
-    function unpause() external onlyAdmin {
+    function unpause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _unpause();
     }
     
     /**
-     * @dev Authorizes an upgrade
+     * @dev 授权合约升级 - 需要ADMIN权限
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {
+    function _authorizeUpgrade(address newImplementation) internal override {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
     /**
-     * @dev 验证房产归属权
+     * @dev 获取版本号
      */
-    function verifyPropertyOwnership(string memory propertyId, address owner) 
-        external 
-        view 
-        returns (bool)
-    {
-        // 首先检查房产是否存在
-        if (!_properties[propertyId].exists) {
-            return false;
-        }
-        
-        // 检查房产状态是否已批准
-        if (_properties[propertyId].status != uint8(PropertyStatus.Approved)) {
-            return false;
-        }
-        
-        // 验证所有权
-        return propertyOwners[propertyId] == owner;
-    }
-
-    /**
-     * @dev 转移房产归属权
-     */
-    function transferPropertyOwnership(string memory propertyId, address newOwner) 
-        external 
-        onlyManager
-        whenNotPaused 
-        nonReentrant 
-    {
-        require(_properties[propertyId].exists, "Property not exist");
-        require(_properties[propertyId].status == uint8(PropertyStatus.Approved), "Property not approved");
-        require(newOwner != address(0), "Invalid new owner");
-        
-        address currentOwner = propertyOwners[propertyId];
-        
-        // 更新所有权
-        propertyOwners[propertyId] = newOwner;
-        
-        // 从当前所有者的属性列表中移除
-        if (currentOwner != address(0)) {
-            _removePropertyFromOwner(propertyId, currentOwner);
-        }
-        
-        // 添加到新所有者的属性列表中
-        ownerProperties[newOwner].push(propertyId);
-        
-        emit PropertyOwnershipTransferred(propertyId, currentOwner, newOwner);
+    function getVersion() external view returns (uint8) {
+        return version;
     }
     
     /**
-     * @dev 从所有者的属性列表中移除属性
+     * @dev 转移房产所有权 - 需要MANAGER权限
      */
-    function _removePropertyFromOwner(string memory propertyId, address owner) private {
-        string[] storage properties = ownerProperties[owner];
-        for (uint i = 0; i < properties.length; i++) {
-            if (keccak256(bytes(properties[i])) == keccak256(bytes(propertyId))) {
-                // 将最后一个元素移动到当前位置并删除最后一个元素
-                properties[i] = properties[properties.length - 1];
-                properties.pop();
-                break;
+    function transferPropertyOwnership(
+        string memory propertyId,
+        address newOwner
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        require(_properties[propertyId].exists, "Property not exist");
+        require(newOwner != address(0), "Invalid new owner address");
+        
+        address oldOwner = propertyOwners[propertyId];
+        if (oldOwner != address(0)) {
+            // 从旧所有者列表中移除
+            string[] storage oldOwnerProperties = ownerProperties[oldOwner];
+            for (uint256 i = 0; i < oldOwnerProperties.length; i++) {
+                if (keccak256(bytes(oldOwnerProperties[i])) == keccak256(bytes(propertyId))) {
+                    oldOwnerProperties[i] = oldOwnerProperties[oldOwnerProperties.length - 1];
+                    oldOwnerProperties.pop();
+                    break;
+                }
             }
         }
+        
+        // 更新所有权
+        propertyOwners[propertyId] = newOwner;
+        ownerProperties[newOwner].push(propertyId);
+        
+        emit PropertyOwnershipTransferred(propertyId, oldOwner, newOwner);
+    }
+    
+    /**
+     * @dev 获取所有者拥有的所有房产ID
+     */
+    function getPropertiesByOwner(address owner) external view returns (string[] memory) {
+        return ownerProperties[owner];
+    }
+    
+    /**
+     * @dev 检查地址是否是房产所有者
+     */
+    function isPropertyOwner(string memory propertyId, address owner) external view returns (bool) {
+        return propertyOwners[propertyId] == owner;
     }
 } 

@@ -110,39 +110,17 @@ async function deploySystemStep(signer) {
   // 从环境变量读取或使用默认值
   const maxTradeAmount = process.env.MAX_TRADE_AMOUNT || "1000"; // 默认为1000
   const minTradeAmount = process.env.MIN_TRADE_AMOUNT || "0.01"; // 默认为0.01
-  
-  // 设置最大交易金额
-  console.log(`INFO: Setting max trade amount to ${maxTradeAmount}`);
-  let tx = await tradingManager.setMaxTradeAmount(ethers.parseEther(maxTradeAmount.toString()));
-  await tx.wait();
-  
-  // 设置最小交易金额
-  console.log(`INFO: Setting min trade amount to ${minTradeAmount}`);
-  tx = await tradingManager.setMinTradeAmount(ethers.parseEther(minTradeAmount.toString()));
-  await tx.wait();
-  
-  // 使用环境变量或默认值设置冷却期
   const cooldownPeriod = process.env.COOLDOWN_PERIOD || "3600"; // 默认为1小时(3600秒)
-  console.log(`INFO: Setting cooldown period to ${cooldownPeriod} seconds`);
-  tx = await tradingManager.setCooldownPeriod(cooldownPeriod);
-  await tx.wait();
-  
-  // 设置交易管理器参数
-  logger.info("Setting TradingManager parameters...");
-  tx = await tradingManager.setFeeRate(initParams.trading.tradingFeeRate);
-  await tx.wait();
-  tx = await tradingManager.setFeeReceiver(initParams.trading.tradingFeeReceiver);
-  await tx.wait();
   
   // 部署 RewardManager
   logger.info("Deploying RewardManager...");
   const RewardManager = await ethers.getContractFactory("RewardManager");
   const rewardManager = await upgrades.deployProxy(RewardManager, [
-    signer.address,
     initParams.reward.platformFeeRate,
     initParams.reward.maintenanceFeeRate,
     initParams.reward.rewardFeeReceiver,
-    ethers.parseEther(initParams.reward.minDistributionThreshold.toString())
+    ethers.parseEther(initParams.reward.minDistributionThreshold.toString()),
+    signer.address  // 系统地址 - 这里暂时用部署者地址，后面会更新
   ], {
     kind: "uups",
   });
@@ -159,7 +137,7 @@ async function deploySystemStep(signer) {
     initParams.tokenFactory.symbol,
     ethers.parseEther(initParams.tokenFactory.initialSupply.toString()),
     signer.address,
-    null // No more roleManager parameter
+    signer.address  // Add a placeholder for systemAddress, will update it after system is deployed
   ], {
     kind: "uups",
   });
@@ -171,10 +149,7 @@ async function deploySystemStep(signer) {
   logger.info("Deploying System...");
   const System = await ethers.getContractFactory("RealEstateSystem");
   const system = await upgrades.deployProxy(System, [
-    signer.address,  // Now deployer is the default admin
-    propertyManagerAddress,
-    tradingManagerAddress,
-    rewardManagerAddress
+    signer.address  // Only pass the admin address
   ], {
     kind: "uups",
   });
@@ -184,7 +159,7 @@ async function deploySystemStep(signer) {
   
   // 更新所有合约的系统地址
   logger.info("Updating system address in all contracts...");
-  tx = await propertyManager.setSystem(systemAddress);
+  let tx = await propertyManager.setSystem(systemAddress);
   await tx.wait();
   
   tx = await tradingManager.setSystem(systemAddress);
@@ -193,12 +168,40 @@ async function deploySystemStep(signer) {
   tx = await rewardManager.setSystem(systemAddress);
   await tx.wait();
   
+  // Update PropertyToken's system address
+  logger.info("Updating PropertyToken's system address...");
+  tx = await propertyToken.setSystem(systemAddress);
+  await tx.wait();
+  
+  // 现在设置交易管理器参数（在系统设置之后）
+  logger.info("Setting TradingManager parameters...");
+  
+  // 设置最大交易金额
+  console.log(`INFO: Setting max trade amount to ${maxTradeAmount}`);
+  tx = await tradingManager.setMaxTradeAmount(ethers.parseEther(maxTradeAmount.toString()));
+  await tx.wait();
+  
+  // 设置最小交易金额
+  console.log(`INFO: Setting min trade amount to ${minTradeAmount}`);
+  tx = await tradingManager.setMinTradeAmount(ethers.parseEther(minTradeAmount.toString()));
+  await tx.wait();
+  
+  // 设置冷却期
+  console.log(`INFO: Setting cooldown period to ${cooldownPeriod} seconds`);
+  tx = await tradingManager.setCooldownPeriod(cooldownPeriod);
+  await tx.wait();
+  
+  // 设置交易费率和接收者
+  tx = await tradingManager.setFeeRate(initParams.trading.tradingFeeRate);
+  await tx.wait();
+  tx = await tradingManager.setFeeReceiver(initParams.trading.tradingFeeReceiver);
+  await tx.wait();
+  
   // 部署 Facade
   logger.info("Deploying RealEstateFacade...");
   const RealEstateFacade = await ethers.getContractFactory("RealEstateFacade");
   const realEstateFacade = await upgrades.deployProxy(RealEstateFacade, [
     systemAddress,
-    signer.address, // Now deployer is the default admin instead of roleManager
     propertyManagerAddress,
     tradingManagerAddress,
     rewardManagerAddress
@@ -346,7 +349,7 @@ async function main() {
     const deploymentInfo = {
       timestamp: new Date().toISOString(),
       network: hre.network.name,
-      deployer: await hre.ethers.provider.getSigner().getAddress(),
+      deployer: (await ethers.getSigners())[0].address,
       contracts: {},
       initializationParams: getContractInitParams(),
       systemStatus: "未知",

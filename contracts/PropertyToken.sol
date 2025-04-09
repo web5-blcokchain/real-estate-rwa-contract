@@ -11,6 +11,14 @@ import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
 import "./utils/SafeMath.sol";
 
+/**
+ * @title PropertyToken
+ * @dev 优化的房产代币合约，继承自ERC20标准
+ * 权限说明：
+ * - ADMIN: 最高权限，包含所有权限
+ * - MANAGER: 管理权限，包含OPERATOR权限
+ * - OPERATOR: 基础操作权限
+ */
 contract PropertyToken is 
     Initializable,
     UUPSUpgradeable,
@@ -24,8 +32,8 @@ contract PropertyToken is
     // Version control - using uint8 to save gas
     uint8 private constant VERSION = 1;
 
-    // Property ID hash
-    bytes32 public propertyIdHash;
+    // Property ID
+    string public propertyId;
 
     // Maximum supply
     uint256 public maxSupply;
@@ -36,120 +44,130 @@ contract PropertyToken is
     // System contract reference
     RealEstateSystem public system;
 
-    // Events
-    event Blacklisted(address indexed account);
-    event UnBlacklisted(address indexed account);
-    event MaxSupplyUpdated(uint256 newMaxSupply);
-    event SnapshotCreated(uint256 snapshotId);
+    // 事件 - 优化事件定义
+    event Blacklisted(
+        address indexed account,
+        uint40 updateTime
+    );
+    event UnBlacklisted(
+        address indexed account,
+        uint40 updateTime
+    );
+    event MaxSupplyUpdated(
+        uint256 oldMaxSupply,
+        uint256 newMaxSupply,
+        uint40 updateTime
+    );
+    event SnapshotCreated(
+        uint256 indexed snapshotId,
+        uint40 createTime
+    );
+    event PropertyTokenInitialized(
+        string indexed propertyId,
+        string name,
+        string symbol,
+        uint256 initialSupply,
+        address indexed admin,
+        address indexed system,
+        uint40 initTime
+    );
 
     /**
-     * @dev 修饰器：只有ADMIN角色可以调用
-     */
-    modifier onlyAdmin() {
-        require(system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有OPERATOR角色可以调用
-     */
-    modifier onlyOperator() {
-        require(system.checkRole(RoleConstants.OPERATOR_ROLE, msg.sender), "Not operator");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有UPGRADER角色可以调用
-     */
-    modifier onlyUpgrader() {
-        require(system.checkRole(RoleConstants.UPGRADER_ROLE, msg.sender), "Not upgrader");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有PAUSER角色可以调用
-     */
-    modifier onlyPauser() {
-        require(system.checkRole(RoleConstants.PAUSER_ROLE, msg.sender), "Not pauser");
-        _;
-    }
-
-    /**
-     * @dev Initializes the contract with property details and initial supply
+     * @dev Initializes the contract with property details and initial supply - 需要ADMIN权限
      */
     function initialize(
-        bytes32 _propertyIdHash,
+        string memory _propertyId,
         string memory _name,
         string memory _symbol,
         uint256 _initialSupply,
         address _admin,
         address _systemAddress
     ) public initializer {
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
+        
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
         __ERC20Snapshot_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
 
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
-
-        propertyIdHash = _propertyIdHash;
+        propertyId = _propertyId;
         uint256 defaultMaxSupply = 1000000000;
         maxSupply = defaultMaxSupply.mul(10**decimals()); // Default 1 billion tokens
 
         if (_initialSupply > 0) {
             _mint(_admin, _initialSupply);
         }
+
+        emit PropertyTokenInitialized(
+            _propertyId,
+            _name,
+            _symbol,
+            _initialSupply,
+            _admin,
+            _systemAddress,
+            uint40(block.timestamp)
+        );
     }
 
     /**
-     * @dev Creates a snapshot of the current token balances
+     * @dev Creates a snapshot of the current token balances - 需要OPERATOR权限
      */
-    function snapshot() external onlyOperator returns (uint256) {
+    function snapshot() external returns (uint256) {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
         uint256 snapshotId = _snapshot();
-        emit SnapshotCreated(snapshotId);
+        emit SnapshotCreated(snapshotId, uint40(block.timestamp));
         return snapshotId;
     }
 
     /**
-     * @dev Updates the maximum supply of tokens
+     * @dev Updates the maximum supply of tokens - 需要ADMIN权限
      */
-    function updateMaxSupply(uint256 _newMaxSupply) external onlyAdmin {
+    function updateMaxSupply(uint256 _newMaxSupply) external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(_newMaxSupply >= totalSupply(), "New max supply must be >= current total supply");
+        
+        uint256 oldMaxSupply = maxSupply;
         maxSupply = _newMaxSupply;
-        emit MaxSupplyUpdated(_newMaxSupply);
+        
+        emit MaxSupplyUpdated(oldMaxSupply, _newMaxSupply, uint40(block.timestamp));
     }
 
     /**
-     * @dev Adds an account to the blacklist
+     * @dev Adds an account to the blacklist - 需要MANAGER权限
      */
-    function blacklist(address _account) external onlyAdmin {
+    function blacklist(address _account) external {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
         require(!blacklisted[_account], "Account already blacklisted");
         blacklisted[_account] = true;
-        emit Blacklisted(_account);
+        emit Blacklisted(_account, uint40(block.timestamp));
     }
 
     /**
-     * @dev Removes an account from the blacklist
+     * @dev Removes an account from the blacklist - 需要MANAGER权限
      */
-    function unBlacklist(address _account) external onlyAdmin {
+    function unBlacklist(address _account) external {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
         require(blacklisted[_account], "Account not blacklisted");
         blacklisted[_account] = false;
-        emit UnBlacklisted(_account);
+        emit UnBlacklisted(_account, uint40(block.timestamp));
     }
 
     /**
-     * @dev Pauses token transfers
+     * @dev Pauses token transfers - 需要ADMIN权限
      */
-    function pause() external onlyPauser {
+    function pause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _pause();
     }
 
     /**
-     * @dev Unpauses token transfers
+     * @dev Unpauses token transfers - 需要ADMIN权限
      */
-    function unpause() external onlyPauser {
+    function unpause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _unpause();
     }
 
@@ -167,9 +185,10 @@ contract PropertyToken is
     }
 
     /**
-     * @dev Function that should revert when msg.sender is not authorized to upgrade the contract
+     * @dev Function that should revert when msg.sender is not authorized to upgrade the contract - 需要ADMIN权限
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {
+    function _authorizeUpgrade(address newImplementation) internal override {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(!system.emergencyMode(), "Emergency mode active");
     }
 
@@ -178,6 +197,15 @@ contract PropertyToken is
      */
     function getVersion() external pure returns (uint8) {
         return VERSION;
+    }
+
+    /**
+     * @dev Updates the system contract reference - 需要ADMIN权限
+     */
+    function setSystem(address _systemAddress) external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
     }
 
     /**

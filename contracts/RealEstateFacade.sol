@@ -19,6 +19,10 @@ import "./utils/SafeMath.sol";
 /**
  * @title RealEstateFacade
  * @dev 不动产系统的业务操作门面合约，提供统一的业务流程接口
+ * 权限说明：
+ * - ADMIN: 最高权限，包含所有权限
+ * - MANAGER: 管理权限，包含OPERATOR权限
+ * - OPERATOR: 基础操作权限
  */
 contract RealEstateFacade is 
     Initializable,
@@ -47,72 +51,98 @@ contract RealEstateFacade is
     RewardManager public rewardManager;
     
     // 事件
-    event PropertyListed(bytes32 indexed propertyIdHash, address indexed tokenAddress);
-    event TradeExecuted(uint256 indexed orderId, address indexed buyer, address indexed seller);
-    event RewardsClaimed(address indexed user, uint256 indexed distributionId, uint256 amount);
-    event PropertyValuationUpdated(bytes32 indexed propertyIdHash, uint256 oldValue, uint256 newValue);
-    event TradingLimitsUpdated(address indexed tokenAddress, uint256 minAmount, uint256 maxAmount);
-    event OrderCreated(uint256 indexed orderId, address indexed seller, address indexed token, uint256 amount, uint256 price);
-    event OrderCancelled(uint256 indexed orderId, address indexed seller);
-    event DistributionCreated(uint256 indexed distributionId, bytes32 indexed propertyIdHash, uint256 amount, string description);
-    event PropertyStatusUpdated(bytes32 indexed propertyIdHash, uint8 oldStatus, uint8 newStatus);
-    event SystemContractUpdated(address indexed oldSystem, address indexed newSystem);
-    event TokenSellOrderCreated(address indexed seller, address indexed token, uint256 amount, uint256 price, uint256 orderId);
-    event DirectSellOrderCreated(address indexed seller, bytes32 indexed propertyIdHash, address indexed token, uint256 amount, uint256 price, uint256 orderId);
+    event PropertyListed(
+        string indexed propertyId,
+        address indexed tokenAddress,
+        uint40 listTime
+    );
+    event TradeExecuted(
+        uint256 indexed orderId,
+        address indexed buyer,
+        address indexed seller,
+        uint40 executeTime
+    );
+    event RewardsClaimed(
+        address indexed user,
+        uint256 indexed distributionId,
+        uint256 amount,
+        uint40 claimTime
+    );
+    event PropertyValuationUpdated(
+        string indexed propertyId,
+        uint256 oldValue,
+        uint256 newValue,
+        uint40 updateTime
+    );
+    event TradingLimitsUpdated(
+        address indexed tokenAddress,
+        uint256 minAmount,
+        uint256 maxAmount,
+        uint40 updateTime
+    );
+    event OrderCreated(
+        uint256 indexed orderId,
+        address indexed seller,
+        address indexed token,
+        uint256 amount,
+        uint256 price,
+        uint40 createTime
+    );
+    event OrderCancelled(
+        uint256 indexed orderId,
+        address indexed seller,
+        uint40 cancelTime
+    );
+    event DistributionCreated(
+        uint256 indexed distributionId,
+        string indexed propertyId,
+        uint256 amount,
+        string description,
+        uint40 createTime
+    );
+    event PropertyStatusUpdated(
+        string indexed propertyId,
+        uint8 oldStatus,
+        uint8 newStatus,
+        uint40 updateTime
+    );
+    event SystemContractUpdated(
+        address indexed oldSystem,
+        address indexed newSystem,
+        uint40 updateTime
+    );
+    event TokenSellOrderCreated(
+        address indexed seller,
+        address indexed token,
+        uint256 amount,
+        uint256 price,
+        uint256 orderId,
+        uint40 createTime
+    );
+    event DirectSellOrderCreated(
+        address indexed seller,
+        string indexed propertyId,
+        address indexed token,
+        uint256 amount,
+        uint256 price,
+        uint256 orderId,
+        uint40 createTime
+    );
     event FacadeInitialized(
         address indexed deployer,
         address indexed system,
         address propertyManager,
         address tradingManager,
-        address rewardManager
+        address rewardManager,
+        uint40 initTime
     );
     event PropertyRegistered(
-        bytes32 indexed propertyIdHash,
-        string propertyId,
+        string indexed propertyId,
         string country,
         string metadataURI,
-        address tokenAddress
+        address tokenAddress,
+        uint40 registerTime
     );
-    
-    /**
-     * @dev 修饰器：只有ADMIN角色可以调用
-     */
-    modifier onlyAdmin() {
-        require(system.checkRole(RoleConstants.ADMIN_ROLE, msg.sender), "Not admin");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有MANAGER角色可以调用
-     */
-    modifier onlyManager() {
-        require(system.checkRole(RoleConstants.MANAGER_ROLE, msg.sender), "Not manager");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有OPERATOR角色可以调用
-     */
-    modifier onlyOperator() {
-        require(system.checkRole(RoleConstants.OPERATOR_ROLE, msg.sender), "Not operator");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有UPGRADER角色可以调用
-     */
-    modifier onlyUpgrader() {
-        require(system.checkRole(RoleConstants.UPGRADER_ROLE, msg.sender), "Not upgrader");
-        _;
-    }
-    
-    /**
-     * @dev 修饰器：只有PAUSER角色可以调用
-     */
-    modifier onlyPauser() {
-        require(system.checkRole(RoleConstants.PAUSER_ROLE, msg.sender), "Not pauser");
-        _;
-    }
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -120,7 +150,7 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev Initializes the contract
+     * @dev Initializes the contract - 需要ADMIN权限
      */
     function initialize(
         address _systemAddress,
@@ -128,12 +158,13 @@ contract RealEstateFacade is
         address payable _tradingManager,
         address payable _rewardManager
     ) public initializer {
+        require(_systemAddress != address(0), "System address cannot be zero");
+        system = RealEstateSystem(_systemAddress);
+        
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         __ReentrancyGuard_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
-        
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
         
         propertyManager = PropertyManager(_propertyManager);
         tradingManager = TradingManager(payable(_tradingManager));
@@ -144,50 +175,55 @@ contract RealEstateFacade is
             _systemAddress,
             _propertyManager,
             _tradingManager,
-            _rewardManager
+            _rewardManager,
+            uint40(block.timestamp)
         );
     }
     
     /**
-     * @dev 设置系统合约
+     * @dev 设置系统合约 - 需要ADMIN权限
      */
-    function setSystem(address _systemAddress) external onlyAdmin {
+    function setSystem(address _systemAddress) external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         address oldSystem = address(system);
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
-        emit SystemContractUpdated(oldSystem, _systemAddress);
+        emit SystemContractUpdated(oldSystem, _systemAddress, uint40(block.timestamp));
     }
     
     /**
-     * @dev Pauses all operations
+     * @dev 暂停所有操作 - 需要ADMIN权限
      */
-    function pause() external onlyPauser {
+    function pause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _pause();
     }
     
     /**
-     * @dev Unpauses all operations
+     * @dev 恢复所有操作 - 需要ADMIN权限
      */
-    function unpause() external onlyPauser {
+    function unpause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         _unpause();
     }
     
     /**
-     * @dev Function that should revert when msg.sender is not authorized to upgrade the contract
+     * @dev 授权合约升级 - 需要ADMIN权限
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {
+    function _authorizeUpgrade(address newImplementation) internal override {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
     /**
-     * @dev Returns the version of the contract
+     * @dev 获取合约版本
      */
     function getVersion() external pure returns (uint8) {
         return VERSION;
     }
     
     /**
-     * @dev 修饰器：检查系统状态
+     * @dev 检查系统状态
      */
     modifier whenSystemActive() {
         require(system.getSystemStatus() == RealEstateSystem.SystemStatus.Active, "System not active");
@@ -195,7 +231,7 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev 注册新房产并创建对应的代币
+     * @dev 注册新房产并创建对应的代币 - 需要ADMIN权限
      */
     function registerPropertyAndCreateToken(
         string memory propertyId,
@@ -205,19 +241,17 @@ contract RealEstateFacade is
         string memory tokenSymbol,
         uint256 initialSupply,
         address propertyTokenImplementation
-    ) public onlyAdmin whenNotPaused nonReentrant returns (bytes32, address) {
+    ) public whenNotPaused nonReentrant returns (address) {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(propertyTokenImplementation != address(0), "Invalid implementation");
         
         // 注册房产
         propertyManager.registerProperty(propertyId, country, metadataURI);
         
-        // 直接计算哈希值，不使用已移除的propertyIdToHash
-        bytes32 propertyIdHash = keccak256(abi.encodePacked(propertyId));
-        
         // 部署代理合约
         bytes memory initData = abi.encodeWithSelector(
             PropertyToken(address(0)).initialize.selector,
-            propertyIdHash,
+            propertyId,
             tokenName,
             tokenSymbol,
             initialSupply,
@@ -233,365 +267,230 @@ contract RealEstateFacade is
             initData
         );
         
-        // 记录代币地址
         address tokenAddress = address(proxy);
         
-        // 注册代币和房产的关联
+        // 注册代币地址
         propertyManager.registerTokenForProperty(propertyId, tokenAddress);
         
-        // 触发事件
         emit PropertyRegistered(
-            propertyIdHash,
             propertyId,
             country,
             metadataURI,
-            tokenAddress
+            tokenAddress,
+            uint40(block.timestamp)
         );
         
-        return (propertyIdHash, tokenAddress);
+        return tokenAddress;
     }
     
     /**
-     * @dev 设置代币工厂模板
-     */
-    function setPropertyTokenContract(address _tokenContract) external onlyAdmin {
-        require(_tokenContract != address(0), "Invalid contract address");
-        propertyTokenContract = PropertyToken(_tokenContract);
-    }
-    
-    /**
-     * @dev 更新房产状态
-     */
-    function updatePropertyStatus(string memory propertyId, uint8 status) 
-        external 
-        onlyManager
-        whenNotPaused 
-    {
-        bytes32 propertyIdHash = keccak256(abi.encodePacked(propertyId));
-        uint8 oldStatus = uint8(propertyManager.getPropertyStatus(propertyId));
-        
-        propertyManager.updatePropertyStatus(propertyId, PropertyManager.PropertyStatus(status));
-        
-        emit PropertyStatusUpdated(propertyIdHash, oldStatus, status);
-    }
-    
-    /**
-     * @dev 创建代币出售订单
+     * @dev 创建代币销售订单 - 需要OPERATOR权限
      */
     function createTokenSellOrder(
         address token,
         uint256 amount,
         uint256 price
-    ) 
-        external 
-        whenNotPaused 
-        nonReentrant
-        onlyOperator
-        returns (uint256) 
-    {
-        // 验证代币是否为有效房产代币
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        require(token != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        require(price > 0, "Price must be greater than 0");
+        
+        // 获取房产ID
         PropertyToken tokenContract = PropertyToken(token);
-        bytes32 propertyIdHash = tokenContract.propertyIdHash();
+        string memory propertyId = tokenContract.propertyId();
         
-        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyIdHash);
+        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyId);
         
-        emit TokenSellOrderCreated(msg.sender, token, amount, price, orderId);
-        
-        return orderId;
-    }
-    
-    /**
-     * @dev 取消订单
-     */
-    function cancelOrder(uint256 orderId) 
-        external 
-        whenNotPaused 
-        nonReentrant
-        onlyOperator
-    {
-        tradingManager.cancelOrder(orderId);
-        
-        emit OrderCancelled(orderId, msg.sender);
-    }
-    
-    /**
-     * @dev 执行交易
-     */
-    function executeOrder(uint256 orderId) 
-        external 
-        payable
-        whenNotPaused 
-        nonReentrant
-        returns (uint256) 
-    {
-        uint256 tradeId = tradingManager.executeOrder{value: msg.value}(orderId);
-        
-        (
-            uint256 id,
-            uint256 orderId,
-            address buyer,
-            address seller,
-            address token,
-            uint256 amount,
-            uint256 price,
-            ,
-            bytes32 propertyIdHash
-        ) = tradingManager.getTrade(tradeId);
-        
-        emit TradeExecuted(id, buyer, seller);
-        
-        return tradeId;
-    }
-    
-    /**
-     * @dev 直接创建并执行代币出售
-     */
-    function directSell(
-        address token,
-        uint256 amount,
-        uint256 price,
-        address buyer
-    ) 
-        external 
-        whenNotPaused 
-        nonReentrant
-        onlyOperator
-        returns (uint256) 
-    {
-        // 验证代币是否为有效房产代币
-        PropertyToken tokenContract = PropertyToken(token);
-        bytes32 propertyIdHash = tokenContract.propertyIdHash();
-        
-        // 创建订单
-        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyIdHash);
-        
-        // 记录原始卖家
-        address seller = msg.sender;
-        
-        // 由买家完成交易
-        // TODO: 实现让指定买家完成交易的逻辑
-        
-        emit DirectSellOrderCreated(seller, propertyIdHash, token, amount, price, orderId);
-        
-        return orderId;
-    }
-    
-    /**
-     * @dev 创建租金或分红分配
-     */
-    function createDistribution(
-        bytes32 propertyIdHash,
-        address tokenAddress,
-        uint256 amount,
-        string memory description,
-        uint8 distributionType,
-        address paymentToken
-    ) 
-        external 
-        payable
-        whenNotPaused 
-        nonReentrant
-        onlyManager
-        returns (uint256) 
-    {
-        // 验证代币地址与房产匹配
-        PropertyToken token = PropertyToken(tokenAddress);
-        require(token.propertyIdHash() == propertyIdHash, "Token does not match property");
-        
-        // 创建快照
-        uint256 snapshotId = token.snapshot();
-        
-        // 创建分配
-        uint256 distributionId = rewardManager.createDistribution{value: msg.value}(
-            propertyIdHash,
-            tokenAddress,
-            snapshotId,
+        emit TokenSellOrderCreated(
+            msg.sender,
+            token,
             amount,
-            description,
-            RewardManager.DistributionType(distributionType),
-            paymentToken
+            price,
+            orderId,
+            uint40(block.timestamp)
         );
         
-        emit DistributionCreated(distributionId, propertyIdHash, amount, description);
+        return orderId;
+    }
+    
+    /**
+     * @dev 创建直接销售订单 - 需要OPERATOR权限
+     */
+    function createDirectSellOrder(
+        string memory propertyId,
+        address token,
+        uint256 amount,
+        uint256 price
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        require(token != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        require(price > 0, "Price must be greater than 0");
+        
+        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyId);
+        
+        emit DirectSellOrderCreated(
+            msg.sender,
+            propertyId,
+            token,
+            amount,
+            price,
+            orderId,
+            uint40(block.timestamp)
+        );
+        
+        return orderId;
+    }
+    
+    /**
+     * @dev 更新房产估值 - 需要MANAGER权限
+     */
+    function updatePropertyValuation(
+        string memory propertyId,
+        uint256 newValue
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        require(newValue > 0, "Invalid value");
+        
+        // 获取当前估值
+        address tokenAddress = propertyManager.propertyTokens(propertyId);
+        require(tokenAddress != address(0), "Token not found");
+        uint256 oldValue = tradingManager.getTokenPrice(tokenAddress);
+        
+        // 更新估值
+        tradingManager.setTokenPrice(tokenAddress, newValue);
+        
+        emit PropertyValuationUpdated(
+            propertyId,
+            oldValue,
+            newValue,
+            uint40(block.timestamp)
+        );
+    }
+    
+    /**
+     * @dev 更新交易限制 - 需要MANAGER权限
+     */
+    function updateTradingLimits(
+        address tokenAddress,
+        uint256 minAmount,
+        uint256 maxAmount
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        require(tokenAddress != address(0), "Invalid token address");
+        require(minAmount <= maxAmount, "Invalid limits");
+        
+        tradingManager.setMinTradeAmount(minAmount);
+        tradingManager.setMaxTradeAmount(maxAmount);
+        
+        emit TradingLimitsUpdated(
+            tokenAddress,
+            minAmount,
+            maxAmount,
+            uint40(block.timestamp)
+        );
+    }
+    
+    /**
+     * @dev 创建奖励分配 - 需要MANAGER权限
+     */
+    function createDistribution(
+        string memory propertyId,
+        uint256 amount,
+        string memory description
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        require(amount > 0, "Amount must be greater than 0");
+        
+        uint256 distributionId = rewardManager.createDistribution(
+            propertyId,
+            amount,
+            description
+        );
+        
+        emit DistributionCreated(
+            distributionId,
+            propertyId,
+            amount,
+            description,
+            uint40(block.timestamp)
+        );
         
         return distributionId;
     }
     
     /**
-     * @dev 提取分配
+     * @dev 领取奖励 - 需要OPERATOR权限
      */
-    function withdrawDistribution(uint256 distributionId)
-        external
-        whenNotPaused
-        nonReentrant
-        returns (uint256)
-    {
-        uint256 amount = rewardManager.withdraw(distributionId);
+    function claimRewards(
+        uint256 distributionId,
+        address user,
+        uint256 amount
+    ) external whenNotPaused nonReentrant {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        require(user != address(0), "Invalid user address");
+        require(amount > 0, "Amount must be greater than 0");
         
-        emit RewardsClaimed(msg.sender, distributionId, amount);
+        rewardManager.withdraw(distributionId, user, amount);
         
-        return amount;
+        emit RewardsClaimed(
+            user,
+            distributionId,
+            amount,
+            uint40(block.timestamp)
+        );
     }
     
     /**
-     * @dev 一键创建房产、代币和初始分配
+     * @dev 更新房产状态 - 需要MANAGER权限
      */
-    function oneClickPropertySetup(
+    function updatePropertyStatus(
         string memory propertyId,
-        string memory country,
-        string memory metadataURI,
-        string memory tokenName,
-        string memory tokenSymbol,
-        uint256 initialSupply,
-        address propertyTokenImplementation,
-        uint256 initialDistributionAmount,
-        string memory distributionDescription,
-        address paymentToken
-    ) 
-        external 
-        payable
-        onlyAdmin
-        whenNotPaused 
-        nonReentrant
-        returns (bytes32, address, uint256) 
-    {
-        // 1. 注册房产并创建代币
-        (bytes32 propertyIdHash, address tokenAddress) = registerPropertyAndCreateToken(
+        uint8 newStatus
+    ) external whenNotPaused {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        
+        uint8 oldStatus = uint8(propertyManager.getPropertyStatus(propertyId));
+        propertyManager.updatePropertyStatus(propertyId, PropertyManager.PropertyStatus(newStatus));
+        
+        emit PropertyStatusUpdated(
             propertyId,
-            country,
-            metadataURI,
-            tokenName,
-            tokenSymbol,
-            initialSupply,
-            propertyTokenImplementation
+            oldStatus,
+            newStatus,
+            uint40(block.timestamp)
         );
-        
-        // 2. 创建初始分配
-        uint256 distributionId = 0;
-        if (initialDistributionAmount > 0) {
-            // 创建快照
-            PropertyToken token = PropertyToken(tokenAddress);
-            uint256 snapshotId = token.snapshot();
-            
-            // 创建分配
-            distributionId = rewardManager.createDistribution{value: msg.value}(
-                propertyIdHash,
-                tokenAddress,
-                snapshotId,
-                initialDistributionAmount,
-                distributionDescription,
-                RewardManager.DistributionType(0), // Dividend
-                paymentToken
-            );
-            
-            emit DistributionCreated(distributionId, propertyIdHash, initialDistributionAmount, distributionDescription);
-        }
-        
-        return (propertyIdHash, tokenAddress, distributionId);
     }
     
     /**
-     * @dev 获取房产详情（组合查询）
+     * @dev 获取房产代币地址
      */
-    function getPropertyFullDetails(string memory propertyId) 
-        external 
-        view 
-        returns (
-            bytes32 propertyIdHash,
-            uint8 status,
-            uint40 registrationTime,
-            string memory country,
-            string memory metadataURI,
-            address tokenAddress,
-            uint256 tokenTotalSupply,
-            uint256 tokenMaxSupply
-        ) 
-    {
-        // 从PropertyManager获取基本信息
-        (
-            PropertyManager.PropertyStatus propertyStatus,
-            uint40 propRegistrationTime,
-            string memory propCountry,
-            string memory propMetadataURI,
-            address propTokenAddress
-        ) = propertyManager.getPropertyDetails(propertyId);
-        
-        propertyIdHash = keccak256(abi.encodePacked(propertyId));
-        status = uint8(propertyStatus);
-        registrationTime = propRegistrationTime;
-        country = propCountry;
-        metadataURI = propMetadataURI;
-        tokenAddress = propTokenAddress;
-        
-        // 如果存在代币，获取代币信息
-        if (propTokenAddress != address(0)) {
-            PropertyToken token = PropertyToken(propTokenAddress);
-            tokenTotalSupply = token.totalSupply();
-            tokenMaxSupply = token.maxSupply();
-        }
-        
+    function getPropertyTokenAddress(string memory propertyId) external view returns (address) {
+        return propertyManager.propertyTokens(propertyId);
+    }
+    
+    /**
+     * @dev 获取房产状态
+     */
+    function getPropertyStatus(string memory propertyId) external view returns (uint8) {
+        return uint8(propertyManager.getPropertyStatus(propertyId));
+    }
+    
+    /**
+     * @dev 获取交易限制
+     */
+    function getTradingLimits(address tokenAddress) external view returns (uint256, uint256) {
         return (
-            propertyIdHash,
-            status,
-            registrationTime,
-            country,
-            metadataURI,
-            tokenAddress,
-            tokenTotalSupply,
-            tokenMaxSupply
+            tradingManager.getMinTradeAmount(),
+            tradingManager.getMaxTradeAmount()
         );
     }
     
     /**
-     * @dev 获取用户的代币余额
+     * @dev 获取房产估值
      */
-    function getUserTokenBalances(address user, address[] memory tokens) 
-        external 
-        view 
-        returns (uint256[] memory balances) 
-    {
-        balances = new uint256[](tokens.length);
-        
-        for (uint256 i = 0; i < tokens.length; i++) {
-            if (tokens[i] != address(0)) {
-                balances[i] = PropertyToken(tokens[i]).balanceOf(user);
-            }
-        }
-        
-        return balances;
-    }
-    
-    /**
-     * @dev 获取用户的分配份额
-     */
-    function getUserDistributionShares(address user, uint256[] memory distributionIds) 
-        external 
-        view 
-        returns (uint256[] memory shares, bool[] memory withdrawn) 
-    {
-        uint256 length = distributionIds.length;
-        shares = new uint256[](length);
-        withdrawn = new bool[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            (shares[i], withdrawn[i]) = rewardManager.calculateUserShare(distributionIds[i], user);
-        }
-        
-        return (shares, withdrawn);
-    }
-    
-    /**
-     * @dev 检查用户是否可以参与交易
-     */
-    function canUserTrade(address user) external view returns (bool) {
-        // 检查用户是否在交易黑名单中
-        return !tradingManager.blacklist(user);
-    }
-    
-    /**
-     * @dev 获取代币当前价格
-     */
-    function getTokenPrice(address tokenAddress) external view returns (uint256) {
+    function getPropertyValuation(string memory propertyId) external view returns (uint256) {
+        address tokenAddress = propertyManager.propertyTokens(propertyId);
         return tradingManager.getTokenPrice(tokenAddress);
     }
     
