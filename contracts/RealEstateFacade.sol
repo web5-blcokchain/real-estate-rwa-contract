@@ -231,7 +231,7 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev 注册新房产并创建对应的代币 - 需要ADMIN权限
+     * @dev 注册新房产并创建对应的代币 - 需要OPERATOR权限
      */
     function registerPropertyAndCreateToken(
         string memory propertyId,
@@ -242,7 +242,7 @@ contract RealEstateFacade is
         uint256 initialSupply,
         address propertyTokenImplementation
     ) public whenNotPaused nonReentrant returns (address) {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
         require(propertyTokenImplementation != address(0), "Invalid implementation");
         
         // 注册房产

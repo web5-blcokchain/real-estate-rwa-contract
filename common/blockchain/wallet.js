@@ -97,7 +97,10 @@ class WalletManager {
           
         Logger.debug(`初始化角色钱包: ${role}@${networkConfig.name}`);
         
-        this.#wallets.set(cacheKey, new ethers.Wallet(networkConfig.privateKeys[role], provider));
+        const wallet = new ethers.Wallet(networkConfig.privateKeys[role], provider);
+        Logger.debug(`角色钱包地址: ${role}@${wallet.address}`);
+        
+        this.#wallets.set(cacheKey, wallet);
       } catch (error) {
         Logger.error(`角色钱包[${role}@${networkName || 'default'}]初始化失败`, { 
           error: error.message,

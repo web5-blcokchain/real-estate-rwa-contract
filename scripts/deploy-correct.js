@@ -238,39 +238,33 @@ async function verifyDeployment(contracts) {
     const systemStatus = await contracts.system.getSystemStatus();
     logger.info(`系统状态: ${systemStatus}`);
     
-    // 验证合约授权
-    const isPropertyManagerAuthorized = await contracts.system.authorizedContracts(contracts.propertyManagerAddress);
-    const isTradingManagerAuthorized = await contracts.system.authorizedContracts(contracts.tradingManagerAddress);
-    const isRewardManagerAuthorized = await contracts.system.authorizedContracts(contracts.rewardManagerAddress);
-    const isFacadeAuthorized = await contracts.system.authorizedContracts(contracts.realEstateFacadeAddress);
-    
+    // 验证合约授权状态
     logger.info("合约授权状态:");
+    const isPropertyManagerAuthorized = await contracts.system.authorizedContracts(contracts.propertyManagerAddress);
     logger.info(`- PropertyManager: ${isPropertyManagerAuthorized ? "已授权" : "未授权"}`);
+    
+    const isTradingManagerAuthorized = await contracts.system.authorizedContracts(contracts.tradingManagerAddress);
     logger.info(`- TradingManager: ${isTradingManagerAuthorized ? "已授权" : "未授权"}`);
+    
+    const isRewardManagerAuthorized = await contracts.system.authorizedContracts(contracts.rewardManagerAddress);
     logger.info(`- RewardManager: ${isRewardManagerAuthorized ? "已授权" : "未授权"}`);
+    
+    const isFacadeAuthorized = await contracts.system.authorizedContracts(contracts.realEstateFacadeAddress);
     logger.info(`- RealEstateFacade: ${isFacadeAuthorized ? "已授权" : "未授权"}`);
     
     // 验证交易参数
-    const maxTradeAmount = await contracts.tradingManager.maxTradeAmount();
-    const minTradeAmount = await contracts.tradingManager.minTradeAmount();
-    const cooldownPeriod = await contracts.tradingManager.cooldownPeriod();
-    const feeRate = await contracts.tradingManager.feeRate();
-    
     logger.info("交易参数:");
+    const maxTradeAmount = await contracts.tradingManager.maxTradeAmount();
     logger.info(`- 最大交易金额: ${ethers.formatEther(maxTradeAmount)} ETH`);
+    
+    const minTradeAmount = await contracts.tradingManager.minTradeAmount();
     logger.info(`- 最小交易金额: ${ethers.formatEther(minTradeAmount)} ETH`);
+    
+    const cooldownPeriod = await contracts.tradingManager.cooldownPeriod();
     logger.info(`- 冷却期: ${cooldownPeriod} 秒`);
+    
+    const feeRate = await contracts.tradingManager.feeRate();
     logger.info(`- 交易费率: ${Number(feeRate) / 100}%`);
-    
-    // 验证 PropertyToken
-    const propertyTokenName = await contracts.propertyToken.name();
-    const propertyTokenSymbol = await contracts.propertyToken.symbol();
-    const propertyTokenTotalSupply = await contracts.propertyToken.totalSupply();
-    
-    logger.info("PropertyToken 信息:");
-    logger.info(`- 名称: ${propertyTokenName}`);
-    logger.info(`- 符号: ${propertyTokenSymbol}`);
-    logger.info(`- 总供应量: ${ethers.formatEther(propertyTokenTotalSupply)}`);
     
     // 验证 SimpleERC20
     const testTokenName = await contracts.testToken.name();
@@ -328,16 +322,31 @@ async function setupRoles(contracts) {
   
   // 验证角色设置
   const isAdmin = await system.hasRole(RoleConstants.ADMIN_ROLE, adminAddress);
+  const isAdminHasManager = await system.hasRole(RoleConstants.MANAGER_ROLE, adminAddress);
+  const isAdminHasOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, adminAddress);
   const isManager = await system.hasRole(RoleConstants.MANAGER_ROLE, managerAddress);
+  const isManagerHasOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, managerAddress);
   const isOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, operatorAddress);
   
   logger.info('角色验证结果', {
-    admin: { address: adminAddress, hasRole: isAdmin },
-    manager: { address: managerAddress, hasRole: isManager },
-    operator: { address: operatorAddress, hasRole: isOperator }
+    admin: { 
+      address: adminAddress, 
+      hasAdminRole: isAdmin,
+      hasManagerRole: isAdminHasManager,
+      hasOperatorRole: isAdminHasOperator
+    },
+    manager: { 
+      address: managerAddress, 
+      hasManagerRole: isManager,
+      hasOperatorRole: isManagerHasOperator
+    },
+    operator: { 
+      address: operatorAddress, 
+      hasOperatorRole: isOperator
+    }
   });
   
-  if (!isAdmin || !isManager || !isOperator) {
+  if (!isAdmin || !isAdminHasManager || !isAdminHasOperator || !isManager || !isManagerHasOperator || !isOperator) {
     throw new Error('角色设置验证失败');
   }
   
@@ -437,28 +446,8 @@ async function deploy() {
     await tx.wait();
     logger.info("RewardManager 已授权");
     
-    // 4. 部署 PropertyToken
-    logger.info("步骤4: 部署 PropertyToken...");
-    const PropertyToken = await ethers.getContractFactory("PropertyToken");
-    const propertyToken = await upgrades.deployProxy(PropertyToken, [
-      ethers.ZeroHash, // propertyIdHash
-      "Test Property Token", // name
-      "TPT", // symbol
-      ethers.parseEther("1000000"), // initialSupply
-      deployer.address, // admin
-      systemAddress // systemAddress
-    ], {
-      kind: "uups",
-      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto", "state-variable-immutable", "state-variable-assignment", "external-library-linking"]
-    });
-    await propertyToken.waitForDeployment();
-    const propertyTokenAddress = await propertyToken.getAddress();
-    const propertyTokenImplementation = await upgrades.erc1967.getImplementationAddress(propertyTokenAddress);
-    logger.info(`PropertyToken 部署到: ${propertyTokenAddress}`);
-    logger.info(`PropertyToken 实现地址: ${propertyTokenImplementation}`);
-    
-    // 5. 部署 SimpleERC20 测试代币
-    logger.info("步骤5: 部署 SimpleERC20 测试代币...");
+    // 4. 部署 SimpleERC20 测试代币
+    logger.info("步骤4: 部署 SimpleERC20 测试代币...");
     const SimpleERC20 = await ethers.getContractFactory("SimpleERC20");
     const testToken = await SimpleERC20.deploy(
       "Test Token",
@@ -532,13 +521,23 @@ async function deploy() {
     
     // 验证角色权限
     const isAdmin = await system.hasRole(ADMIN_ROLE, adminSigner.address);
+    const isAdminHasManager = await system.hasRole(MANAGER_ROLE, adminSigner.address);
+    const isAdminHasOperator = await system.hasRole(OPERATOR_ROLE, adminSigner.address);
     const isManager = await system.hasRole(MANAGER_ROLE, managerSigner.address);
+    const isManagerHasOperator = await system.hasRole(OPERATOR_ROLE, managerSigner.address);
     const isOperator = await system.hasRole(OPERATOR_ROLE, operatorSigner.address);
     
     logger.info("角色权限验证结果:");
     logger.info(`- 管理员权限: ${isAdmin ? "已授予" : "未授予"}`);
+    logger.info(`- 管理员是否拥有经理权限: ${isAdminHasManager ? "是" : "否"}`);
+    logger.info(`- 管理员是否拥有操作员权限: ${isAdminHasOperator ? "是" : "否"}`);
     logger.info(`- 经理权限: ${isManager ? "已授予" : "未授予"}`);
+    logger.info(`- 经理是否拥有操作员权限: ${isManagerHasOperator ? "是" : "否"}`);
     logger.info(`- 操作员权限: ${isOperator ? "已授予" : "未授予"}`);
+    
+    if (!isAdmin || !isAdminHasManager || !isAdminHasOperator || !isManager || !isManagerHasOperator || !isOperator) {
+        throw new Error('角色设置验证失败');
+    }
     
     // 输出所有合约地址
     logger.info("== 合约地址摘要 ==");
@@ -546,7 +545,6 @@ async function deploy() {
     logger.info(`PropertyManager: ${propertyManagerAddress}`);
     logger.info(`TradingManager: ${tradingManagerAddress}`);
     logger.info(`RewardManager: ${rewardManagerAddress}`);
-    logger.info(`PropertyToken: ${propertyTokenAddress}`);
     logger.info(`SimpleERC20: ${testTokenAddress}`);
     logger.info(`RealEstateFacade: ${realEstateFacadeAddress}`);
     
@@ -556,21 +554,18 @@ async function deploy() {
       propertyManager,
       tradingManager,
       rewardManager,
-      propertyToken,
       testToken,
       realEstateFacade,
       systemAddress,
       propertyManagerAddress,
       tradingManagerAddress,
       rewardManagerAddress,
-      propertyTokenAddress,
       testTokenAddress,
       realEstateFacadeAddress,
       systemImplementation,
       propertyManagerImplementation,
       tradingManagerImplementation,
       rewardManagerImplementation,
-      propertyTokenImplementation,
       realEstateFacadeImplementation,
       deployerAddress: deployer.address,
       adminAddress: adminSigner.address,
