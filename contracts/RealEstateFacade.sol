@@ -35,6 +35,9 @@ contract RealEstateFacade is
     // Version control - using uint8 to save gas
     uint8 private constant VERSION = 1;
     
+    // 版本控制
+    uint8 public version;
+    
     // 系统合约引用
     RealEstateSystem public system;
     
@@ -158,18 +161,22 @@ contract RealEstateFacade is
         address payable _tradingManager,
         address payable _rewardManager
     ) public initializer {
-        require(_systemAddress != address(0), "Invalid system address");
-        __Pausable_init();
-        __UUPSUpgradeable_init();
+        require(_systemAddress != address(0), "System address cannot be zero");
+        require(_propertyManager != address(0), "Property manager address cannot be zero");
+        require(_tradingManager != address(0), "Trading manager address cannot be zero");
+        require(_rewardManager != address(0), "Reward manager address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
-        
-        // 验证调用者具有ADMIN_ROLE权限
-        system.validateRole(RoleConstants.ADMIN_ROLE, "Only admin can initialize facade contract");
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         
         propertyManager = PropertyManager(_propertyManager);
         tradingManager = TradingManager(payable(_tradingManager));
         rewardManager = RewardManager(payable(_rewardManager));
+        
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+        
+        version = 1;
         
         emit FacadeInitialized(
             msg.sender,
@@ -284,30 +291,35 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev 创建代币销售订单 - 需要OPERATOR权限
+     * @dev 创建卖单
      */
-    function createTokenSellOrder(
-        bytes32 propertyId,
+    function createSellOrder(
+        string memory propertyId,
         uint256 amount,
         uint256 price
-    ) external {
+    ) external whenNotPaused nonReentrant {
         system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        address token = propertyManager.propertyTokens(propertyId);
-        tradingManager.createOrder(token, msg.sender, amount, price);
+        
+        address token = propertyManager.getPropertyToken(propertyId);
+        require(token != address(0), "Property token not found");
+        
+        tradingManager.createSellOrder(token, msg.sender, amount, price);
     }
-    
+
     /**
-     * @dev 创建直接销售订单 - 需要OPERATOR权限
+     * @dev 创建买单
      */
-    function createDirectSellOrder(
-        bytes32 propertyId,
+    function createBuyOrder(
+        string memory propertyId,
         uint256 amount,
-        uint256 price,
-        address buyer
-    ) external {
+        uint256 price
+    ) external whenNotPaused nonReentrant {
         system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        address token = propertyManager.propertyTokens(propertyId);
-        tradingManager.createOrder(token, msg.sender, amount, price);
+        
+        address token = propertyManager.getPropertyToken(propertyId);
+        require(token != address(0), "Property token not found");
+        
+        tradingManager.createBuyOrder(token, msg.sender, amount, price);
     }
     
     /**
@@ -388,11 +400,15 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev 领取奖励 - 需要OPERATOR权限
+     * @dev 提取分红
      */
-    function claimRewards(bytes32 distributionId) external {
+    function withdraw(
+        uint256 distributionId,
+        address user,
+        uint256 amount
+    ) external whenNotPaused nonReentrant {
         system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        rewardManager.withdraw(distributionId);
+        rewardManager.withdraw(distributionId, user, amount);
     }
     
     /**

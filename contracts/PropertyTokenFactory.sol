@@ -1,36 +1,78 @@
-// ADMIN_ROLE 权限
-function setSystem(address _systemAddress) external {
-    system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-    require(_systemAddress != address(0), "System address cannot be zero");
-    system = RealEstateSystem(_systemAddress);
-}
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-function pause() external {
-    system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-    _pause();
-}
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "./PropertyToken.sol";
+import "./RealEstateSystem.sol";
+import "./utils/RoleConstants.sol";
 
-function unpause() external {
-    system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-    _unpause();
-}
+contract PropertyTokenFactory is Initializable, UUPSUpgradeable, PausableUpgradeable, AccessControlUpgradeable {
+    RealEstateSystem public system;
+    address public implementation;
+    mapping(address => PropertyToken.TokenInfo) public tokenInfos;
 
-function _authorizeUpgrade(address newImplementation) internal override {
-    system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-}
+    function initialize(address _implementation) public initializer {
+        __UUPSUpgradeable_init();
+        __Pausable_init();
+        __AccessControl_init();
+        implementation = _implementation;
+    }
 
-// OPERATOR_ROLE 权限
-function createToken(
-    string calldata name,
-    string calldata symbol,
-    uint256 initialSupply
-) external returns (address) {
-    system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-    // ... existing implementation ...
-}
+    function setSystem(address _systemAddress) external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system = RealEstateSystem(_systemAddress);
+    }
 
-// 用户操作（不需要角色权限）
-function getTokenInfo(address tokenAddress) external view returns (PropertyToken.TokenInfo memory) {
-    require(tokenAddress != address(0), "Invalid token address");
-    return PropertyToken(tokenAddress).getTokenInfo();
+    function pause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        _pause();
+    }
+
+    function unpause() external {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        _unpause();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override {
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+    }
+
+    function createToken(
+        string memory name,
+        string memory symbol,
+        uint256 totalSupply,
+        uint256 price,
+        uint256 minInvestment,
+        uint256 maxInvestment,
+        uint256 lockupPeriod
+    ) external whenNotPaused returns (address) {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        PropertyToken token = new PropertyToken();
+        token.initialize(
+            name,
+            symbol,
+            totalSupply,
+            price,
+            minInvestment,
+            maxInvestment,
+            lockupPeriod
+        );
+        tokenInfos[address(token)] = PropertyToken.TokenInfo(
+            name,
+            symbol,
+            totalSupply,
+            price,
+            minInvestment,
+            maxInvestment,
+            lockupPeriod
+        );
+        return address(token);
+    }
+
+    function getTokenInfo(address tokenAddress) external view returns (PropertyToken.TokenInfo memory) {
+        return tokenInfos[tokenAddress];
+    }
 } 

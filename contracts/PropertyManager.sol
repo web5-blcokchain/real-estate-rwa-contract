@@ -99,17 +99,16 @@ contract PropertyManager is
     }
     
     /**
-     * @dev 初始化函数 - 需要ADMIN权限
+     * @dev 初始化合约
      */
     function initialize(address _systemAddress) public initializer {
-        require(_systemAddress != address(0), "Invalid system address");
-        __Pausable_init();
-        __UUPSUpgradeable_init();
+        require(_systemAddress != address(0), "System address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         
-        // 验证调用者具有ADMIN_ROLE权限
-        system.validateRole(RoleConstants.ADMIN_ROLE, "Only admin can initialize property manager");
+        __Pausable_init();
+        __UUPSUpgradeable_init();
         
         version = 1;
         
@@ -384,5 +383,13 @@ contract PropertyManager is
         system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
+    }
+
+    /**
+     * @dev 获取房产代币地址
+     */
+    function getPropertyToken(string memory propertyId) external view returns (address) {
+        require(_properties[propertyId].exists, "Property not exist");
+        return propertyTokens[propertyId];
     }
 } 

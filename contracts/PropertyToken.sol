@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -32,6 +32,17 @@ contract PropertyToken is
     // Version control - using uint8 to save gas
     uint8 private constant VERSION = 1;
 
+    // Token information structure
+    struct TokenInfo {
+        string name;
+        string symbol;
+        uint256 totalSupply;
+        uint256 price;
+        uint256 minInvestment;
+        uint256 maxInvestment;
+        uint256 lockupPeriod;
+    }
+
     // Property ID
     string public propertyId;
 
@@ -63,51 +74,45 @@ contract PropertyToken is
         uint40 createTime
     );
     event PropertyTokenInitialized(
-        string indexed propertyId,
         string name,
         string symbol,
-        uint256 initialSupply,
-        address indexed admin,
-        address indexed system,
+        uint256 totalSupply,
+        uint256 price,
+        uint256 minInvestment,
+        uint256 maxInvestment,
+        uint256 lockupPeriod,
         uint40 initTime
     );
 
     /**
-     * @dev Initializes the contract with property details and initial supply - 需要ADMIN权限
+     * @dev Initializes the contract with property details and initial supply - 需要OPERATOR权限
      */
     function initialize(
-        string memory _propertyId,
         string memory _name,
         string memory _symbol,
-        uint256 _initialSupply,
-        address _admin,
-        address _systemAddress
+        uint256 _totalSupply,
+        uint256 _price,
+        uint256 _minInvestment,
+        uint256 _maxInvestment,
+        uint256 _lockupPeriod
     ) public initializer {
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
-        
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
         __ERC20Snapshot_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
 
-        propertyId = _propertyId;
-        uint256 defaultMaxSupply = 1000000000;
-        maxSupply = defaultMaxSupply.mul(10**decimals()); // Default 1 billion tokens
-
-        if (_initialSupply > 0) {
-            _mint(_admin, _initialSupply);
-        }
+        maxSupply = _totalSupply;
+        _mint(msg.sender, _totalSupply);
 
         emit PropertyTokenInitialized(
-            _propertyId,
             _name,
             _symbol,
-            _initialSupply,
-            _admin,
-            _systemAddress,
+            _totalSupply,
+            _price,
+            _minInvestment,
+            _maxInvestment,
+            _lockupPeriod,
             uint40(block.timestamp)
         );
     }

@@ -65,7 +65,7 @@ contract TradingManager is
         address indexed token,
         uint256 amount,
         uint256 price,
-        string propertyId,
+        bool isSellOrder,
         uint40 createTime
     );
     event OrderCancelled(
@@ -81,7 +81,7 @@ contract TradingManager is
         uint256 amount,
         uint256 price,
         uint256 tradeId,
-        string propertyId,
+        bool isSellOrder,
         uint40 executeTime
     );
     event FeeRateUpdated(
@@ -141,7 +141,7 @@ contract TradingManager is
         uint256 price;
         uint256 timestamp;
         bool active;
-        string propertyId;
+        bool isSellOrder;
     }
     
     // 交易结构体
@@ -154,7 +154,7 @@ contract TradingManager is
         uint256 amount;
         uint256 price;
         uint256 timestamp;
-        string propertyId;
+        bool isSellOrder;
     }
     
     /**
@@ -273,7 +273,7 @@ contract TradingManager is
             price: price,
             timestamp: block.timestamp,
             active: true,
-            propertyId: propertyId
+            isSellOrder: true
         });
         
         // 更新用户订单列表
@@ -286,7 +286,7 @@ contract TradingManager is
             token,
             amount,
             price,
-            propertyId,
+            true,
             uint40(block.timestamp)
         );
         
@@ -296,13 +296,101 @@ contract TradingManager is
     /**
      * @dev 创建卖单
      */
-    function createOrder(
+    function createSellOrder(
         address token,
+        address seller,
         uint256 amount,
-        uint256 price,
-        bool isBuy
+        uint256 price
     ) external whenNotPaused nonReentrant returns (uint256) {
-        // ... existing implementation ...
+        require(token != address(0), "Invalid token address");
+        require(seller != address(0), "Invalid seller address");
+        require(amount > 0, "Invalid amount");
+        require(price > 0, "Invalid price");
+        
+        // 检查交易限制
+        require(amount >= minTradeAmount, "Amount below minimum");
+        require(amount <= maxTradeAmount, "Amount above maximum");
+        
+        // 检查黑名单
+        require(!blacklist[seller], "Seller is blacklisted");
+        
+        // 创建订单
+        uint256 orderId = _nextOrderId++;
+        _orders[orderId] = Order({
+            id: orderId,
+            seller: seller,
+            token: token,
+            amount: amount,
+            price: price,
+            timestamp: block.timestamp,
+            active: true,
+            isSellOrder: true
+        });
+        
+        _userOrders[seller].push(orderId);
+        _tokenTrades[token].push(orderId);
+        
+        emit OrderCreated(
+            orderId,
+            seller,
+            token,
+            amount,
+            price,
+            true,
+            uint40(block.timestamp)
+        );
+        
+        return orderId;
+    }
+    
+    /**
+     * @dev 创建买单
+     */
+    function createBuyOrder(
+        address token,
+        address buyer,
+        uint256 amount,
+        uint256 price
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        require(token != address(0), "Invalid token address");
+        require(buyer != address(0), "Invalid buyer address");
+        require(amount > 0, "Invalid amount");
+        require(price > 0, "Invalid price");
+        
+        // 检查交易限制
+        require(amount >= minTradeAmount, "Amount below minimum");
+        require(amount <= maxTradeAmount, "Amount above maximum");
+        
+        // 检查黑名单
+        require(!blacklist[buyer], "Buyer is blacklisted");
+        
+        // 创建订单
+        uint256 orderId = _nextOrderId++;
+        _orders[orderId] = Order({
+            id: orderId,
+            seller: buyer,
+            token: token,
+            amount: amount,
+            price: price,
+            timestamp: block.timestamp,
+            active: true,
+            isSellOrder: false
+        });
+        
+        _userOrders[buyer].push(orderId);
+        _tokenTrades[token].push(orderId);
+        
+        emit OrderCreated(
+            orderId,
+            buyer,
+            token,
+            amount,
+            price,
+            false,
+            uint40(block.timestamp)
+        );
+        
+        return orderId;
     }
     
     /**
@@ -316,11 +404,11 @@ contract TradingManager is
      * @dev 执行订单 - 需要OPERATOR权限
      * @param orderId 订单ID
      */
-    function executeOrder(bytes32 orderId) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, "Only operator can execute orders");
+    function executeOrder(uint256 orderId) external whenNotPaused nonReentrant {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
         
         Order storage order = _orders[orderId];
-        require(order.id != bytes32(0), "Order does not exist");
+        require(order.id != 0, "Order does not exist");
         require(order.active == true, "Order is not active");
         
         // 检查交易限制
@@ -362,7 +450,7 @@ contract TradingManager is
             amount: order.amount,
             price: order.price,
             timestamp: block.timestamp,
-            propertyId: order.propertyId
+            isSellOrder: true
         });
         
         _userTrades[order.seller].push(tradeId);
@@ -377,7 +465,7 @@ contract TradingManager is
             order.amount,
             order.price,
             tradeId,
-            order.propertyId,
+            true,
             uint40(block.timestamp)
         );
     }
@@ -491,7 +579,7 @@ contract TradingManager is
             uint256 price,
             uint256 timestamp,
             bool active,
-            string memory propertyId
+            bool isSellOrder
         )
     {
         Order storage order = _orders[orderId];
@@ -505,7 +593,7 @@ contract TradingManager is
             order.price,
             order.timestamp,
             order.active,
-            order.propertyId
+            order.isSellOrder
         );
     }
     
@@ -524,7 +612,7 @@ contract TradingManager is
             uint256 amount,
             uint256 price,
             uint256 timestamp,
-            string memory propertyId
+            bool isSellOrder
         )
     {
         Trade storage trade = _trades[tradeId];
@@ -539,7 +627,7 @@ contract TradingManager is
             trade.amount,
             trade.price,
             trade.timestamp,
-            trade.propertyId
+            trade.isSellOrder
         );
     }
     

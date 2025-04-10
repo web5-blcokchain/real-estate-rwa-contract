@@ -172,17 +172,22 @@ contract RewardManager is
     }
     
     /**
-     * @dev 初始化函数 - 需要ADMIN权限
+     * @dev 初始化合约
      */
-    function initialize(address _systemAddress) public initializer {
-        require(_systemAddress != address(0), "Invalid system address");
-        __Pausable_init();
-        __UUPSUpgradeable_init();
+    function initialize(
+        address _systemAddress,
+        address _propertyManager,
+        address _tradingManager
+    ) public initializer {
+        require(_systemAddress != address(0), "System address cannot be zero");
+        require(_propertyManager != address(0), "Property manager address cannot be zero");
+        require(_tradingManager != address(0), "Trading manager address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         
-        // 验证调用者具有ADMIN_ROLE权限
-        system.validateRole(RoleConstants.ADMIN_ROLE, "Only admin can initialize reward manager");
+        __Pausable_init();
+        __UUPSUpgradeable_init();
         
         version = 1;
         
