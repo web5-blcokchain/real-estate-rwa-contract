@@ -184,8 +184,9 @@ contract RewardManager is
         require(_tradingManager != address(0), "Trading manager address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         
+        __ReentrancyGuard_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
         
@@ -289,7 +290,7 @@ contract RewardManager is
      * @dev 授权合约 - 需要ADMIN权限
      */
     function authorizeContract(address _contract, bool _authorized) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         authorizedContracts[_contract] = _authorized;
         emit ContractAuthorized(_contract, _authorized, uint40(block.timestamp));
     }
@@ -455,7 +456,7 @@ contract RewardManager is
         uint256 distributionId,
         DistributionStatus status
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_distributions[distributionId].exists, "Distribution not exist");
         
         uint8 oldStatus = _distributions[distributionId].status;
@@ -508,7 +509,7 @@ contract RewardManager is
         address user,
         uint256 amount
     ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(_distributions[distributionId].exists, "Distribution not exist");
         require(amount > 0, "Invalid amount");
         
@@ -524,7 +525,7 @@ contract RewardManager is
      * @dev 暂停合约 - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _pause();
     }
     
@@ -532,7 +533,7 @@ contract RewardManager is
      * @dev 恢复合约 - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _unpause();
     }
     
@@ -540,7 +541,7 @@ contract RewardManager is
      * @dev 授权合约升级 - 需要ADMIN权限
      */
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
@@ -552,7 +553,7 @@ contract RewardManager is
     }
 
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
     }

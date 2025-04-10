@@ -22,22 +22,22 @@ contract PropertyTokenFactory is Initializable, UUPSUpgradeable, PausableUpgrade
     }
 
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         system = RealEstateSystem(_systemAddress);
     }
 
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _pause();
     }
 
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _unpause();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
     }
 
     function createToken(
@@ -49,7 +49,7 @@ contract PropertyTokenFactory is Initializable, UUPSUpgradeable, PausableUpgrade
         uint256 maxInvestment,
         uint256 lockupPeriod
     ) external whenNotPaused returns (address) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
         PropertyToken token = new PropertyToken();
         token.initialize(
             name,

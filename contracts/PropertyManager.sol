@@ -105,8 +105,9 @@ contract PropertyManager is
         require(_systemAddress != address(0), "System address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         
+        __ReentrancyGuard_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
         
@@ -123,7 +124,7 @@ contract PropertyManager is
         string memory country,
         string memory metadataURI
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
         require(!_properties[propertyId].exists, "Property already exists");
         
         uint40 registrationTime = uint40(block.timestamp);
@@ -148,7 +149,7 @@ contract PropertyManager is
         string memory propertyId,
         PropertyStatus status
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_properties[propertyId].exists, "Property not exist");
         
         uint8 oldStatus = _properties[propertyId].status;
@@ -170,7 +171,7 @@ contract PropertyManager is
         string memory country,
         string memory metadataURI
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
         require(_properties[propertyId].exists, "Property not exist");
         
         _properties[propertyId].country = country;
@@ -232,7 +233,7 @@ contract PropertyManager is
         external 
         whenNotPaused
     {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
         require(_properties[propertyId].exists, "Property not exist");
         require(tokenAddress != address(0), "Invalid token address");
         require(propertyTokens[propertyId] == address(0), "Token already registered");
@@ -307,7 +308,7 @@ contract PropertyManager is
      * @dev 暂停合约 - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _pause();
     }
     
@@ -315,7 +316,7 @@ contract PropertyManager is
      * @dev 恢复合约 - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _unpause();
     }
     
@@ -323,7 +324,7 @@ contract PropertyManager is
      * @dev 授权合约升级 - 需要ADMIN权限
      */
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
@@ -341,7 +342,7 @@ contract PropertyManager is
         string memory propertyId,
         address newOwner
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_properties[propertyId].exists, "Property not exist");
         require(newOwner != address(0), "Invalid new owner address");
         
@@ -380,7 +381,7 @@ contract PropertyManager is
     }
 
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
     }

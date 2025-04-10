@@ -244,9 +244,10 @@ contract RealEstateSystem is
      * @dev 验证调用者是否具有指定角色
      * @param role 角色
      * @param account 账户地址
+     * @param message 错误提示消息
      */
-    function validateRole(bytes32 role, address account) public view {
-        require(hasRole(role, account), "Account does not have required role");
+    function validateRole(bytes32 role, address account, string memory message) public view {
+        require(hasRole(role, account), message);
     }
     
     /**

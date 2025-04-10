@@ -422,7 +422,11 @@ async function deploy() {
     // 部署 RewardManager
     logger.info("部署 RewardManager...");
     const RewardManager = await ethers.getContractFactory("RewardManager");
-    const rewardManager = await upgrades.deployProxy(RewardManager, [systemAddress], {
+    const rewardManager = await upgrades.deployProxy(RewardManager, [
+      systemAddress,
+      propertyManagerAddress,
+      tradingManagerAddress
+    ], {
       kind: "uups",
       unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto", "state-variable-immutable", "state-variable-assignment", "external-library-linking"]
     });
@@ -458,8 +462,8 @@ async function deploy() {
     const testTokenAddress = await testToken.getAddress();
     logger.info(`SimpleERC20 部署到: ${testTokenAddress}`);
     
-    // 6. 部署门面合约
-    logger.info("步骤6: 部署门面合约...");
+    // 5. 部署门面合约
+    logger.info("步骤5: 部署门面合约...");
     const RealEstateFacade = await ethers.getContractFactory("RealEstateFacade");
     const realEstateFacade = await upgrades.deployProxy(RealEstateFacade, [
       systemAddress,
@@ -481,8 +485,8 @@ async function deploy() {
     await tx.wait();
     logger.info("RealEstateFacade 已授权");
     
-    // 7. 设置交易管理器参数
-    logger.info("步骤7: 配置交易参数...");
+    // 6. 设置交易管理器参数
+    logger.info("步骤6: 配置交易参数...");
     tx = await tradingManager.setMaxTradeAmount(ethers.parseEther("1000"));
     await tx.wait();
     tx = await tradingManager.setMinTradeAmount(ethers.parseEther("0.01"));
@@ -495,11 +499,14 @@ async function deploy() {
     await tx.wait();
     logger.info("交易参数已配置");
     
-    // 8. 激活系统
-    logger.info("步骤8: 激活系统...");
+    // 7. 激活系统
+    logger.info("步骤7: 激活系统...");
     tx = await system.setSystemStatus(2); // Active = 2
     await tx.wait();
     logger.info("系统已激活");
+    
+    // 8. 设置角色权限
+    logger.info("步骤8: 设置角色权限...");
     
     // 在部署完成后，设置角色权限
     logger.info("设置角色权限...");

@@ -204,10 +204,10 @@ contract TradingManager is
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
         
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        __UUPSUpgradeable_init();
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         __Pausable_init();
         __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
         
         // 初始化状态变量
         _nextOrderId = 1;
@@ -220,7 +220,7 @@ contract TradingManager is
      * @dev 设置系统合约 - 需要ADMIN权限
      */
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
     }
@@ -405,7 +405,7 @@ contract TradingManager is
      * @param orderId 订单ID
      */
     function executeOrder(uint256 orderId) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
         
         Order storage order = _orders[orderId];
         require(order.id != 0, "Order does not exist");
@@ -474,7 +474,7 @@ contract TradingManager is
      * @dev 设置交易费率 - 需要MANAGER权限
      */
     function setFeeRate(uint256 _feeRate) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_feeRate <= 10000, "Fee rate too high");
         
         uint256 oldRate = feeRate;
@@ -487,7 +487,7 @@ contract TradingManager is
      * @dev 设置手续费接收地址 - 需要MANAGER权限
      */
     function setFeeReceiver(address _feeReceiver) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_feeReceiver != address(0), "Invalid fee receiver");
         
         address oldReceiver = feeReceiver;
@@ -500,7 +500,7 @@ contract TradingManager is
      * @dev 设置最小交易金额 - 需要MANAGER权限
      */
     function setMinTradeAmount(uint256 _minTradeAmount) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_minTradeAmount <= maxTradeAmount, "Invalid min amount");
         
         uint256 oldAmount = minTradeAmount;
@@ -513,7 +513,7 @@ contract TradingManager is
      * @dev 设置最大交易金额 - 需要MANAGER权限
      */
     function setMaxTradeAmount(uint256 _maxTradeAmount) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_maxTradeAmount >= minTradeAmount, "Invalid max amount");
         
         uint256 oldAmount = maxTradeAmount;
@@ -526,7 +526,7 @@ contract TradingManager is
      * @dev 设置冷却期 - 需要MANAGER权限
      */
     function setCooldownPeriod(uint256 _cooldownPeriod) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(_cooldownPeriod > 0, "Invalid cooldown period");
         
         uint256 oldPeriod = cooldownPeriod;
@@ -539,7 +539,7 @@ contract TradingManager is
      * @dev 暂停合约 - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _pause();
         emit TradingStatusUpdated(true, uint40(block.timestamp));
     }
@@ -548,7 +548,7 @@ contract TradingManager is
      * @dev 恢复合约 - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         _unpause();
         emit TradingStatusUpdated(false, uint40(block.timestamp));
     }
@@ -557,7 +557,7 @@ contract TradingManager is
      * @dev 设置地址黑名单状态 - 需要MANAGER权限
      */
     function setBlacklistStatus(address account, bool status) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
         require(account != address(0), "Invalid account");
         
         blacklist[account] = status;
@@ -752,7 +752,7 @@ contract TradingManager is
      * @dev 授权合约升级 - 需要ADMIN权限
      */
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
