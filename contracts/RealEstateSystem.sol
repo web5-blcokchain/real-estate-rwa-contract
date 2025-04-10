@@ -241,12 +241,12 @@ contract RealEstateSystem is
     }
 
     /**
-     * @dev 验证地址是否有特定角色 - 失败则revert
+     * @dev 验证调用者是否具有指定角色
      * @param role 角色
-     * @param account 账户地址
+     * @param errorMessage 错误信息
      */
-    function validateRole(bytes32 role, address account) external view {
-        require(hasRole(role, account), "Account does not have required role");
+    function validateRole(bytes32 role, string memory errorMessage) public view {
+        require(hasRole(role, msg.sender), errorMessage);
     }
     
     /**

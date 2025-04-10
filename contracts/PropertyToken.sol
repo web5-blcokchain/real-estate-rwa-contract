@@ -73,7 +73,7 @@ contract PropertyToken is
     );
 
     /**
-     * @dev Initializes the contract with property details and initial supply - 需要OPERATOR权限
+     * @dev Initializes the contract with property details and initial supply - 需要ADMIN权限
      */
     function initialize(
         string memory _propertyId,
@@ -86,7 +86,7 @@ contract PropertyToken is
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
         
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
         __ERC20Snapshot_init();

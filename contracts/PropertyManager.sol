@@ -102,13 +102,14 @@ contract PropertyManager is
      * @dev 初始化函数 - 需要ADMIN权限
      */
     function initialize(address _systemAddress) public initializer {
-        require(_systemAddress != address(0), "System address cannot be zero");
+        require(_systemAddress != address(0), "Invalid system address");
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+        
         system = RealEstateSystem(_systemAddress);
         
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
-        __Pausable_init();
+        // 验证调用者具有ADMIN_ROLE权限
+        system.validateRole(RoleConstants.ADMIN_ROLE, "Only admin can initialize property manager");
         
         version = 1;
         

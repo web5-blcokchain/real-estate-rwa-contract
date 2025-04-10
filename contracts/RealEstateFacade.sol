@@ -158,13 +158,14 @@ contract RealEstateFacade is
         address payable _tradingManager,
         address payable _rewardManager
     ) public initializer {
-        require(_systemAddress != address(0), "System address cannot be zero");
-        system = RealEstateSystem(_systemAddress);
-        
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        __ReentrancyGuard_init();
+        require(_systemAddress != address(0), "Invalid system address");
         __Pausable_init();
         __UUPSUpgradeable_init();
+        
+        system = RealEstateSystem(_systemAddress);
+        
+        // 验证调用者具有ADMIN_ROLE权限
+        system.validateRole(RoleConstants.ADMIN_ROLE, "Only admin can initialize facade contract");
         
         propertyManager = PropertyManager(_propertyManager);
         tradingManager = TradingManager(payable(_tradingManager));
@@ -290,7 +291,9 @@ contract RealEstateFacade is
         uint256 amount,
         uint256 price
     ) external {
-        // ... existing implementation ...
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        address token = propertyManager.propertyTokens(propertyId);
+        tradingManager.createOrder(token, msg.sender, amount, price);
     }
     
     /**
@@ -302,7 +305,9 @@ contract RealEstateFacade is
         uint256 price,
         address buyer
     ) external {
-        // ... existing implementation ...
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        address token = propertyManager.propertyTokens(propertyId);
+        tradingManager.createOrder(token, msg.sender, amount, price);
     }
     
     /**
@@ -385,8 +390,9 @@ contract RealEstateFacade is
     /**
      * @dev 领取奖励 - 需要OPERATOR权限
      */
-    function claimRewards(bytes32 propertyId) external {
-        // ... existing implementation ...
+    function claimRewards(bytes32 distributionId) external {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
+        rewardManager.withdraw(distributionId);
     }
     
     /**

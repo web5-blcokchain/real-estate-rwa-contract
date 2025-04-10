@@ -313,10 +313,73 @@ contract TradingManager is
     }
     
     /**
-     * @dev 执行交易
+     * @dev 执行订单 - 需要OPERATOR权限
+     * @param orderId 订单ID
      */
-    function executeOrder(uint256 orderId, uint256 amount) external whenNotPaused nonReentrant {
-        // ... existing implementation ...
+    function executeOrder(bytes32 orderId) external whenNotPaused nonReentrant {
+        system.validateRole(RoleConstants.OPERATOR_ROLE, "Only operator can execute orders");
+        
+        Order storage order = _orders[orderId];
+        require(order.id != bytes32(0), "Order does not exist");
+        require(order.active == true, "Order is not active");
+        
+        // 检查交易限制
+        require(order.amount >= minTradeAmount, "Amount below minimum");
+        require(order.amount <= maxTradeAmount, "Amount above maximum");
+        
+        // 检查冷却期
+        require(
+            block.timestamp >= _tokenPrices[order.token] + cooldownPeriod,
+            "In cooldown period"
+        );
+        
+        // 检查黑名单
+        require(!blacklist[order.seller], "Seller is blacklisted");
+        require(!blacklist[order.seller], "Buyer is blacklisted");
+        
+        // 计算手续费
+        uint256 fee = (order.amount * feeRate) / 10000;
+        uint256 amountAfterFee = order.amount - fee;
+        
+        // 执行交易
+        IERC20Upgradeable(order.token).transferFrom(order.seller, order.seller, amountAfterFee);
+        if (fee > 0) {
+            IERC20Upgradeable(order.token).transferFrom(order.seller, feeReceiver, fee);
+        }
+        
+        // 更新订单状态
+        order.active = false;
+        _tokenPrices[order.token] = block.timestamp;
+        
+        // 记录交易
+        uint256 tradeId = _nextTradeId++;
+        _trades[tradeId] = Trade({
+            id: tradeId,
+            orderId: orderId,
+            buyer: order.seller,
+            seller: order.seller,
+            token: order.token,
+            amount: order.amount,
+            price: order.price,
+            timestamp: block.timestamp,
+            propertyId: order.propertyId
+        });
+        
+        _userTrades[order.seller].push(tradeId);
+        _userTrades[order.seller].push(tradeId);
+        _tokenTrades[order.token].push(tradeId);
+        
+        emit OrderExecuted(
+            orderId,
+            order.seller,
+            order.seller,
+            order.token,
+            order.amount,
+            order.price,
+            tradeId,
+            order.propertyId,
+            uint40(block.timestamp)
+        );
     }
     
     /**
