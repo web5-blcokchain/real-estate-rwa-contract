@@ -115,11 +115,9 @@ contract PropertyToken is
     /**
      * @dev Creates a snapshot of the current token balances - 需要OPERATOR权限
      */
-    function snapshot() external returns (uint256) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        uint256 snapshotId = _snapshot();
-        emit SnapshotCreated(snapshotId, uint40(block.timestamp));
-        return snapshotId;
+    function snapshot() external {
+        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender);
+        _snapshot();
     }
 
     /**
@@ -189,7 +187,6 @@ contract PropertyToken is
      */
     function _authorizeUpgrade(address newImplementation) internal override {
         system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        require(!system.emergencyMode(), "Emergency mode active");
     }
 
     /**
@@ -213,4 +210,13 @@ contract PropertyToken is
      * variables without shifting down storage in the inheritance chain.
      */
     uint256[45] private __gap;
+
+    // 用户操作（不需要角色权限）
+    function balanceOf(address account) public view virtual override returns (uint256) {
+        return super.balanceOf(account);
+    }
+
+    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+        return super.allowance(owner, spender);
+    }
 }

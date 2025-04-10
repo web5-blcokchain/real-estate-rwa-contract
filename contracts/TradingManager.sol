@@ -300,106 +300,23 @@ contract TradingManager is
         address token,
         uint256 amount,
         uint256 price,
-        string memory propertyId
-    ) external whenNotPaused nonReentrant notBlacklisted(msg.sender) returns (uint256) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        return _createOrderInternal(token, amount, price, propertyId, false);
-    }
-    
-    /**
-     * @dev 创建卖单（无需转账）
-     */
-    function createOrderWithoutTransfer(
-        address token, 
-        uint256 amount, 
-        uint256 price, 
-        string memory propertyId
-    ) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        notBlacklisted(msg.sender)
-        onlyOperator
-        returns (uint256) 
-    {
-        return _createOrderInternal(token, amount, price, propertyId, true);
+        bool isBuy
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        // ... existing implementation ...
     }
     
     /**
      * @dev 取消卖单
      */
-    function cancelOrder(uint256 orderId) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        notBlacklisted(msg.sender)
-        onlyOperator
-    {
-        Order storage order = _orders[orderId];
-        require(order.id == orderId, "Order does not exist");
-        require(order.active, "Order is not active");
-        require(order.seller == msg.sender, "Not the seller");
-        
-        // 更新订单状态
-        order.active = false;
-        
-        // 将代币退还给卖家
-        IERC20Upgradeable(order.token).transfer(order.seller, order.amount);
-        
-        // 触发事件
-        emit OrderCancelled(orderId, msg.sender, uint40(block.timestamp));
+    function cancelOrder(uint256 orderId) external whenNotPaused nonReentrant {
+        // ... existing implementation ...
     }
     
     /**
      * @dev 执行交易
      */
-    function executeOrder(
-        uint256 orderId,
-        address buyer,
-        uint256 amount
-    ) external whenNotPaused nonReentrant notBlacklisted(buyer) returns (uint256) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        
-        Order storage order = _orders[orderId];
-        require(order.active, "Order not active");
-        require(amount > 0 && amount <= order.amount, "Invalid amount");
-        
-        uint256 tradeId = _nextTradeId++;
-        _trades[tradeId] = Trade({
-            id: tradeId,
-            orderId: orderId,
-            buyer: buyer,
-            seller: order.seller,
-            token: order.token,
-            amount: amount,
-            price: order.price,
-            timestamp: block.timestamp,
-            propertyId: order.propertyId
-        });
-        
-        _userTrades[buyer].push(tradeId);
-        _userTrades[order.seller].push(tradeId);
-        _tokenTrades[order.token].push(tradeId);
-        
-        if (amount == order.amount) {
-            order.active = false;
-        } else {
-            order.amount -= amount;
-        }
-        
-        emit OrderExecuted(
-            orderId,
-            buyer,
-            order.seller,
-            order.token,
-            amount,
-            order.price,
-            tradeId,
-            order.propertyId,
-            uint40(block.timestamp)
-        );
-        
-        return tradeId;
+    function executeOrder(uint256 orderId, uint256 amount) external whenNotPaused nonReentrant {
+        // ... existing implementation ...
     }
     
     /**

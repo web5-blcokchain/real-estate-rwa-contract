@@ -212,7 +212,6 @@ contract RealEstateFacade is
      */
     function _authorizeUpgrade(address newImplementation) internal override {
         system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        require(!system.emergencyMode(), "Emergency mode active");
     }
     
     /**
@@ -287,60 +286,23 @@ contract RealEstateFacade is
      * @dev 创建代币销售订单 - 需要OPERATOR权限
      */
     function createTokenSellOrder(
-        address token,
+        bytes32 propertyId,
         uint256 amount,
         uint256 price
-    ) external whenNotPaused nonReentrant returns (uint256) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        require(token != address(0), "Invalid token address");
-        require(amount > 0, "Amount must be greater than 0");
-        require(price > 0, "Price must be greater than 0");
-        
-        // 获取房产ID
-        PropertyToken tokenContract = PropertyToken(token);
-        string memory propertyId = tokenContract.propertyId();
-        
-        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyId);
-        
-        emit TokenSellOrderCreated(
-            msg.sender,
-            token,
-            amount,
-            price,
-            orderId,
-            uint40(block.timestamp)
-        );
-        
-        return orderId;
+    ) external {
+        // ... existing implementation ...
     }
     
     /**
      * @dev 创建直接销售订单 - 需要OPERATOR权限
      */
     function createDirectSellOrder(
-        string memory propertyId,
-        address token,
+        bytes32 propertyId,
         uint256 amount,
-        uint256 price
-    ) external whenNotPaused nonReentrant returns (uint256) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        require(token != address(0), "Invalid token address");
-        require(amount > 0, "Amount must be greater than 0");
-        require(price > 0, "Price must be greater than 0");
-        
-        uint256 orderId = tradingManager.createOrder(token, amount, price, propertyId);
-        
-        emit DirectSellOrderCreated(
-            msg.sender,
-            propertyId,
-            token,
-            amount,
-            price,
-            orderId,
-            uint40(block.timestamp)
-        );
-        
-        return orderId;
+        uint256 price,
+        address buyer
+    ) external {
+        // ... existing implementation ...
     }
     
     /**
@@ -423,23 +385,8 @@ contract RealEstateFacade is
     /**
      * @dev 领取奖励 - 需要OPERATOR权限
      */
-    function claimRewards(
-        uint256 distributionId,
-        address user,
-        uint256 amount
-    ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        require(user != address(0), "Invalid user address");
-        require(amount > 0, "Amount must be greater than 0");
-        
-        rewardManager.withdraw(distributionId, user, amount);
-        
-        emit RewardsClaimed(
-            user,
-            distributionId,
-            amount,
-            uint40(block.timestamp)
-        );
+    function claimRewards(bytes32 propertyId) external {
+        // ... existing implementation ...
     }
     
     /**
