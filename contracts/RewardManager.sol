@@ -20,8 +20,8 @@ import "./utils/SafeMath.sol";
  * - OPERATOR: 基础操作权限
  */
 contract RewardManager is 
-    Initializable, 
-    UUPSUpgradeable, 
+    Initializable,
+    UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
     PausableUpgradeable {
     
@@ -134,7 +134,7 @@ contract RewardManager is
         uint40 updateTime
     );
     event DistributionCreated(
-        uint256 indexed distributionId,
+        uint256 indexed distributionId, 
         string indexed propertyId,
         uint8 indexed distributionType,
         address tokenAddress,
@@ -157,7 +157,7 @@ contract RewardManager is
     event EmergencyWithdrawal(
         uint256 indexed distributionId,
         address indexed user,
-        uint256 amount,
+        uint256 amount, 
         uint40 withdrawTime
     );
     event RewardManagerInitialized(
@@ -430,7 +430,7 @@ contract RewardManager is
         allDistributionIds.push(distributionId);
         
         emit DistributionCreated(
-            distributionId,
+            distributionId, 
             propertyId,
             uint8(DistributionType.Dividend),
             address(0),

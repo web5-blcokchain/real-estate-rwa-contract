@@ -64,7 +64,10 @@ contract RealEstateSystem is
         __UUPSUpgradeable_init();
         __Pausable_init();
         
+        // 设置默认管理员
         _setupRole(DEFAULT_ADMIN_ROLE, admin);
+        
+        // 设置角色层级关系
         _setupRole(RoleConstants.ADMIN_ROLE, admin);
         _setupRole(RoleConstants.MANAGER_ROLE, admin);
         _setupRole(RoleConstants.OPERATOR_ROLE, admin);
@@ -75,6 +78,67 @@ contract RealEstateSystem is
         emergencyMode = false;
         
         emit SystemInitialized(admin);
+    }
+    
+    /**
+     * @dev 重写_setupRole以支持角色层级关系
+     */
+    function _setupRole(bytes32 role, address account) internal override {
+        super._setupRole(role, account);
+        
+        // 设置角色层级关系
+        if (role == RoleConstants.ADMIN_ROLE) {
+            // ADMIN 自动获得 MANAGER 和 OPERATOR 权限
+            super._setupRole(RoleConstants.MANAGER_ROLE, account);
+            super._setupRole(RoleConstants.OPERATOR_ROLE, account);
+            emit RoleGranted(RoleConstants.MANAGER_ROLE, account, msg.sender);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+        } else if (role == RoleConstants.MANAGER_ROLE) {
+            // MANAGER 自动获得 OPERATOR 权限
+            super._setupRole(RoleConstants.OPERATOR_ROLE, account);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+        }
+        
+        emit RoleGranted(role, account, msg.sender);
+    }
+    
+    /**
+     * @dev 重写_grantRole以支持角色层级关系
+     */
+    function _grantRole(bytes32 role, address account) internal override {
+        super._grantRole(role, account);
+        
+        // 设置角色层级关系
+        if (role == RoleConstants.ADMIN_ROLE) {
+            // ADMIN 自动获得 MANAGER 和 OPERATOR 权限
+            super._grantRole(RoleConstants.MANAGER_ROLE, account);
+            super._grantRole(RoleConstants.OPERATOR_ROLE, account);
+            emit RoleGranted(RoleConstants.MANAGER_ROLE, account, msg.sender);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+        } else if (role == RoleConstants.MANAGER_ROLE) {
+            // MANAGER 自动获得 OPERATOR 权限
+            super._grantRole(RoleConstants.OPERATOR_ROLE, account);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+        }
+        
+        emit RoleGranted(role, account, msg.sender);
+    }
+    
+    /**
+     * @dev 重写_revokeRole以支持角色层级关系
+     */
+    function _revokeRole(bytes32 role, address account) internal override {
+        super._revokeRole(role, account);
+        
+        // 撤销相关角色的权限
+        if (role == RoleConstants.ADMIN_ROLE) {
+            // 撤销 ADMIN 时同时撤销 MANAGER 和 OPERATOR 权限
+            super._revokeRole(RoleConstants.MANAGER_ROLE, account);
+            super._revokeRole(RoleConstants.OPERATOR_ROLE, account);
+        } else if (role == RoleConstants.MANAGER_ROLE) {
+            // 撤销 MANAGER 时同时撤销 OPERATOR 权限
+            super._revokeRole(RoleConstants.OPERATOR_ROLE, account);
+        }
     }
     
     /**

@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const AuthMiddleware = require('../../middleware/auth');
 const ValidatorMiddleware = require('../../middleware/validator');
-const { ControllerFactory } = require('../../utils');
+const PropertyManagerController = require('../../controllers/core/PropertyManagerController');
+
+// 创建控制器实例
+const propertyManagerController = new PropertyManagerController();
 
 /**
  * @swagger
@@ -88,7 +91,7 @@ router.get('/auth-test',
  */
 router.get('/properties',
     AuthMiddleware.validateApiKey,
-    ControllerFactory.getHandler('PropertyManagerController', 'getProperties')
+    (req, res) => propertyManagerController.getAllPropertyIds(req, res)
 );
 
 /**
@@ -112,7 +115,7 @@ router.get('/properties',
 router.get('/properties/:owner',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('owner', 'params'),
-    ControllerFactory.getHandler('PropertyManagerController', 'getOwnerProperties')
+    (req, res) => propertyManagerController.getOwnerProperties(req, res)
 );
 
 /**
@@ -155,7 +158,7 @@ router.get('/properties/:owner',
 router.post('/register',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('propertyDetails.owner'),
-    ControllerFactory.getHandler('PropertyManagerController', 'registerProperty')
+    (req, res) => propertyManagerController.registerProperty(req, res)
 );
 
 /**
@@ -186,7 +189,7 @@ router.post('/register',
  */
 router.put('/update-status',
     AuthMiddleware.validateApiKey,
-    ControllerFactory.getHandler('PropertyManagerController', 'updatePropertyStatus')
+    (req, res) => propertyManagerController.updatePropertyStatus(req, res)
 );
 
 /**
@@ -218,7 +221,7 @@ router.put('/update-status',
 router.post('/transfer-ownership',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('newOwner'),
-    ControllerFactory.getHandler('PropertyManagerController', 'transferPropertyOwnership')
+    (req, res) => propertyManagerController.transferPropertyOwnership(req, res)
 );
 
 /**
@@ -250,7 +253,7 @@ router.post('/transfer-ownership',
 router.post('/set-token',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('tokenAddress'),
-    ControllerFactory.getHandler('PropertyManagerController', 'setPropertyToken')
+    (req, res) => propertyManagerController.setPropertyToken(req, res)
 );
 
 // 路由带通配符的路由
@@ -275,7 +278,7 @@ router.post('/set-token',
  */
 router.get('/:propertyId',
     AuthMiddleware.validateApiKey,
-    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyInfo')
+    (req, res) => propertyManagerController.getProperty(req, res)
 );
 
 /**
@@ -298,7 +301,7 @@ router.get('/:propertyId',
  */
 router.get('/:propertyId/details',
     AuthMiddleware.validateApiKey,
-    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyDetails')
+    (req, res) => propertyManagerController.getPropertyDetails(req, res)
 );
 
 /**
@@ -321,7 +324,7 @@ router.get('/:propertyId/details',
  */
 router.get('/:propertyId/token',
     AuthMiddleware.validateApiKey,
-    ControllerFactory.getHandler('PropertyManagerController', 'getPropertyToken')
+    (req, res) => propertyManagerController.getPropertyToken(req, res)
 );
 
 /**
@@ -350,7 +353,7 @@ router.get('/:propertyId/token',
 router.get('/verify-ownership/:propertyId/:owner',
     AuthMiddleware.validateApiKey,
     ValidatorMiddleware.validateAddress('owner', 'params'),
-    ControllerFactory.getHandler('PropertyManagerController', 'verifyPropertyOwnership')
+    (req, res) => propertyManagerController.verifyPropertyOwnership(req, res)
 );
 
 module.exports = router; 

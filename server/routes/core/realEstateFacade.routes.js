@@ -3,7 +3,9 @@ const router = express.Router();
 const RealEstateFacadeController = require('../../controllers/core/RealEstateFacadeController');
 const AuthMiddleware = require('../../middleware/auth');
 const ValidatorMiddleware = require('../../middleware/validator');
-const { ControllerFactory } = require('../../utils');
+
+// 创建控制器实例
+const realEstateFacadeController = new RealEstateFacadeController();
 
 /**
  * @swagger
@@ -42,7 +44,13 @@ const { ControllerFactory } = require('../../utils');
 router.post('/register', 
   AuthMiddleware.validateApiKey,
   ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RealEstateFacadeController, 'registerPropertyAndCreateToken')
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.registerPropertyAndCreateToken(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -71,8 +79,14 @@ router.post('/register',
  */
 router.put('/status',
   AuthMiddleware.validateApiKey,
-  ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RealEstateFacadeController, 'updatePropertyStatus')
+  ValidatorMiddleware.validatePropertyStatusUpdate,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.updatePropertyStatus(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -107,10 +121,14 @@ router.put('/status',
  */
 router.post('/trade',
   AuthMiddleware.validateApiKey,
-  ValidatorMiddleware.validateAddress('tokenAddress'),
-  ValidatorMiddleware.validateAddress('from'),
-  ValidatorMiddleware.validateAddress('to'),
-  ControllerFactory.getHandler(RealEstateFacadeController, 'executeTrade')
+  ValidatorMiddleware.validateTradeExecution,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.executeTrade(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -139,8 +157,14 @@ router.post('/trade',
  */
 router.post('/rewards/distribute',
   AuthMiddleware.validateApiKey,
-  ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RealEstateFacadeController, 'distributeRewards')
+  ValidatorMiddleware.validateRewardDistribution,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.distributeRewards(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -155,7 +179,13 @@ router.post('/rewards/distribute',
  */
 router.get('/version',
   AuthMiddleware.validateApiKey,
-  ControllerFactory.getHandler(RealEstateFacadeController, 'getVersion')
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.getVersion(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -181,8 +211,14 @@ router.get('/version',
  */
 router.post('/rewards/claim',
   AuthMiddleware.validateApiKey,
-  ValidatorMiddleware.validateAddress('propertyId'),
-  ControllerFactory.getHandler(RealEstateFacadeController, 'claimRewards')
+  ValidatorMiddleware.validateRewardClaim,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.claimRewards(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 );
 
 /**
@@ -203,5 +239,30 @@ router.get('/test', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// 创建订单
+router.post('/orders',
+  AuthMiddleware.validateApiKey,
+  ValidatorMiddleware.validateOrderCreation,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.createOrder(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// 取消订单
+router.post('/orders/:orderId/cancel',
+  AuthMiddleware.validateApiKey,
+  async (req, res) => {
+    try {
+      await realEstateFacadeController.cancelOrder(req, res);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 
 module.exports = router; 

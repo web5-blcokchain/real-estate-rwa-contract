@@ -41,7 +41,6 @@ class RealEstateFacadeController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async registerPropertyAndCreateToken(req, res) {
-    // 修改参数结构，与合约方法匹配
     const { 
       propertyId, 
       propertyData, 
@@ -88,60 +87,10 @@ class RealEstateFacadeController extends BaseController {
       async () => {
         console.log("[registerPropertyAndCreateToken] 获取合约实例...");
         
-        // 尝试获取调用栈信息
-        try {
-          const stack = new Error().stack;
-          const callerFunction = stack.split('\n')[2]?.match(/at\s+(\w+)\s+/)?.[1];
-          console.log("[registerPropertyAndCreateToken] 当前调用栈函数名:", callerFunction);
-          
-          // 检查角色映射
-          const overrideRole = BaseController._roleOverrideMap[callerFunction];
-          console.log("[registerPropertyAndCreateToken] 角色重写映射:", 
-            callerFunction ? `${callerFunction} -> ${overrideRole || '(无重写)'}` : '无法获取调用函数名');
-        } catch (error) {
-          console.log("[registerPropertyAndCreateToken] 获取调用栈失败:", error.message);
-        }
-        
-        // 获取admin角色合约实例
-        console.log("[registerPropertyAndCreateToken] 获取admin角色合约实例");
-        const adminContract = this.getContract('RealEstateFacade', 'admin');
-        const adminWallet = adminContract.runner;
-        const adminAddress = await adminWallet.getAddress();
-        console.log("[registerPropertyAndCreateToken] admin钱包地址:", adminAddress);
-        
         // 获取manager角色合约实例
-        console.log("[registerPropertyAndCreateToken] 获取manager角色合约实例");
-        const managerContract = this.getContract('RealEstateFacade', 'manager');
-        const managerWallet = managerContract.runner;
-        const managerAddress = await managerWallet.getAddress();
-        console.log("[registerPropertyAndCreateToken] manager钱包地址:", managerAddress);
+        const contract = this.getContract('RealEstateFacade', 'manager');
         
-        // 获取系统合约和检查权限
-        try {
-          console.log("[registerPropertyAndCreateToken] 获取System合约进行角色检查...");
-          const systemAddress = await adminContract.system();
-          console.log("[registerPropertyAndCreateToken] System地址:", systemAddress);
-          
-          const { ContractUtils } = require('../../../common/blockchain');
-          const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
-          
-          const managerRole = await systemContract.MANAGER_ROLE();
-          console.log("[registerPropertyAndCreateToken] MANAGER_ROLE:", managerRole);
-          
-          const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
-          console.log("[registerPropertyAndCreateToken] admin钱包是否有MANAGER_ROLE:", isAdminManager);
-          
-          const isManagerRole = await systemContract.hasRole(managerRole, managerAddress);
-          console.log("[registerPropertyAndCreateToken] manager钱包是否有MANAGER_ROLE:", isManagerRole);
-        } catch (error) {
-          console.log("[registerPropertyAndCreateToken] 检查权限时出错:", error.message);
-        }
-        
-        // 最终选择使用的合约实例
-        console.log("[registerPropertyAndCreateToken] 使用admin角色合约实例调用合约方法");
-        const contract = adminContract;
-
-        // 调用合约方法 - 使用正确的参数结构
+        // 调用合约方法
         console.log("[registerPropertyAndCreateToken] 准备调用合约方法...");
         console.log("[registerPropertyAndCreateToken] 参数:", {
           propertyId,
@@ -200,7 +149,6 @@ class RealEstateFacadeController extends BaseController {
     
     // 验证状态值
     try {
-      // 将状态转换为合约期望的枚举值
       const propertyStatus = this._getPropertyStatus(status);
       console.log("[updatePropertyStatus] 转换后的状态值:", propertyStatus);
       
@@ -209,75 +157,19 @@ class RealEstateFacadeController extends BaseController {
         async () => {
           console.log("[updatePropertyStatus] 获取合约实例...");
           
-          // 尝试获取调用栈信息
-          try {
-            const stack = new Error().stack;
-            const callerFunction = stack.split('\n')[2]?.match(/at\s+(\w+)\s+/)?.[1];
-            console.log("[updatePropertyStatus] 当前调用栈函数名:", callerFunction);
-            
-            // 检查角色映射
-            const overrideRole = BaseController._roleOverrideMap[callerFunction];
-            console.log("[updatePropertyStatus] 角色重写映射:", 
-              callerFunction ? `${callerFunction} -> ${overrideRole || '(无重写)'}` : '无法获取调用函数名');
-          } catch (error) {
-            console.log("[updatePropertyStatus] 获取调用栈失败:", error.message);
-          }
-          
-          // 获取admin角色合约实例
-          console.log("[updatePropertyStatus] 获取admin角色合约实例");
-          const adminContract = this.getContract('RealEstateFacade', 'admin');
-          const adminWallet = adminContract.runner;
-          const adminAddress = await adminWallet.getAddress();
-          console.log("[updatePropertyStatus] admin钱包地址:", adminAddress);
-          
           // 获取manager角色合约实例
-          console.log("[updatePropertyStatus] 获取manager角色合约实例");
-          const managerContract = this.getContract('RealEstateFacade', 'manager');
-          const managerWallet = managerContract.runner;
-          const managerAddress = await managerWallet.getAddress();
-          console.log("[updatePropertyStatus] manager钱包地址:", managerAddress);
+          const contract = this.getContract('RealEstateFacade', 'manager');
           
-          // 获取系统合约和检查权限
-          try {
-            console.log("[updatePropertyStatus] 获取System合约进行角色检查...");
-            const systemAddress = await adminContract.system();
-            console.log("[updatePropertyStatus] System地址:", systemAddress);
-            
-            const { ContractUtils } = require('../../../common/blockchain');
-            const systemContract = ContractUtils.getContractWithRole('RealEstateSystem', systemAddress, 'admin');
-            
-            const managerRole = await systemContract.MANAGER_ROLE();
-            console.log("[updatePropertyStatus] MANAGER_ROLE:", managerRole);
-            
-            const isAdminManager = await systemContract.hasRole(managerRole, adminAddress);
-            console.log("[updatePropertyStatus] admin钱包是否有MANAGER_ROLE:", isAdminManager);
-            
-            const isManagerRole = await systemContract.hasRole(managerRole, managerAddress);
-            console.log("[updatePropertyStatus] manager钱包是否有MANAGER_ROLE:", isManagerRole);
-          } catch (error) {
-            console.log("[updatePropertyStatus] 检查权限时出错:", error.message);
-          }
-          
-          // 使用当前方法默认应该使用的角色
-          const currentFunction = 'updatePropertyStatus';
-          const preferredRole = BaseController._roleOverrideMap[currentFunction] || 'admin';
-          console.log(`[updatePropertyStatus] 该方法在roleOverrides中配置的角色: ${preferredRole}`);
-          
-          // 获取合约实例 - 获取实际会使用的角色
-          console.log("[updatePropertyStatus] 正在使用 this.getContract('RealEstateFacade') 获取合约实例");
-          // 这里不指定角色，让BaseController根据角色重写配置决定
-          const contract = this.getContract('RealEstateFacade');
-          const contractWallet = contract.runner;
-          const contractAddress = await contractWallet.getAddress();
-          console.log(`[updatePropertyStatus] 最终使用的钱包地址: ${contractAddress}`);
-  
-          // 调用合约方法，确保传递正确的枚举值
+          // 调用合约方法
           console.log("[updatePropertyStatus] 准备调用合约方法...");
-          console.log("[updatePropertyStatus] 参数:", { propertyId, status: propertyStatus });
+          console.log("[updatePropertyStatus] 参数:", {
+            propertyId,
+            status: propertyStatus
+          });
           
           const tx = await contract.updatePropertyStatus(propertyId, propertyStatus);
           console.log("[updatePropertyStatus] 交易已发送:", tx.hash);
-  
+          
           // 等待交易确认
           console.log("[updatePropertyStatus] 等待交易确认...");
           const receipt = await this.waitForTransaction(tx);
@@ -294,9 +186,7 @@ class RealEstateFacadeController extends BaseController {
         '房产状态更新失败'
       );
     } catch (error) {
-      console.log("[updatePropertyStatus] 捕获到错误:", error.message);
-      console.log("[updatePropertyStatus] 错误堆栈:", error.stack);
-      return ResponseUtils.sendError(res, error.message, 400);
+      return ResponseUtils.sendError(res, `无效的房产状态值: ${status}`, 400);
     }
   }
 
@@ -306,274 +196,351 @@ class RealEstateFacadeController extends BaseController {
    * @param {Object} res - 响应对象
    */
   async executeTrade(req, res) {
-    // 修改参数结构，与合约方法匹配
-    const { orderId, value } = req.body;
+    const { propertyId, orderId } = req.body;
+    
+    console.log("\n[executeTrade] 开始执行");
+    
     const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[executeTrade] 合约地址:", contractAddress);
     
     // 验证参数
-    if (!this.validateRequired(res, { orderId, contractAddress })) {
+    if (!this.validateRequired(res, { propertyId, orderId, contractAddress })) {
       return;
     }
-
+    
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
-
-        // 调用合约方法 - 修改为只传递orderId，并正确支持发送ETH值
-        const tx = await contract.executeTrade(orderId, { value: value || 0 });
-
+        console.log("[executeTrade] 获取合约实例...");
+        
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
+        
+        // 调用合约方法
+        console.log("[executeTrade] 准备调用合约方法...");
+        console.log("[executeTrade] 参数:", {
+          propertyId,
+          orderId
+        });
+        
+        const tx = await contract.executeTrade(propertyId, orderId);
+        console.log("[executeTrade] 交易已发送:", tx.hash);
+        
         // 等待交易确认
+        console.log("[executeTrade] 等待交易确认...");
         const receipt = await this.waitForTransaction(tx);
-
+        console.log("[executeTrade] 交易已确认:", receipt.hash);
+        
         return {
           transactionHash: receipt.hash,
+          propertyId,
           orderId
         };
       },
       '交易执行成功',
-      { orderId },
+      { propertyId, orderId },
       '交易执行失败'
     );
   }
 
   /**
-   * 创建奖励分配 (原distributeRewards改名为createDistribution以匹配合约)
+   * 创建收益分配
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async createDistribution(req, res) {
-    const { propertyId, amount, description, applyFees, paymentToken } = req.body;
+    const { propertyId, amount, tokenAddress } = req.body;
+    
+    console.log("\n[createDistribution] 开始执行");
+    
     const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[createDistribution] 合约地址:", contractAddress);
     
     // 验证参数
-    if (!this.validateRequired(res, { propertyId, amount, description, contractAddress })) {
+    if (!this.validateRequired(res, { propertyId, amount, tokenAddress, contractAddress })) {
       return;
     }
     
-    // applyFees默认为true，paymentToken默认为零地址
-    const finalApplyFees = applyFees !== false;
-    // 使用兼容ethers v5和v6的方式获取零地址
-    const zeroAddress = ethers.constants ? ethers.constants.AddressZero : ethers.ZeroAddress;
-    const finalPaymentToken = paymentToken || zeroAddress;
-    
-    // 验证地址
-    if (paymentToken && !AddressUtils.isValid(finalPaymentToken)) {
-      return ResponseUtils.sendError(res, '无效的支付代币地址', 400);
-    }
-
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
-
-        // 调用合约方法 - 使用createDistribution替代distributeRewards
-        const tx = await contract.createDistribution(
+        console.log("[createDistribution] 获取合约实例...");
+        
+        // 获取manager角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'manager');
+        
+        // 调用合约方法
+        console.log("[createDistribution] 准备调用合约方法...");
+        console.log("[createDistribution] 参数:", {
           propertyId,
           amount,
-          description,
-          finalApplyFees,
-          finalPaymentToken
-        );
-
-        // 等待交易确认
-        const receipt = await this.waitForTransaction(tx);
+          tokenAddress
+        });
         
-        // 尝试从事件中提取分配ID
-        let distributionId;
-        try {
-          const event = receipt.logs.find(log => {
-            try {
-              return log?.topics[0] === ethers.id("DistributionCreated(uint256,bytes32,uint256,string)");
-            } catch (e) {
-              return false;
-            }
-          });
-          if (event) {
-            // 解析事件获取distributionId
-            const iface = new ethers.Interface([
-              "event DistributionCreated(uint256 indexed distributionId, bytes32 indexed propertyIdHash, uint256 amount, string description)"
-            ]);
-            const parsedLog = iface.parseLog(event);
-            distributionId = parsedLog.args.distributionId.toString();
-          }
-        } catch (err) {
-          Logger.warn("无法解析DistributionCreated事件", err);
-        }
-
+        const tx = await contract.createDistribution(propertyId, amount, tokenAddress);
+        console.log("[createDistribution] 交易已发送:", tx.hash);
+        
+        // 等待交易确认
+        console.log("[createDistribution] 等待交易确认...");
+        const receipt = await this.waitForTransaction(tx);
+        console.log("[createDistribution] 交易已确认:", receipt.hash);
+        
         return {
           transactionHash: receipt.hash,
           propertyId,
           amount,
-          description,
-          distributionId
+          tokenAddress
         };
       },
-      '奖励分配创建成功',
-      { propertyId, amount },
-      '奖励分配创建失败'
+      '收益分配创建成功',
+      { propertyId, amount, tokenAddress },
+      '收益分配创建失败'
     );
   }
 
   /**
-   * 分发奖励 (保留旧方法名，内部调用createDistribution以向后兼容)
+   * 分配收益
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
-   * @deprecated 请使用createDistribution方法
    */
   async distributeRewards(req, res) {
-    Logger.warn('distributeRewards方法已弃用，请使用createDistribution方法');
-    return this.createDistribution(req, res);
+    const { propertyId } = req.body;
+    
+    console.log("\n[distributeRewards] 开始执行");
+    
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[distributeRewards] 合约地址:", contractAddress);
+    
+    // 验证参数
+    if (!this.validateRequired(res, { propertyId, contractAddress })) {
+      return;
+    }
+    
+    await this.handleContractAction(
+      res,
+      async () => {
+        console.log("[distributeRewards] 获取合约实例...");
+        
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
+        
+        // 调用合约方法
+        console.log("[distributeRewards] 准备调用合约方法...");
+        console.log("[distributeRewards] 参数:", {
+          propertyId
+        });
+        
+        const tx = await contract.distributeRewards(propertyId);
+        console.log("[distributeRewards] 交易已发送:", tx.hash);
+        
+        // 等待交易确认
+        console.log("[distributeRewards] 等待交易确认...");
+        const receipt = await this.waitForTransaction(tx);
+        console.log("[distributeRewards] 交易已确认:", receipt.hash);
+        
+        return {
+          transactionHash: receipt.hash,
+          propertyId
+        };
+      },
+      '收益分配成功',
+      { propertyId },
+      '收益分配失败'
+    );
   }
 
   /**
-   * 获取版本
+   * 获取版本号
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async getVersion(req, res) {
-    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("\n[getVersion] 开始执行");
     
-    // 验证参数
-    if (!this.validateRequired(res, { contractAddress })) {
-      return;
-    }
-
+    const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[getVersion] 合约地址:", contractAddress);
+    
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
+        console.log("[getVersion] 获取合约实例...");
+        
+        // 获取admin角色合约实例
         const contract = this.getContract('RealEstateFacade', 'admin');
-
+        
         // 调用合约方法
-        const version = await contract.getVersion();
-
-        return { version };
+        console.log("[getVersion] 准备调用合约方法...");
+        const version = await contract.version();
+        console.log("[getVersion] 获取到的版本号:", version);
+        
+        return {
+          version
+        };
       },
-      '获取版本成功',
-      {},
-      '获取版本失败'
+      '获取版本号成功',
+      null,
+      '获取版本号失败'
     );
   }
 
   /**
-   * 领取奖励
+   * 领取收益
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async claimRewards(req, res) {
-    // 修改参数结构，与合约方法匹配
-    const { distributionId } = req.body;
+    const { propertyId } = req.body;
+    
+    console.log("\n[claimRewards] 开始执行");
+    
     const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[claimRewards] 合约地址:", contractAddress);
     
     // 验证参数
-    if (!this.validateRequired(res, { distributionId, contractAddress })) {
+    if (!this.validateRequired(res, { propertyId, contractAddress })) {
       return;
     }
-
+    
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
-
-        // 调用合约方法 - 修改为只传递distributionId
-        const tx = await contract.claimRewards(distributionId);
-
+        console.log("[claimRewards] 获取合约实例...");
+        
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
+        
+        // 调用合约方法
+        console.log("[claimRewards] 准备调用合约方法...");
+        console.log("[claimRewards] 参数:", {
+          propertyId
+        });
+        
+        const tx = await contract.claimRewards(propertyId);
+        console.log("[claimRewards] 交易已发送:", tx.hash);
+        
         // 等待交易确认
+        console.log("[claimRewards] 等待交易确认...");
         const receipt = await this.waitForTransaction(tx);
-
+        console.log("[claimRewards] 交易已确认:", receipt.hash);
+        
         return {
           transactionHash: receipt.hash,
-          distributionId
+          propertyId
         };
       },
-      '奖励领取成功',
-      { distributionId },
-      '奖励领取失败'
+      '收益领取成功',
+      { propertyId },
+      '收益领取失败'
     );
   }
 
   /**
-   * 创建卖单
+   * 创建订单
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async createOrder(req, res) {
-    const { token, amount, price } = req.body;
+    const { propertyId, price, amount, isBuyOrder } = req.body;
+    
+    console.log("\n[createOrder] 开始执行");
+    
     const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[createOrder] 合约地址:", contractAddress);
     
     // 验证参数
-    if (!this.validateRequired(res, { token, amount, price, contractAddress })) {
+    if (!this.validateRequired(res, { propertyId, price, amount, isBuyOrder, contractAddress })) {
       return;
     }
-
-    // 验证地址格式
-    if (!AddressUtils.isValid(token)) {
-      return ResponseUtils.sendError(res, '无效的代币地址格式', 400);
-    }
-
+    
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
-
+        console.log("[createOrder] 获取合约实例...");
+        
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
+        
         // 调用合约方法
-        const tx = await contract.createOrder(token, amount, price);
-
+        console.log("[createOrder] 准备调用合约方法...");
+        console.log("[createOrder] 参数:", {
+          propertyId,
+          price,
+          amount,
+          isBuyOrder
+        });
+        
+        const tx = await contract.createOrder(propertyId, price, amount, isBuyOrder);
+        console.log("[createOrder] 交易已发送:", tx.hash);
+        
         // 等待交易确认
+        console.log("[createOrder] 等待交易确认...");
         const receipt = await this.waitForTransaction(tx);
-
+        console.log("[createOrder] 交易已确认:", receipt.hash);
+        
         return {
           transactionHash: receipt.hash,
-          token,
+          propertyId,
+          price,
           amount,
-          price
+          isBuyOrder
         };
       },
-      '创建卖单成功',
-      { token, amount, price },
-      '创建卖单失败'
+      '订单创建成功',
+      { propertyId, price, amount, isBuyOrder },
+      '订单创建失败'
     );
   }
 
   /**
-   * 取消卖单
+   * 取消订单
    * @param {Object} req - 请求对象
    * @param {Object} res - 响应对象
    */
   async cancelOrder(req, res) {
-    const { orderId } = req.body;
+    const { propertyId, orderId } = req.body;
+    
+    console.log("\n[cancelOrder] 开始执行");
+    
     const contractAddress = EnvUtils.getContractAddress('RealEstateFacade');
+    console.log("[cancelOrder] 合约地址:", contractAddress);
     
     // 验证参数
-    if (!this.validateRequired(res, { orderId, contractAddress })) {
+    if (!this.validateRequired(res, { propertyId, orderId, contractAddress })) {
       return;
     }
-
+    
     await this.handleContractAction(
       res,
       async () => {
-        // 获取合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
-
+        console.log("[cancelOrder] 获取合约实例...");
+        
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
+        
         // 调用合约方法
-        const tx = await contract.cancelOrder(orderId);
-
+        console.log("[cancelOrder] 准备调用合约方法...");
+        console.log("[cancelOrder] 参数:", {
+          propertyId,
+          orderId
+        });
+        
+        const tx = await contract.cancelOrder(propertyId, orderId);
+        console.log("[cancelOrder] 交易已发送:", tx.hash);
+        
         // 等待交易确认
+        console.log("[cancelOrder] 等待交易确认...");
         const receipt = await this.waitForTransaction(tx);
-
+        console.log("[cancelOrder] 交易已确认:", receipt.hash);
+        
         return {
           transactionHash: receipt.hash,
+          propertyId,
           orderId
         };
       },
-      '取消卖单成功',
-      { orderId },
-      '取消卖单失败'
+      '订单取消成功',
+      { propertyId, orderId },
+      '订单取消失败'
     );
   }
 }

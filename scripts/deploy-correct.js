@@ -290,6 +290,60 @@ async function verifyDeployment(contracts) {
   }
 }
 
+/**
+ * 设置角色权限
+ * @param {Object} contracts - 合约实例
+ */
+async function setupRoles(contracts) {
+  const { system, adminAddress, managerAddress, operatorAddress } = contracts;
+  
+  logger.info('开始设置角色权限...');
+  
+  // 设置管理员角色
+  const adminTx = await system.grantRole(RoleConstants.ADMIN_ROLE, adminAddress);
+  await adminTx.wait();
+  logger.info('管理员角色设置完成', { 
+    address: adminAddress,
+    role: 'ADMIN_ROLE',
+    txHash: adminTx.hash
+  });
+  
+  // 设置经理角色
+  const managerTx = await system.grantRole(RoleConstants.MANAGER_ROLE, managerAddress);
+  await managerTx.wait();
+  logger.info('经理角色设置完成', { 
+    address: managerAddress,
+    role: 'MANAGER_ROLE',
+    txHash: managerTx.hash
+  });
+  
+  // 设置操作员角色
+  const operatorTx = await system.grantRole(RoleConstants.OPERATOR_ROLE, operatorAddress);
+  await operatorTx.wait();
+  logger.info('操作员角色设置完成', { 
+    address: operatorAddress,
+    role: 'OPERATOR_ROLE',
+    txHash: operatorTx.hash
+  });
+  
+  // 验证角色设置
+  const isAdmin = await system.hasRole(RoleConstants.ADMIN_ROLE, adminAddress);
+  const isManager = await system.hasRole(RoleConstants.MANAGER_ROLE, managerAddress);
+  const isOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, operatorAddress);
+  
+  logger.info('角色验证结果', {
+    admin: { address: adminAddress, hasRole: isAdmin },
+    manager: { address: managerAddress, hasRole: isManager },
+    operator: { address: operatorAddress, hasRole: isOperator }
+  });
+  
+  if (!isAdmin || !isManager || !isOperator) {
+    throw new Error('角色设置验证失败');
+  }
+  
+  logger.info('角色权限设置完成');
+}
+
 async function deploy() {
   try {
     logger.info("开始正确的部署流程...");

@@ -237,6 +237,303 @@ class ValidatorMiddleware {
   }
 
   /**
+   * 验证角色检查请求
+   * @returns {Function} Express中间件
+   */
+  static validateRoleCheck() {
+    return (req, res, next) => {
+      const { role, account } = req.query;
+      
+      if (!role || !account) {
+        return ResponseUtils.sendError(res, '缺少必要参数: role 或 account', 400);
+      }
+      
+      if (!AddressUtils.isValid(account)) {
+        return ResponseUtils.sendError(res, '无效的账户地址格式', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证角色授予请求
+   * @returns {Function} Express中间件
+   */
+  static validateRoleGrant() {
+    return (req, res, next) => {
+      const { role, account } = req.body;
+      
+      if (!role || !account) {
+        return ResponseUtils.sendError(res, '缺少必要参数: role 或 account', 400);
+      }
+      
+      if (!AddressUtils.isValid(account)) {
+        return ResponseUtils.sendError(res, '无效的账户地址格式', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证角色撤销请求
+   * @returns {Function} Express中间件
+   */
+  static validateRoleRevoke() {
+    return (req, res, next) => {
+      const { role, account } = req.body;
+      
+      if (!role || !account) {
+        return ResponseUtils.sendError(res, '缺少必要参数: role 或 account', 400);
+      }
+      
+      if (!AddressUtils.isValid(account)) {
+        return ResponseUtils.sendError(res, '无效的账户地址格式', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证房产状态更新请求
+   * @returns {Function} Express中间件
+   */
+  static validatePropertyStatusUpdate() {
+    return (req, res, next) => {
+      const { propertyId, status } = req.body;
+      
+      if (!propertyId || status === undefined) {
+        return ResponseUtils.sendError(res, '缺少必要参数: propertyId 或 status', 400);
+      }
+      
+      if (!AddressUtils.isValid(propertyId)) {
+        return ResponseUtils.sendError(res, '无效的房产ID格式', 400);
+      }
+      
+      // 验证状态值是否在有效范围内
+      const validStatuses = [0, 1, 2, 3, 4]; // NotRegistered, Pending, Approved, Rejected, Delisted
+      if (!validStatuses.includes(Number(status))) {
+        return ResponseUtils.sendError(res, '无效的房产状态值', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证交易执行请求
+   * @returns {Function} Express中间件
+   */
+  static validateTradeExecution() {
+    return (req, res, next) => {
+      const { tokenAddress, from, to, amount } = req.body;
+      
+      if (!tokenAddress || !from || !to || !amount) {
+        return ResponseUtils.sendError(res, '缺少必要参数: tokenAddress, from, to, amount', 400);
+      }
+      
+      if (!AddressUtils.isValid(tokenAddress)) {
+        return ResponseUtils.sendError(res, '无效的代币地址格式', 400);
+      }
+      
+      if (!AddressUtils.isValid(from)) {
+        return ResponseUtils.sendError(res, '无效的发送方地址格式', 400);
+      }
+      
+      if (!AddressUtils.isValid(to)) {
+        return ResponseUtils.sendError(res, '无效的接收方地址格式', 400);
+      }
+      
+      const amountNum = Number(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return ResponseUtils.sendError(res, '无效的交易金额', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证分配创建请求
+   * @returns {Function} Express中间件
+   */
+  static validateDistributionCreation() {
+    return (req, res, next) => {
+      const { propertyId, amount, recipients } = req.body;
+      
+      if (!propertyId || !amount || !recipients) {
+        return ResponseUtils.sendError(res, '缺少必要参数: propertyId, amount, recipients', 400);
+      }
+      
+      if (!AddressUtils.isValid(propertyId)) {
+        return ResponseUtils.sendError(res, '无效的房产ID格式', 400);
+      }
+      
+      const amountNum = Number(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return ResponseUtils.sendError(res, '无效的分配金额', 400);
+      }
+      
+      if (!Array.isArray(recipients) || recipients.length === 0) {
+        return ResponseUtils.sendError(res, '无效的接收者列表', 400);
+      }
+      
+      for (const recipient of recipients) {
+        if (!AddressUtils.isValid(recipient)) {
+          return ResponseUtils.sendError(res, '接收者列表中包含无效的地址格式', 400);
+        }
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证奖励分配请求
+   * @returns {Function} Express中间件
+   */
+  static validateRewardDistribution() {
+    return (req, res, next) => {
+      const { propertyId, amount } = req.body;
+      
+      if (!propertyId || !amount) {
+        return ResponseUtils.sendError(res, '缺少必要参数: propertyId, amount', 400);
+      }
+      
+      if (!AddressUtils.isValid(propertyId)) {
+        return ResponseUtils.sendError(res, '无效的房产ID格式', 400);
+      }
+      
+      const amountNum = Number(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return ResponseUtils.sendError(res, '无效的奖励金额', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证奖励领取请求
+   * @returns {Function} Express中间件
+   */
+  static validateRewardClaim() {
+    return (req, res, next) => {
+      const { propertyId } = req.body;
+      
+      if (!propertyId) {
+        return ResponseUtils.sendError(res, '缺少必要参数: propertyId', 400);
+      }
+      
+      if (!AddressUtils.isValid(propertyId)) {
+        return ResponseUtils.sendError(res, '无效的房产ID格式', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证订单创建参数
+   * @returns {Function} Express中间件
+   */
+  static validateOrderCreation() {
+    return (req, res, next) => {
+      const { token, amount, price, propertyId } = req.body;
+      
+      // 验证必需参数
+      if (!token || !amount || !price || !propertyId) {
+        return ResponseUtils.sendError(res, '缺少必要参数: token, amount, price, propertyId', 400);
+      }
+      
+      // 验证地址格式
+      if (!AddressUtils.isValid(token)) {
+        return ResponseUtils.sendError(res, '无效的代币地址格式', 400);
+      }
+      
+      // 验证数值参数
+      if (isNaN(amount) || amount <= 0) {
+        return ResponseUtils.sendError(res, '无效的金额', 400);
+      }
+      
+      if (isNaN(price) || price <= 0) {
+        return ResponseUtils.sendError(res, '无效的价格', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证手续费率
+   * @returns {Function} Express中间件
+   */
+  static validateFeeRate() {
+    return (req, res, next) => {
+      const { feeRate } = req.body;
+      
+      if (feeRate === undefined || feeRate === null) {
+        return ResponseUtils.sendError(res, '缺少必要参数: feeRate', 400);
+      }
+      
+      const feeRateNum = Number(feeRate);
+      if (isNaN(feeRateNum) || feeRateNum < 0 || feeRateNum > 10000) {
+        return ResponseUtils.sendError(res, '无效的手续费率，必须在0-10000之间', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证最小交易金额
+   * @returns {Function} Express中间件
+   */
+  static validateMinTradeAmount() {
+    return (req, res, next) => {
+      const { minTradeAmount } = req.body;
+      
+      if (minTradeAmount === undefined || minTradeAmount === null) {
+        return ResponseUtils.sendError(res, '缺少必要参数: minTradeAmount', 400);
+      }
+      
+      const amountNum = Number(minTradeAmount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return ResponseUtils.sendError(res, '无效的最小交易金额', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
+   * 验证紧急提现参数
+   * @returns {Function} Express中间件
+   */
+  static validateEmergencyWithdrawal() {
+    return (req, res, next) => {
+      const { token, amount } = req.body;
+      
+      if (!token || !amount) {
+        return ResponseUtils.sendError(res, '缺少必要参数: token, amount', 400);
+      }
+      
+      if (!AddressUtils.isValid(token)) {
+        return ResponseUtils.sendError(res, '无效的代币地址格式', 400);
+      }
+      
+      const amountNum = Number(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return ResponseUtils.sendError(res, '无效的提现金额', 400);
+      }
+      
+      next();
+    };
+  }
+
+  /**
    * 通用验证中间件组合
    * @param {Object} schema - 验证模式
    * @returns {Function} Express中间件

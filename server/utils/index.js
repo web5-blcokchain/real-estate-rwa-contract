@@ -4,9 +4,7 @@
  */
 
 const ResponseUtils = require('./response');
-const ControllerFactory = require('./controller-factory');
 
 module.exports = {
-  ResponseUtils,
-  ControllerFactory
+  ResponseUtils
 }; 
