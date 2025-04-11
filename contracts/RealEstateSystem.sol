@@ -42,6 +42,9 @@ contract RealEstateSystem is
     // 当前系统状态
     SystemStatus public systemStatus;
 
+    // PropertyToken实现合约地址
+    address public propertyTokenImplementation;
+
     // 授权合约地址
     mapping(address => bool) public authorizedContracts;
     
@@ -296,5 +299,12 @@ contract RealEstateSystem is
         return authorizedList[sender] || 
                hasRole(RoleConstants.ADMIN_ROLE(), sender) ||
                hasRole(RoleConstants.MANAGER_ROLE(), sender);
+    }
+
+    /**
+     * @dev 获取PropertyToken实现合约地址
+     */
+    function getPropertyTokenImplementation() external view returns (address) {
+        return propertyTokenImplementation;
     }
 } 

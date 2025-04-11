@@ -154,25 +154,26 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev Initializes the contract - 需要ADMIN权限
+     * @dev 初始化合约
      */
     function initialize(
         address _systemAddress,
-        address _propertyManager,
-        address payable _tradingManager,
-        address payable _rewardManager
+        address _propertyManagerAddress,
+        address payable _tradingManagerAddress,
+        address payable _rewardManagerAddress
     ) public initializer {
         require(_systemAddress != address(0), "System address cannot be zero");
-        require(_propertyManager != address(0), "Property manager address cannot be zero");
-        require(_tradingManager != address(0), "Trading manager address cannot be zero");
-        require(_rewardManager != address(0), "Reward manager address cannot be zero");
+        require(_propertyManagerAddress != address(0), "PropertyManager address cannot be zero");
+        require(_tradingManagerAddress != address(0), "TradingManager address cannot be zero");
+        require(_rewardManagerAddress != address(0), "RewardManager address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+        propertyManager = PropertyManager(_propertyManagerAddress);
+        tradingManager = TradingManager(_tradingManagerAddress);
+        rewardManager = RewardManager(_rewardManagerAddress);
         
-        propertyManager = PropertyManager(_propertyManager);
-        tradingManager = TradingManager(payable(_tradingManager));
-        rewardManager = RewardManager(payable(_rewardManager));
+        // 验证调用者是否有 ADMIN_ROLE 权限
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         
         __ReentrancyGuard_init();
         __Pausable_init();
@@ -183,9 +184,9 @@ contract RealEstateFacade is
         emit FacadeInitialized(
             msg.sender,
             _systemAddress,
-            _propertyManager,
-            _tradingManager,
-            _rewardManager,
+            _propertyManagerAddress,
+            _tradingManagerAddress,
+            _rewardManagerAddress,
             uint40(block.timestamp)
         );
     }
@@ -246,40 +247,22 @@ contract RealEstateFacade is
         string memory propertyId,
         string memory country,
         string memory metadataURI,
-        string memory tokenName,
-        string memory tokenSymbol,
         uint256 initialSupply,
-        address propertyTokenImplementation
+        string memory tokenName,
+        string memory tokenSymbol
     ) public whenNotPaused nonReentrant returns (address) {
+        // 验证调用者权限
         system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        require(propertyTokenImplementation != address(0), "Invalid implementation");
         
-        // 注册房产
-        propertyManager.registerProperty(propertyId, country, metadataURI);
-        
-        // 部署代理合约
-        bytes memory initData = abi.encodeWithSelector(
-            PropertyToken(address(0)).initialize.selector,
+        // 调用 PropertyManager 注册房产
+        address tokenAddress = propertyManager.registerProperty(
             propertyId,
-            tokenName,
-            tokenSymbol,
+            country,
+            metadataURI,
             initialSupply,
-            msg.sender,
-            address(system)
+            tokenName,
+            tokenSymbol
         );
-        
-        // 使用系统合约作为ProxyAdmin
-        address proxyAdmin = address(system);
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            propertyTokenImplementation,
-            proxyAdmin,
-            initData
-        );
-        
-        address tokenAddress = address(proxy);
-        
-        // 注册代币地址
-        propertyManager.registerTokenForProperty(propertyId, tokenAddress);
         
         emit PropertyRegistered(
             propertyId,

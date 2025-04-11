@@ -121,10 +121,9 @@ async function main() {
       TEST_DATA.propertyId,
       TEST_DATA.propertyData.country,
       TEST_DATA.propertyData.metadataURI,
-      TEST_DATA.tokenData.name,
-      TEST_DATA.tokenData.symbol,
       TEST_DATA.tokenData.initialSupply,
-      TEST_DATA.propertyTokenImplementation
+      TEST_DATA.tokenData.name,
+      TEST_DATA.tokenData.symbol
     );
 
     console.log('交易已发送:', tx.hash);

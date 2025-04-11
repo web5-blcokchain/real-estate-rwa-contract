@@ -88,13 +88,11 @@ contract PropertyToken is
      * @dev Initializes the contract with property details and initial supply - 需要OPERATOR权限
      */
     function initialize(
+        RealEstateSystem _system,
+        string memory _propertyId,
+        uint256 _initialSupply,
         string memory _name,
-        string memory _symbol,
-        uint256 _totalSupply,
-        uint256 _price,
-        uint256 _minInvestment,
-        uint256 _maxInvestment,
-        uint256 _lockupPeriod
+        string memory _symbol
     ) public initializer {
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
@@ -102,17 +100,19 @@ contract PropertyToken is
         __Pausable_init();
         __UUPSUpgradeable_init();
 
-        maxSupply = _totalSupply;
-        _mint(msg.sender, _totalSupply);
+        system = _system;
+        propertyId = _propertyId;
+        maxSupply = _initialSupply;
+        _mint(msg.sender, _initialSupply);
 
         emit PropertyTokenInitialized(
             _name,
             _symbol,
-            _totalSupply,
-            _price,
-            _minInvestment,
-            _maxInvestment,
-            _lockupPeriod,
+            _initialSupply,
+            0,  // price
+            0,  // minInvestment
+            0,  // maxInvestment
+            0,  // lockupPeriod
             uint40(block.timestamp)
         );
     }

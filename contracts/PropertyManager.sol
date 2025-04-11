@@ -5,8 +5,10 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
+import "./PropertyToken.sol";
 
 /**
  * @title PropertyManager
@@ -124,8 +126,12 @@ contract PropertyManager is
     function registerProperty(
         string memory propertyId,
         string memory country,
-        string memory metadataURI
-    ) external whenNotPaused {
+        string memory metadataURI,
+        uint256 initialSupply,
+        string memory tokenName,
+        string memory tokenSymbol
+    ) external whenNotPaused returns (address) {
+        // 验证调用者（RealEstateFacade 合约）是否有权限
         system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         require(!_properties[propertyId].exists, "Property already exists");
         
@@ -141,7 +147,45 @@ contract PropertyManager is
         
         allPropertyIds.push(propertyId);
         
+        // 创建代币合约
+        address tokenAddress = _createToken(
+            propertyId,
+            initialSupply,
+            tokenName,
+            tokenSymbol
+        );
+        
+        // 注册代币地址
+        propertyTokens[propertyId] = tokenAddress;
+        
         emit PropertyRegistered(propertyId, country, metadataURI, registrationTime);
+        emit TokenRegistered(propertyId, tokenAddress);
+        
+        return tokenAddress;
+    }
+    
+    /**
+     * @dev 创建代币合约
+     */
+    function _createToken(
+        string memory propertyId,
+        uint256 initialSupply,
+        string memory tokenName,
+        string memory tokenSymbol
+    ) private returns (address) {
+        // 直接部署 PropertyToken 合约
+        PropertyToken token = new PropertyToken();
+        
+        // 初始化代币合约
+        token.initialize(
+            system,
+            propertyId,
+            initialSupply,
+            tokenName,
+            tokenSymbol
+        );
+        
+        return address(token);
     }
     
     /**
@@ -226,23 +270,6 @@ contract PropertyManager is
     function isPropertyApproved(string memory propertyId) public view returns (bool) {
         if (!_properties[propertyId].exists) return false;
         return _properties[propertyId].status == uint8(PropertyStatus.Approved);
-    }
-    
-    /**
-     * @dev 注册代币地址 - 需要OPERATOR权限
-     */
-    function registerTokenForProperty(string memory propertyId, address tokenAddress) 
-        external 
-        whenNotPaused
-    {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        require(_properties[propertyId].exists, "Property not exist");
-        require(tokenAddress != address(0), "Invalid token address");
-        require(propertyTokens[propertyId] == address(0), "Token already registered");
-        
-        propertyTokens[propertyId] = tokenAddress;
-        
-        emit TokenRegistered(propertyId, tokenAddress);
     }
     
     /**

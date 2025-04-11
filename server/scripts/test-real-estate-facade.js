@@ -3,6 +3,14 @@ const { ContractUtils } = require('../../common');
 const RealEstateFacadeController = require('../controllers/core/RealEstateFacadeController');
 const fs = require('fs');
 const path = require('path');
+const { ethers } = require('ethers');
+
+// 导入角色常量
+const ROLES = {
+  ADMIN_ROLE: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
+  MANAGER_ROLE: '0x241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08',
+  OPERATOR_ROLE: '0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929'
+};
 
 /**
  * 获取最新的部署报告
@@ -79,6 +87,74 @@ async function runTest(name, testFn) {
 }
 
 /**
+ * 检查系统状态和角色权限
+ */
+async function checkSystemAndRoles() {
+  Logger.info('检查系统状态和角色权限...');
+  
+  // 获取系统合约实例
+  const systemContract = controller.getContract('RealEstateSystem', 'admin');
+  
+  // 检查系统状态
+  const systemStatus = await systemContract.getSystemStatus();
+  Logger.info(`当前系统状态: ${systemStatus} (${getSystemStatusName(systemStatus)})`);
+  
+  if (systemStatus !== 2) { // 2 = Active
+    Logger.warn(`系统状态为 ${systemStatus} (${getSystemStatusName(systemStatus)})，尝试设置为 Active...`);
+    const tx = await systemContract.setSystemStatus(2);
+    await tx.wait();
+    const newStatus = await systemContract.getSystemStatus();
+    Logger.info(`系统状态已更新为: ${newStatus} (${getSystemStatusName(newStatus)})`);
+  } else {
+    Logger.info('系统已处于激活状态');
+  }
+  
+  // 检查角色权限
+  const operatorAddress = EnvUtils.getString('OPERATOR_ADDRESS');
+  const hasOperatorRole = await systemContract.hasRole(
+    ROLES.OPERATOR_ROLE,
+    operatorAddress
+  );
+  Logger.info(`操作员角色权限: ${hasOperatorRole}`);
+  
+  if (!hasOperatorRole) {
+    Logger.warn('操作员没有权限，尝试授予权限...');
+    const tx = await systemContract.grantRole(
+      ROLES.OPERATOR_ROLE,
+      operatorAddress
+    );
+    await tx.wait();
+    Logger.info('已授予操作员权限');
+  }
+  
+  // 检查合约授权
+  const facadeAddress = EnvUtils.getString('CONTRACT_REALESTATEFACADE_ADDRESS');
+  const isAuthorized = await systemContract.authorizedContracts(facadeAddress);
+  Logger.info(`门面合约授权状态: ${isAuthorized}`);
+  
+  if (!isAuthorized) {
+    Logger.warn('门面合约未授权，尝试授权...');
+    const tx = await systemContract.setContractAuthorization(facadeAddress, true);
+    await tx.wait();
+    Logger.info('已授权门面合约');
+  }
+}
+
+/**
+ * 获取系统状态名称
+ */
+function getSystemStatusName(status) {
+  switch (status) {
+    case 0: return 'Inactive';
+    case 1: return 'Testing';
+    case 2: return 'Active';
+    case 3: return 'Suspended';
+    case 4: return 'Upgrading';
+    default: return 'Unknown';
+  }
+}
+
+/**
  * 主测试函数
  */
 async function main() {
@@ -90,6 +166,15 @@ async function main() {
     Logger.info('使用合约地址', { 
       facadeAddress,
       systemAddress
+    });
+
+    // 检查系统状态和角色权限
+    await checkSystemAndRoles();
+
+    // 设置角色重写映射
+    controller.constructor.setRoleOverrides({
+      'registerPropertyAndCreateToken': 'operator',
+      'getVersion': 'operator'
     });
     
     // 测试注册房产并创建代币

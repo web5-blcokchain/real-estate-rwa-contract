@@ -473,25 +473,37 @@ async function deploy() {
     // 5. 部署门面合约
     logger.info("步骤5: 部署门面合约...");
     const RealEstateFacade = await ethers.getContractFactory("RealEstateFacade");
-    const realEstateFacade = await upgrades.deployProxy(RealEstateFacade, [
-      systemAddress,
-      propertyManagerAddress,
-      tradingManagerAddress,
-      rewardManagerAddress
-    ], {
-      kind: "uups",
-      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto", "state-variable-immutable", "state-variable-assignment", "external-library-linking"]
-    });
-    await realEstateFacade.waitForDeployment();
-    const realEstateFacadeAddress = await realEstateFacade.getAddress();
-    const realEstateFacadeImplementation = await upgrades.erc1967.getImplementationAddress(realEstateFacadeAddress);
-    logger.info(`RealEstateFacade 部署到: ${realEstateFacadeAddress}`);
-    logger.info(`RealEstateFacade 实现地址: ${realEstateFacadeImplementation}`);
+    const facade = await upgrades.deployProxy(
+        RealEstateFacade,
+        [
+            systemAddress,
+            propertyManagerAddress,
+            tradingManagerAddress,
+            rewardManagerAddress
+        ],
+        { initializer: 'initialize' }
+    );
+    await facade.waitForDeployment();
+    const facadeAddress = await facade.getAddress();
+    logger.info(`RealEstateFacade 部署到: ${facadeAddress}`);
     
-    // 授权门面合约
-    tx = await system.setContractAuthorization(realEstateFacadeAddress, true);
-    await tx.wait();
-    logger.info("RealEstateFacade 已授权");
+    // 授予 RealEstateFacade 合约 OPERATOR_ROLE 权限
+    logger.info('授予 RealEstateFacade 合约 OPERATOR_ROLE 权限...');
+    await system.connect(adminSigner).grantRole(ROLES.OPERATOR_ROLE, facadeAddress);
+    logger.info('已授予 RealEstateFacade 合约 OPERATOR_ROLE 权限');
+    
+    // 激活系统
+    logger.info('正在激活系统...');
+    await system.connect(adminSigner).setSystemStatus(2); // 2 = Active
+    logger.info('系统已激活');
+    
+    // 验证系统状态
+    const systemStatus = await system.getSystemStatus();
+    logger.info(`系统状态: ${systemStatus}`);
+    if (Number(systemStatus) !== 2) { // 2 = Active
+        throw new Error(`系统激活失败，当前状态: ${systemStatus}`);
+    }
+    logger.info('系统状态验证通过');
     
     // 6. 设置交易管理器参数
     logger.info("步骤6: 配置交易参数...");
@@ -506,13 +518,7 @@ async function deploy() {
     tx = await tradingManager.setFeeReceiver(deployer.address);
     await tx.wait();
     
-    // 7. 激活系统
-    logger.info("步骤7: 激活系统...");
-    tx = await system.setSystemStatus(1); // 1 = Active
-    await tx.wait();
-    logger.info("系统已激活");
-    
-    // 8. 设置角色权限
+    // 7. 设置角色权限
     await setupRoles({
       system,
       adminSigner,
@@ -536,8 +542,8 @@ async function deploy() {
       rewardManagerAddress,
       rewardManagerImplementation,
       testTokenAddress,
-      realEstateFacadeAddress,
-      realEstateFacadeImplementation
+      realEstateFacadeAddress: facadeAddress,
+      realEstateFacadeImplementation: systemImplementation
     };
     
     generateDeploymentReport(contracts);

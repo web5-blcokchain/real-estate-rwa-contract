@@ -43,33 +43,28 @@ contract PropertyTokenFactory is Initializable, UUPSUpgradeable, PausableUpgrade
     }
 
     function createToken(
+        string memory propertyId,
+        uint256 initialSupply,
         string memory name,
-        string memory symbol,
-        uint256 totalSupply,
-        uint256 price,
-        uint256 minInvestment,
-        uint256 maxInvestment,
-        uint256 lockupPeriod
+        string memory symbol
     ) external whenNotPaused returns (address) {
         system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         PropertyToken token = new PropertyToken();
         token.initialize(
+            system,
+            propertyId,
+            initialSupply,
             name,
-            symbol,
-            totalSupply,
-            price,
-            minInvestment,
-            maxInvestment,
-            lockupPeriod
+            symbol
         );
         tokenInfos[address(token)] = PropertyToken.TokenInfo(
             name,
             symbol,
-            totalSupply,
-            price,
-            minInvestment,
-            maxInvestment,
-            lockupPeriod
+            initialSupply,
+            0,  // price
+            0,  // minInvestment
+            0,  // maxInvestment
+            0   // lockupPeriod
         );
         return address(token);
     }
