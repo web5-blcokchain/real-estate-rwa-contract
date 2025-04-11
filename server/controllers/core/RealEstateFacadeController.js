@@ -87,8 +87,8 @@ class RealEstateFacadeController extends BaseController {
       async () => {
         console.log("[registerPropertyAndCreateToken] 获取合约实例...");
         
-        // 获取admin角色合约实例
-        const contract = this.getContract('RealEstateFacade', 'admin');
+        // 获取operator角色合约实例
+        const contract = this.getContract('RealEstateFacade', 'operator');
         
         // 调用合约方法
         console.log("[registerPropertyAndCreateToken] 准备调用合约方法...");

@@ -22,6 +22,8 @@ contract RealEstateSystem is
     UUPSUpgradeable,
     PausableUpgradeable {
     
+    using RoleConstants for bytes32;
+    
     // 版本控制
     uint8 private constant VERSION = 1;
     
@@ -64,15 +66,15 @@ contract RealEstateSystem is
         __UUPSUpgradeable_init();
         __Pausable_init();
         
-        // 设置默认管理员
-        _setupRole(DEFAULT_ADMIN_ROLE, admin);
+        // 设置角色继承关系
+        _setRoleAdmin(RoleConstants.MANAGER_ROLE(), RoleConstants.ADMIN_ROLE());
+        _setRoleAdmin(RoleConstants.OPERATOR_ROLE(), RoleConstants.MANAGER_ROLE());
         
-        // 设置角色层级关系
-        _setupRole(RoleConstants.ADMIN_ROLE, admin);
-        _setupRole(RoleConstants.MANAGER_ROLE, admin);
-        _setupRole(RoleConstants.OPERATOR_ROLE, admin);
-        _setupRole(RoleConstants.PAUSER_ROLE, admin);
-        _setupRole(RoleConstants.UPGRADER_ROLE, admin);
+        // 授予部署者 DEFAULT_ADMIN_ROLE 权限
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        
+        // 授予管理员角色
+        _grantRole(RoleConstants.ADMIN_ROLE(), admin);
         
         systemStatus = SystemStatus.Inactive;
         emergencyMode = false;
@@ -87,16 +89,16 @@ contract RealEstateSystem is
         super._setupRole(role, account);
         
         // 设置角色层级关系
-        if (role == RoleConstants.ADMIN_ROLE) {
+        if (role == RoleConstants.ADMIN_ROLE()) {
             // ADMIN 自动获得 MANAGER 和 OPERATOR 权限
-            super._setupRole(RoleConstants.MANAGER_ROLE, account);
-            super._setupRole(RoleConstants.OPERATOR_ROLE, account);
-            emit RoleGranted(RoleConstants.MANAGER_ROLE, account, msg.sender);
-            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
-        } else if (role == RoleConstants.MANAGER_ROLE) {
+            super._setupRole(RoleConstants.MANAGER_ROLE(), account);
+            super._setupRole(RoleConstants.OPERATOR_ROLE(), account);
+            emit RoleGranted(RoleConstants.MANAGER_ROLE(), account, msg.sender);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE(), account, msg.sender);
+        } else if (role == RoleConstants.MANAGER_ROLE()) {
             // MANAGER 自动获得 OPERATOR 权限
-            super._setupRole(RoleConstants.OPERATOR_ROLE, account);
-            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+            super._setupRole(RoleConstants.OPERATOR_ROLE(), account);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE(), account, msg.sender);
         }
         
         emit RoleGranted(role, account, msg.sender);
@@ -109,16 +111,16 @@ contract RealEstateSystem is
         super._grantRole(role, account);
         
         // 设置角色层级关系
-        if (role == RoleConstants.ADMIN_ROLE) {
+        if (role == RoleConstants.ADMIN_ROLE()) {
             // ADMIN 自动获得 MANAGER 和 OPERATOR 权限
-            super._grantRole(RoleConstants.MANAGER_ROLE, account);
-            super._grantRole(RoleConstants.OPERATOR_ROLE, account);
-            emit RoleGranted(RoleConstants.MANAGER_ROLE, account, msg.sender);
-            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
-        } else if (role == RoleConstants.MANAGER_ROLE) {
+            super._grantRole(RoleConstants.MANAGER_ROLE(), account);
+            super._grantRole(RoleConstants.OPERATOR_ROLE(), account);
+            emit RoleGranted(RoleConstants.MANAGER_ROLE(), account, msg.sender);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE(), account, msg.sender);
+        } else if (role == RoleConstants.MANAGER_ROLE()) {
             // MANAGER 自动获得 OPERATOR 权限
-            super._grantRole(RoleConstants.OPERATOR_ROLE, account);
-            emit RoleGranted(RoleConstants.OPERATOR_ROLE, account, msg.sender);
+            super._grantRole(RoleConstants.OPERATOR_ROLE(), account);
+            emit RoleGranted(RoleConstants.OPERATOR_ROLE(), account, msg.sender);
         }
         
         emit RoleGranted(role, account, msg.sender);
@@ -131,13 +133,13 @@ contract RealEstateSystem is
         super._revokeRole(role, account);
         
         // 撤销相关角色的权限
-        if (role == RoleConstants.ADMIN_ROLE) {
+        if (role == RoleConstants.ADMIN_ROLE()) {
             // 撤销 ADMIN 时同时撤销 MANAGER 和 OPERATOR 权限
-            super._revokeRole(RoleConstants.MANAGER_ROLE, account);
-            super._revokeRole(RoleConstants.OPERATOR_ROLE, account);
-        } else if (role == RoleConstants.MANAGER_ROLE) {
+            super._revokeRole(RoleConstants.MANAGER_ROLE(), account);
+            super._revokeRole(RoleConstants.OPERATOR_ROLE(), account);
+        } else if (role == RoleConstants.MANAGER_ROLE()) {
             // 撤销 MANAGER 时同时撤销 OPERATOR 权限
-            super._revokeRole(RoleConstants.OPERATOR_ROLE, account);
+            super._revokeRole(RoleConstants.OPERATOR_ROLE(), account);
         }
     }
     
@@ -146,7 +148,7 @@ contract RealEstateSystem is
      */
     function setSystemStatus(SystemStatus newStatus) 
         external 
-        onlyRole(RoleConstants.ADMIN_ROLE) 
+        onlyRole(RoleConstants.ADMIN_ROLE()) 
     {
         SystemStatus oldStatus = systemStatus;
         systemStatus = newStatus;
@@ -163,7 +165,7 @@ contract RealEstateSystem is
     /**
      * @dev 激活紧急模式
      */
-    function activateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE) {
+    function activateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE()) {
         require(!emergencyMode, "Emergency mode already active");
         emergencyMode = true;
         _pause();
@@ -173,7 +175,7 @@ contract RealEstateSystem is
     /**
      * @dev 取消激活紧急模式
      */
-    function deactivateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE) {
+    function deactivateEmergencyMode() external onlyRole(RoleConstants.ADMIN_ROLE()) {
         require(emergencyMode, "Emergency mode not active");
         emergencyMode = false;
         _unpause();
@@ -183,16 +185,13 @@ contract RealEstateSystem is
     /**
      * @dev 转移管理员权限到新地址
      */
-    function transferAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE) {
+    function transferAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE()) {
         require(newAdmin != address(0), "New admin is zero address");
         
         // 授予新管理员所有角色
-        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
-        _setupRole(RoleConstants.ADMIN_ROLE, newAdmin);
-        _setupRole(RoleConstants.MANAGER_ROLE, newAdmin);
-        _setupRole(RoleConstants.OPERATOR_ROLE, newAdmin);
-        _setupRole(RoleConstants.PAUSER_ROLE, newAdmin);
-        _setupRole(RoleConstants.UPGRADER_ROLE, newAdmin);
+        _setupRole(RoleConstants.ADMIN_ROLE(), newAdmin);
+        _setupRole(RoleConstants.MANAGER_ROLE(), newAdmin);
+        _setupRole(RoleConstants.OPERATOR_ROLE(), newAdmin);
         
         emit SystemAdminChanged(msg.sender, newAdmin);
     }
@@ -200,24 +199,18 @@ contract RealEstateSystem is
     /**
      * @dev 转移管理员权限并撤销当前管理员权限
      */
-    function transferAndRenounceAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE) {
+    function transferAndRenounceAdminRole(address newAdmin) external onlyRole(RoleConstants.ADMIN_ROLE()) {
         require(newAdmin != address(0), "New admin is zero address");
         
         // 授予新管理员所有角色
-        _setupRole(DEFAULT_ADMIN_ROLE, newAdmin);
-        _setupRole(RoleConstants.ADMIN_ROLE, newAdmin);
-        _setupRole(RoleConstants.MANAGER_ROLE, newAdmin);
-        _setupRole(RoleConstants.OPERATOR_ROLE, newAdmin);
-        _setupRole(RoleConstants.PAUSER_ROLE, newAdmin);
-        _setupRole(RoleConstants.UPGRADER_ROLE, newAdmin);
+        _setupRole(RoleConstants.ADMIN_ROLE(), newAdmin);
+        _setupRole(RoleConstants.MANAGER_ROLE(), newAdmin);
+        _setupRole(RoleConstants.OPERATOR_ROLE(), newAdmin);
         
         // 撤销当前管理员的角色
-        renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        renounceRole(RoleConstants.ADMIN_ROLE, msg.sender);
-        renounceRole(RoleConstants.MANAGER_ROLE, msg.sender);
-        renounceRole(RoleConstants.OPERATOR_ROLE, msg.sender);
-        renounceRole(RoleConstants.PAUSER_ROLE, msg.sender);
-        renounceRole(RoleConstants.UPGRADER_ROLE, msg.sender);
+        renounceRole(RoleConstants.ADMIN_ROLE(), msg.sender);
+        renounceRole(RoleConstants.MANAGER_ROLE(), msg.sender);
+        renounceRole(RoleConstants.OPERATOR_ROLE(), msg.sender);
         
         emit SystemAdminChanged(msg.sender, newAdmin);
     }
@@ -225,7 +218,7 @@ contract RealEstateSystem is
     /**
      * @dev 授权合约调用
      */
-    function setContractAuthorization(address contractAddress, bool authorized) external onlyRole(RoleConstants.ADMIN_ROLE) {
+    function setContractAuthorization(address contractAddress, bool authorized) external onlyRole(RoleConstants.ADMIN_ROLE()) {
         authorizedContracts[contractAddress] = authorized;
         emit ContractAuthorized(contractAddress, authorized);
     }
@@ -270,7 +263,7 @@ contract RealEstateSystem is
     function _authorizeUpgrade(address newImplementation) 
         internal 
         override 
-        onlyRole(RoleConstants.UPGRADER_ROLE) 
+        onlyRole(RoleConstants.UPGRADER_ROLE()) 
     {
         require(!emergencyMode, "Emergency mode active");
     }
@@ -278,7 +271,7 @@ contract RealEstateSystem is
     /**
      * @dev 批量授予地址特定角色
      */
-    function batchGrantRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function batchGrantRole(bytes32 role, address[] calldata accounts) external onlyRole(RoleConstants.ADMIN_ROLE()) {
         for (uint256 i = 0; i < accounts.length; i++) {
             grantRole(role, accounts[i]);
         }
@@ -287,7 +280,7 @@ contract RealEstateSystem is
     /**
      * @dev 批量撤销地址的特定角色
      */
-    function batchRevokeRole(bytes32 role, address[] calldata accounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function batchRevokeRole(bytes32 role, address[] calldata accounts) external onlyRole(RoleConstants.ADMIN_ROLE()) {
         for (uint256 i = 0; i < accounts.length; i++) {
             revokeRole(role, accounts[i]);
         }
@@ -301,7 +294,7 @@ contract RealEstateSystem is
      */
     function checkAuthorization(mapping(address => bool) storage authorizedList, address sender) internal view returns (bool) {
         return authorizedList[sender] || 
-               hasRole(RoleConstants.ADMIN_ROLE, sender) ||
-               hasRole(RoleConstants.MANAGER_ROLE, sender);
+               hasRole(RoleConstants.ADMIN_ROLE(), sender) ||
+               hasRole(RoleConstants.MANAGER_ROLE(), sender);
     }
 } 

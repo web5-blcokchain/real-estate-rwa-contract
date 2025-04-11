@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
 import "./PropertyToken.sol";
@@ -21,11 +22,13 @@ import "./utils/SafeMath.sol";
  */
 contract RewardManager is 
     Initializable,
-    UUPSUpgradeable,
+    AccessControlUpgradeable,
     ReentrancyGuardUpgradeable,
+    UUPSUpgradeable,
     PausableUpgradeable {
     
     using SafeMath for uint256;
+    using RoleConstants for bytes32;
     
     // 版本控制 - 使用uint8节省gas
     uint8 public version;
@@ -183,12 +186,13 @@ contract RewardManager is
         require(_propertyManager != address(0), "Property manager address cannot be zero");
         require(_tradingManager != address(0), "Trading manager address cannot be zero");
         
-        system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
-        
+        __AccessControl_init();
         __ReentrancyGuard_init();
-        __Pausable_init();
         __UUPSUpgradeable_init();
+        __Pausable_init();
+        
+        system = RealEstateSystem(_systemAddress);
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         
         version = 1;
         
@@ -205,9 +209,9 @@ contract RewardManager is
         string memory description
     ) external whenNotPaused returns (uint256) {
         require(
-            system.hasRole(RoleConstants.OPERATOR_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.MANAGER_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.ADMIN_ROLE, msg.sender),
+            system.hasRole(RoleConstants.OPERATOR_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.MANAGER_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.ADMIN_ROLE(), msg.sender),
             "Not authorized"
         );
         require(recipient != address(0), "Invalid recipient address");
@@ -249,9 +253,9 @@ contract RewardManager is
         RewardStatus status
     ) external whenNotPaused {
         require(
-            system.hasRole(RoleConstants.OPERATOR_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.MANAGER_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.ADMIN_ROLE, msg.sender),
+            system.hasRole(RoleConstants.OPERATOR_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.MANAGER_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.ADMIN_ROLE(), msg.sender),
             "Not authorized"
         );
         require(_rewards[rewardId].exists, "Reward not exist");
@@ -272,8 +276,8 @@ contract RewardManager is
         uint256 _cooldownPeriod
     ) external whenNotPaused {
         require(
-            system.hasRole(RoleConstants.MANAGER_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.ADMIN_ROLE, msg.sender),
+            system.hasRole(RoleConstants.MANAGER_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.ADMIN_ROLE(), msg.sender),
             "Not authorized"
         );
         require(_maxRewardAmount > _minRewardAmount, "Invalid amount range");
@@ -290,7 +294,7 @@ contract RewardManager is
      * @dev 授权合约 - 需要ADMIN权限
      */
     function authorizeContract(address _contract, bool _authorized) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         authorizedContracts[_contract] = _authorized;
         emit ContractAuthorized(_contract, _authorized, uint40(block.timestamp));
     }
@@ -411,9 +415,9 @@ contract RewardManager is
         string memory description
     ) external whenNotPaused returns (uint256) {
         require(
-            system.hasRole(RoleConstants.OPERATOR_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.MANAGER_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.ADMIN_ROLE, msg.sender),
+            system.hasRole(RoleConstants.OPERATOR_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.MANAGER_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.ADMIN_ROLE(), msg.sender),
             "Not authorized"
         );
         require(amount > 0, "Invalid amount");
@@ -456,7 +460,7 @@ contract RewardManager is
         uint256 distributionId,
         DistributionStatus status
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(_distributions[distributionId].exists, "Distribution not exist");
         
         uint8 oldStatus = _distributions[distributionId].status;
@@ -479,9 +483,9 @@ contract RewardManager is
         uint256 amount
     ) external whenNotPaused nonReentrant {
         require(
-            system.hasRole(RoleConstants.OPERATOR_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.MANAGER_ROLE, msg.sender) ||
-            system.hasRole(RoleConstants.ADMIN_ROLE, msg.sender),
+            system.hasRole(RoleConstants.OPERATOR_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.MANAGER_ROLE(), msg.sender) ||
+            system.hasRole(RoleConstants.ADMIN_ROLE(), msg.sender),
             "Not authorized"
         );
         require(_distributions[distributionId].exists, "Distribution not exist");
@@ -509,7 +513,7 @@ contract RewardManager is
         address user,
         uint256 amount
     ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         require(_distributions[distributionId].exists, "Distribution not exist");
         require(amount > 0, "Invalid amount");
         
@@ -525,7 +529,7 @@ contract RewardManager is
      * @dev 暂停合约 - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _pause();
     }
     
@@ -533,15 +537,18 @@ contract RewardManager is
      * @dev 恢复合约 - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _unpause();
     }
     
     /**
      * @dev 授权合约升级 - 需要ADMIN权限
      */
-    function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+    function _authorizeUpgrade(address newImplementation) 
+        internal 
+        override 
+        onlyRole(RoleConstants.UPGRADER_ROLE()) 
+    {
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
@@ -553,7 +560,7 @@ contract RewardManager is
     }
 
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
     }

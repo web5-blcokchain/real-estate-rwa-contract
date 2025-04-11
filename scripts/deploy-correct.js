@@ -4,6 +4,13 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
+// 硬编码的角色哈希值
+const ROLES = {
+    ADMIN_ROLE: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
+    MANAGER_ROLE: '0x241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08',
+    OPERATOR_ROLE: '0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929'
+};
+
 const logger = {
   info: (message, ...args) => console.log(`INFO: ${message}`, ...args),
   warn: (message, ...args) => console.warn(`WARN: ${message}`, ...args),
@@ -289,62 +296,58 @@ async function verifyDeployment(contracts) {
  * @param {Object} contracts - 合约实例
  */
 async function setupRoles(contracts) {
-  const { system, adminAddress, managerAddress, operatorAddress } = contracts;
+  const { system, adminSigner, managerSigner, operatorSigner, deployer } = contracts;
   
   logger.info('开始设置角色权限...');
   
-  // 设置管理员角色
-  const adminTx = await system.grantRole(RoleConstants.ADMIN_ROLE, adminAddress);
-  await adminTx.wait();
-  logger.info('管理员角色设置完成', { 
-    address: adminAddress,
-    role: 'ADMIN_ROLE',
-    txHash: adminTx.hash
-  });
+  // 首先授予部署账户 DEFAULT_ADMIN_ROLE
+  let tx = await system.connect(deployer).grantRole(ethers.ZeroHash, deployer.address);
+  await tx.wait();
+  logger.info(`已授予 ${deployer.address} DEFAULT_ADMIN_ROLE 权限`);
   
-  // 设置经理角色
-  const managerTx = await system.grantRole(RoleConstants.MANAGER_ROLE, managerAddress);
-  await managerTx.wait();
-  logger.info('经理角色设置完成', { 
-    address: managerAddress,
-    role: 'MANAGER_ROLE',
-    txHash: managerTx.hash
-  });
+  // 授予管理员角色
+  tx = await system.connect(deployer).grantRole(ROLES.ADMIN_ROLE, adminSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${adminSigner.address} ADMIN_ROLE 权限`);
+  tx = await system.connect(deployer).grantRole(ROLES.MANAGER_ROLE, adminSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${adminSigner.address} MANAGER_ROLE 权限`);
+  tx = await system.connect(deployer).grantRole(ROLES.OPERATOR_ROLE, adminSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${adminSigner.address} OPERATOR_ROLE 权限`);
   
-  // 设置操作员角色
-  const operatorTx = await system.grantRole(RoleConstants.OPERATOR_ROLE, operatorAddress);
-  await operatorTx.wait();
-  logger.info('操作员角色设置完成', { 
-    address: operatorAddress,
-    role: 'OPERATOR_ROLE',
-    txHash: operatorTx.hash
-  });
+  // 验证 ADMIN 是否自动获得 MANAGER 和 OPERATOR 权限
+  const isAdminHasManager = await system.hasRole(ROLES.MANAGER_ROLE, adminSigner.address);
+  const isAdminHasOperator = await system.hasRole(ROLES.OPERATOR_ROLE, adminSigner.address);
+  logger.info(`- 管理员是否拥有经理权限: ${isAdminHasManager ? "是" : "否"}`);
+  logger.info(`- 管理员是否拥有操作员权限: ${isAdminHasOperator ? "是" : "否"}`);
   
-  // 验证角色设置
-  const isAdmin = await system.hasRole(RoleConstants.ADMIN_ROLE, adminAddress);
-  const isAdminHasManager = await system.hasRole(RoleConstants.MANAGER_ROLE, adminAddress);
-  const isAdminHasOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, adminAddress);
-  const isManager = await system.hasRole(RoleConstants.MANAGER_ROLE, managerAddress);
-  const isManagerHasOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, managerAddress);
-  const isOperator = await system.hasRole(RoleConstants.OPERATOR_ROLE, operatorAddress);
+  // 授予经理角色
+  tx = await system.connect(deployer).grantRole(ROLES.MANAGER_ROLE, managerSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${managerSigner.address} MANAGER_ROLE 权限`);
+  tx = await system.connect(deployer).grantRole(ROLES.OPERATOR_ROLE, managerSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${managerSigner.address} OPERATOR_ROLE 权限`);
+
+  // 验证 MANAGER 是否自动获得 OPERATOR 权限
+  const isManagerHasOperator = await system.hasRole(ROLES.OPERATOR_ROLE, managerSigner.address);
+  logger.info(`- 经理是否拥有操作员权限: ${isManagerHasOperator ? "是" : "否"}`);
   
-  logger.info('角色验证结果', {
-    admin: { 
-      address: adminAddress, 
-      hasAdminRole: isAdmin,
-      hasManagerRole: isAdminHasManager,
-      hasOperatorRole: isAdminHasOperator
-    },
-    manager: { 
-      address: managerAddress, 
-      hasManagerRole: isManager,
-      hasOperatorRole: isManagerHasOperator
-    },
-    operator: { 
-      address: operatorAddress, 
-      hasOperatorRole: isOperator
-    }
-  });
+  // 授予操作员角色
+  tx = await system.connect(deployer).grantRole(ROLES.OPERATOR_ROLE, operatorSigner.address);
+  await tx.wait();
+  logger.info(`已授予 ${operatorSigner.address} OPERATOR_ROLE 权限`);
+  
+  // 验证角色权限
+  const isAdmin = await system.hasRole(ROLES.ADMIN_ROLE, adminSigner.address);
+  const isManager = await system.hasRole(ROLES.MANAGER_ROLE, managerSigner.address);
+  const isOperator = await system.hasRole(ROLES.OPERATOR_ROLE, operatorSigner.address);
+  
+  logger.info("角色权限验证结果:");
+  logger.info(`- 管理员权限: ${isAdmin ? "已授予" : "未授予"}`);
+  logger.info(`- 经理权限: ${isManager ? "已授予" : "未授予"}`);
+  logger.info(`- 操作员权限: ${isOperator ? "已授予" : "未授予"}`);
   
   if (!isAdmin || !isAdminHasManager || !isAdminHasOperator || !isManager || !isManagerHasOperator || !isOperator) {
     throw new Error('角色设置验证失败');
@@ -389,6 +392,11 @@ async function deploy() {
     const systemImplementation = await upgrades.erc1967.getImplementationAddress(systemAddress);
     logger.info(`RealEstateSystem 部署到: ${systemAddress}`);
     logger.info(`RealEstateSystem 实现地址: ${systemImplementation}`);
+    
+    // 授予部署账户 DEFAULT_ADMIN_ROLE
+    let adminTx = await system.connect(deployer).grantRole(ethers.ZeroHash, deployer.address);
+    await adminTx.wait();
+    logger.info(`已授予 ${deployer.address} DEFAULT_ADMIN_ROLE 权限`);
     
     // 2. 部署其他合约，直接传入正确的系统地址
     logger.info("步骤2: 部署管理合约...");
@@ -497,112 +505,54 @@ async function deploy() {
     await tx.wait();
     tx = await tradingManager.setFeeReceiver(deployer.address);
     await tx.wait();
-    logger.info("交易参数已配置");
     
     // 7. 激活系统
     logger.info("步骤7: 激活系统...");
-    tx = await system.setSystemStatus(2); // Active = 2
+    tx = await system.setSystemStatus(1); // 1 = Active
     await tx.wait();
     logger.info("系统已激活");
     
     // 8. 设置角色权限
-    logger.info("步骤8: 设置角色权限...");
-    
-    // 在部署完成后，设置角色权限
-    logger.info("设置角色权限...");
-    
-    // 获取角色常量
-    const ADMIN_ROLE = ethers.keccak256(ethers.toUtf8Bytes("ADMIN_ROLE"));
-    const MANAGER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MANAGER_ROLE"));
-    const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("OPERATOR_ROLE"));
-    
-    // 授予 MANAGER_ROLE
-    tx = await system.connect(adminSigner).grantRole(MANAGER_ROLE, managerSigner.address);
-    await tx.wait();
-    logger.info(`已授予 ${managerSigner.address} MANAGER_ROLE 权限`);
-    
-    // 授予 OPERATOR_ROLE
-    tx = await system.connect(adminSigner).grantRole(OPERATOR_ROLE, operatorSigner.address);
-    await tx.wait();
-    logger.info(`已授予 ${operatorSigner.address} OPERATOR_ROLE 权限`);
-    
-    // 验证角色权限
-    const isAdmin = await system.hasRole(ADMIN_ROLE, adminSigner.address);
-    const isAdminHasManager = await system.hasRole(MANAGER_ROLE, adminSigner.address);
-    const isAdminHasOperator = await system.hasRole(OPERATOR_ROLE, adminSigner.address);
-    const isManager = await system.hasRole(MANAGER_ROLE, managerSigner.address);
-    const isManagerHasOperator = await system.hasRole(OPERATOR_ROLE, managerSigner.address);
-    const isOperator = await system.hasRole(OPERATOR_ROLE, operatorSigner.address);
-    
-    logger.info("角色权限验证结果:");
-    logger.info(`- 管理员权限: ${isAdmin ? "已授予" : "未授予"}`);
-    logger.info(`- 管理员是否拥有经理权限: ${isAdminHasManager ? "是" : "否"}`);
-    logger.info(`- 管理员是否拥有操作员权限: ${isAdminHasOperator ? "是" : "否"}`);
-    logger.info(`- 经理权限: ${isManager ? "已授予" : "未授予"}`);
-    logger.info(`- 经理是否拥有操作员权限: ${isManagerHasOperator ? "是" : "否"}`);
-    logger.info(`- 操作员权限: ${isOperator ? "已授予" : "未授予"}`);
-    
-    if (!isAdmin || !isAdminHasManager || !isAdminHasOperator || !isManager || !isManagerHasOperator || !isOperator) {
-        throw new Error('角色设置验证失败');
-    }
-    
-    // 输出所有合约地址
-    logger.info("== 合约地址摘要 ==");
-    logger.info(`RealEstateSystem: ${systemAddress}`);
-    logger.info(`PropertyManager: ${propertyManagerAddress}`);
-    logger.info(`TradingManager: ${tradingManagerAddress}`);
-    logger.info(`RewardManager: ${rewardManagerAddress}`);
-    logger.info(`SimpleERC20: ${testTokenAddress}`);
-    logger.info(`RealEstateFacade: ${realEstateFacadeAddress}`);
-    
-    // 验证部署
-    const contracts = {
+    await setupRoles({
       system,
-      propertyManager,
-      tradingManager,
-      rewardManager,
-      testToken,
-      realEstateFacade,
-      systemAddress,
-      propertyManagerAddress,
-      tradingManagerAddress,
-      rewardManagerAddress,
-      testTokenAddress,
-      realEstateFacadeAddress,
-      systemImplementation,
-      propertyManagerImplementation,
-      tradingManagerImplementation,
-      rewardManagerImplementation,
-      realEstateFacadeImplementation,
+      adminSigner,
+      managerSigner,
+      operatorSigner,
+      deployer
+    });
+    
+    // 生成部署报告
+    const contracts = {
       deployerAddress: deployer.address,
       adminAddress: adminSigner.address,
       managerAddress: managerSigner.address,
-      operatorAddress: operatorSigner.address
+      operatorAddress: operatorSigner.address,
+      systemAddress,
+      systemImplementation,
+      propertyManagerAddress,
+      propertyManagerImplementation,
+      tradingManagerAddress,
+      tradingManagerImplementation,
+      rewardManagerAddress,
+      rewardManagerImplementation,
+      testTokenAddress,
+      realEstateFacadeAddress,
+      realEstateFacadeImplementation
     };
     
-    await verifyDeployment(contracts);
-    
-    // 生成部署报告
-    const report = generateDeploymentReport(contracts);
-    
-    // 更新环境变量文件
+    generateDeploymentReport(contracts);
     updateEnvFile(contracts);
     
-    logger.info("部署完成！系统已准备就绪。");
-    
-    return contracts;
+    logger.info("部署完成！");
   } catch (error) {
-    logger.error("部署失败:", error);
+    logger.error(`部署失败: ${error}`);
     throw error;
   }
 }
 
-// 执行部署
-deploy()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+deploy().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 
 module.exports = { deploy, verifyDeployment };

@@ -121,7 +121,7 @@ contract PropertyToken is
      * @dev Creates a snapshot of the current token balances - 需要OPERATOR权限
      */
     function snapshot() external {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         _snapshot();
     }
 
@@ -129,7 +129,7 @@ contract PropertyToken is
      * @dev Updates the maximum supply of tokens - 需要ADMIN权限
      */
     function updateMaxSupply(uint256 _newMaxSupply) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         require(_newMaxSupply >= totalSupply(), "New max supply must be >= current total supply");
         
         uint256 oldMaxSupply = maxSupply;
@@ -142,7 +142,7 @@ contract PropertyToken is
      * @dev Adds an account to the blacklist - 需要MANAGER权限
      */
     function blacklist(address _account) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(!blacklisted[_account], "Account already blacklisted");
         blacklisted[_account] = true;
         emit Blacklisted(_account, uint40(block.timestamp));
@@ -152,7 +152,7 @@ contract PropertyToken is
      * @dev Removes an account from the blacklist - 需要MANAGER权限
      */
     function unBlacklist(address _account) external {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(blacklisted[_account], "Account not blacklisted");
         blacklisted[_account] = false;
         emit UnBlacklisted(_account, uint40(block.timestamp));
@@ -162,7 +162,7 @@ contract PropertyToken is
      * @dev Pauses token transfers - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _pause();
     }
 
@@ -170,7 +170,7 @@ contract PropertyToken is
      * @dev Unpauses token transfers - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _unpause();
     }
 
@@ -191,7 +191,7 @@ contract PropertyToken is
      * @dev Function that should revert when msg.sender is not authorized to upgrade the contract - 需要ADMIN权限
      */
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
     }
 
     /**
@@ -205,10 +205,10 @@ contract PropertyToken is
      * @dev Updates the system contract reference - 需要ADMIN权限
      */
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
     }
 
     /**

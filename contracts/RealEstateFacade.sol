@@ -31,6 +31,7 @@ contract RealEstateFacade is
     PausableUpgradeable {
     
     using SafeMath for uint256;
+    using RoleConstants for bytes32;
     
     // Version control - using uint8 to save gas
     uint8 private constant VERSION = 1;
@@ -167,7 +168,7 @@ contract RealEstateFacade is
         require(_rewardManager != address(0), "Reward manager address cannot be zero");
         
         system = RealEstateSystem(_systemAddress);
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         
         propertyManager = PropertyManager(_propertyManager);
         tradingManager = TradingManager(payable(_tradingManager));
@@ -193,7 +194,7 @@ contract RealEstateFacade is
      * @dev 设置系统合约 - 需要ADMIN权限
      */
     function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         address oldSystem = address(system);
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
@@ -204,7 +205,7 @@ contract RealEstateFacade is
      * @dev 暂停所有操作 - 需要ADMIN权限
      */
     function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _pause();
     }
     
@@ -212,7 +213,7 @@ contract RealEstateFacade is
      * @dev 恢复所有操作 - 需要ADMIN权限
      */
     function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         _unpause();
     }
     
@@ -220,7 +221,7 @@ contract RealEstateFacade is
      * @dev 授权合约升级 - 需要ADMIN权限
      */
     function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE, msg.sender, "Caller is not an admin");
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
     }
     
     /**
@@ -250,7 +251,7 @@ contract RealEstateFacade is
         uint256 initialSupply,
         address propertyTokenImplementation
     ) public whenNotPaused nonReentrant returns (address) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         require(propertyTokenImplementation != address(0), "Invalid implementation");
         
         // 注册房产
@@ -299,7 +300,7 @@ contract RealEstateFacade is
         uint256 amount,
         uint256 price
     ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         
         address token = propertyManager.getPropertyToken(propertyId);
         require(token != address(0), "Property token not found");
@@ -315,7 +316,7 @@ contract RealEstateFacade is
         uint256 amount,
         uint256 price
     ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         
         address token = propertyManager.getPropertyToken(propertyId);
         require(token != address(0), "Property token not found");
@@ -330,7 +331,7 @@ contract RealEstateFacade is
         string memory propertyId,
         uint256 newValue
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(newValue > 0, "Invalid value");
         
         // 获取当前估值
@@ -357,7 +358,7 @@ contract RealEstateFacade is
         uint256 minAmount,
         uint256 maxAmount
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(tokenAddress != address(0), "Invalid token address");
         require(minAmount <= maxAmount, "Invalid limits");
         
@@ -380,7 +381,7 @@ contract RealEstateFacade is
         uint256 amount,
         string memory description
     ) external whenNotPaused nonReentrant returns (uint256) {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(amount > 0, "Amount must be greater than 0");
         
         uint256 distributionId = rewardManager.createDistribution(
@@ -408,7 +409,7 @@ contract RealEstateFacade is
         address user,
         uint256 amount
     ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE, msg.sender, "Caller is not an operator");
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
         rewardManager.withdraw(distributionId, user, amount);
     }
     
@@ -419,7 +420,7 @@ contract RealEstateFacade is
         string memory propertyId,
         uint8 newStatus
     ) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE, msg.sender, "Caller is not a manager");
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         
         uint8 oldStatus = uint8(propertyManager.getPropertyStatus(propertyId));
         propertyManager.updatePropertyStatus(propertyId, PropertyManager.PropertyStatus(newStatus));

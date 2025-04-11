@@ -1,0 +1,18 @@
+/**
+ * 区块链相关常量定义
+ */
+const ROLES = {
+    // 角色哈希值
+    ADMIN_ROLE: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
+    MANAGER_ROLE: '0x241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08',
+    OPERATOR_ROLE: '0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929',
+    
+    // 角色名称
+    ADMIN_ROLE_NAME: 'ADMIN_ROLE',
+    MANAGER_ROLE_NAME: 'MANAGER_ROLE',
+    OPERATOR_ROLE_NAME: 'OPERATOR_ROLE'
+};
+
+module.exports = {
+    ROLES
+}; 
