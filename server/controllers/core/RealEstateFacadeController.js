@@ -45,7 +45,6 @@ class RealEstateFacadeController extends BaseController {
       propertyId, 
       propertyData, 
       tokenData,
-      propertyTokenImplementation
     } = req.body;
     
     console.log("\n[registerPropertyAndCreateToken] 开始执行");
@@ -55,7 +54,7 @@ class RealEstateFacadeController extends BaseController {
     
     // 验证主要参数
     if (!this.validateRequired(res, { 
-      propertyId, propertyData, tokenData, propertyTokenImplementation, contractAddress 
+      propertyId, propertyData, tokenData, contractAddress 
     })) {
       return;
     }
@@ -76,11 +75,6 @@ class RealEstateFacadeController extends BaseController {
     })) {
       return;
     }
-    
-    // 验证代币实现地址
-    if (!AddressUtils.isValid(propertyTokenImplementation)) {
-      return ResponseUtils.sendError(res, '无效的代币实现合约地址', 400);
-    }
 
     await this.handleContractAction(
       res,
@@ -96,20 +90,19 @@ class RealEstateFacadeController extends BaseController {
           propertyId,
           country: propertyData.country,
           metadataURI: propertyData.metadataURI,
-          tokenName: tokenData.name,
-          tokenSymbol: tokenData.symbol,
           initialSupply: tokenData.initialSupply,
-          implementation: propertyTokenImplementation
+          tokenName: tokenData.name,
+          tokenSymbol: tokenData.symbol
         });
         
+        // 注意参数顺序: propertyId, country, metadataURI, initialSupply, tokenName, tokenSymbol
         const tx = await contract.registerPropertyAndCreateToken(
           propertyId,
           propertyData.country,
           propertyData.metadataURI,
-          tokenData.name,
-          tokenData.symbol,
           tokenData.initialSupply,
-          propertyTokenImplementation
+          tokenData.name,
+          tokenData.symbol
         );
         console.log("[registerPropertyAndCreateToken] 交易已发送:", tx.hash);
 

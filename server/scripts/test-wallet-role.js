@@ -1,9 +1,7 @@
-const { Logger, EnvUtils, Blockchain } = require('../../common');
-const { ContractUtils, AbiUtils, WalletManager, ProviderManager } = Blockchain;
-const RealEstateFacadeController = require('../controllers/core/RealEstateFacadeController');
+const { ethers } = require('ethers');
 const fs = require('fs');
 const path = require('path');
-const { ethers } = require('ethers');
+const { Logger } = require('../../common');
 
 // 设置日志级别为 debug
 process.env.LOG_LEVEL = 'debug';
@@ -16,207 +14,308 @@ const ROLES = {
 };
 
 /**
- * 检查网络连接
+ * 获取钱包实例
  */
-async function checkNetworkConnection() {
-  try {
-    console.log('正在检查网络连接...');
-    
-    // 获取网络配置
-    const networkConfig = EnvUtils.getNetworkConfig();
-    console.log('网络配置:', networkConfig);
-    
-    // 获取 Provider
-    const provider = ProviderManager.getDefaultProvider();
-    console.log('Provider:', provider);
-    
-    if (!provider) {
-      throw new Error('无法获取 Provider 实例');
+function getWallet(role) {
+    // 根据角色获取私钥
+    let privateKey;
+    switch (role) {
+        case 'admin':
+            privateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+            break;
+        case 'manager':
+            privateKey = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+            break;
+        case 'operator':
+            privateKey = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a';
+            break;
+        default:
+            throw new Error(`未知角色: ${role}`);
     }
     
-    // 获取网络信息
-    const networkInfo = await provider.getNetwork();
-    console.log('网络信息:', {
-      chainId: networkInfo.chainId.toString(),
-      name: networkInfo.name
-    });
-    
-    // 获取区块号
-    const blockNumber = await provider.getBlockNumber();
-    console.log('当前区块号:', blockNumber.toString());
-    
-    Logger.info('网络连接状态', {
-      blockNumber: blockNumber.toString(),
-      chainId: networkInfo.chainId.toString(),
-      networkName: networkInfo.name
-    });
-    
-    return true;
-  } catch (error) {
-    console.error('网络连接失败:', error);
-    Logger.error('网络连接失败', { 
-      error: error.message,
-      stack: error.stack
-    });
-    return false;
-  }
+    // 创建钱包
+    const provider = new ethers.JsonRpcProvider('http://localhost:8545');
+    return new ethers.Wallet(privateKey, provider);
 }
 
 /**
- * 检查系统状态和角色权限
+ * 加载合约 ABI
  */
-async function checkSystemAndRoles(contract, wallet) {
-    Logger.info('检查系统状态和角色权限...');
+function loadContractAbi(contractName) {
+    const abiPath = path.join(__dirname, `../../artifacts/contracts/${contractName}.sol/${contractName}.json`);
     
-    // 获取系统合约
-    const systemAddress = await contract.system();
-    const system = await ContractUtils.getContract('RealEstateSystem', systemAddress);
-    
-    // 1. 检查系统状态
-    const status = await system.getSystemStatus();
-    Logger.info(`系统状态: ${status}`);
-    
-    if (status !== 2) { // 2 表示 Active 状态
-        Logger.info('系统未处于 Active 状态，正在激活系统...');
-        // 获取 admin 钱包
-        const adminWallet = WalletManager.getRoleWallet('admin');
-        // 使用 admin 钱包激活系统
-        await system.connect(adminWallet).activateSystem();
-        Logger.info('系统已激活');
+    if (!fs.existsSync(abiPath)) {
+        throw new Error(`找不到合约 ABI 文件: ${abiPath}`);
     }
     
-    // 2. 检查钱包是否有 MANAGER_ROLE 权限
-    const hasManagerRole = await system.hasRole(RoleConstants.MANAGER_ROLE(), wallet.address);
-    Logger.info(`钱包 ${wallet.address} 是否有 MANAGER_ROLE 权限: ${hasManagerRole}`);
-    
-    if (!hasManagerRole) {
-        Logger.info('正在授予钱包 MANAGER_ROLE 权限...');
-        await system.connect(adminWallet).grantRole(RoleConstants.MANAGER_ROLE(), wallet.address);
-        Logger.info('已授予钱包 MANAGER_ROLE 权限');
-    }
-    
-    // 3. 检查合约是否已授权
-    const isContractAuthorized = await system.isContractAuthorized(contract.address);
-    Logger.info(`合约 ${contract.address} 是否已授权: ${isContractAuthorized}`);
-    
-    if (!isContractAuthorized) {
-        Logger.info('正在授权合约...');
-        await system.connect(adminWallet).authorizeContract(contract.address);
-        Logger.info('已授权合约');
-    }
-    
-    Logger.info('系统状态和角色权限检查完成');
+    const artifact = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+    return artifact.abi;
 }
 
 /**
  * 获取最新的部署报告
  */
 function getLatestDeploymentReport() {
-    const reportsDir = path.join(__dirname, '../../deployment-reports');
-    const files = fs.readdirSync(reportsDir)
-        .filter(file => file.startsWith('localhost-') && file.endsWith('.md'))
-        .sort((a, b) => {
-            const timestampA = parseInt(a.split('-')[1].split('.')[0]);
-            const timestampB = parseInt(b.split('-')[1].split('.')[0]);
-            return timestampB - timestampA;
+    try {
+        Logger.info('获取最新部署报告...');
+        const reportsDir = path.join(__dirname, '../../deployment-reports');
+        
+        // 检查目录是否存在
+        if (!fs.existsSync(reportsDir)) {
+            throw new Error(`部署报告目录不存在: ${reportsDir}`);
+        }
+        
+        const files = fs.readdirSync(reportsDir)
+            .filter(file => file.startsWith('localhost-') && file.endsWith('.md'))
+            .sort((a, b) => {
+                const timestampA = parseInt(a.split('-')[1].split('.')[0]);
+                const timestampB = parseInt(b.split('-')[1].split('.')[0]);
+                return timestampB - timestampA;
+            });
+
+        if (files.length === 0) {
+            throw new Error('未找到部署报告');
+        }
+
+        Logger.info(`找到最新部署报告: ${files[0]}`);
+        const reportPath = path.join(reportsDir, files[0]);
+        const latestReport = fs.readFileSync(reportPath, 'utf8');
+        
+        // 打印报告片段
+        const reportPreview = latestReport.substring(0, 500) + '...';
+        Logger.info(`部署报告内容预览: ${reportPreview}`);
+        
+        // 从部署报告中提取合约地址
+        const systemAddressMatch = latestReport.match(/RealEstateSystem\s*\n\s*-\s*地址:\s*(0x[a-fA-F0-9]{40})/);
+        const propertyManagerAddressMatch = latestReport.match(/PropertyManager\s*\n\s*-\s*地址:\s*(0x[a-fA-F0-9]{40})/);
+        const tradingManagerAddressMatch = latestReport.match(/TradingManager\s*\n\s*-\s*地址:\s*(0x[a-fA-F0-9]{40})/);
+        const rewardManagerAddressMatch = latestReport.match(/RewardManager\s*\n\s*-\s*地址:\s*(0x[a-fA-F0-9]{40})/);
+        const facadeAddressMatch = latestReport.match(/RealEstateFacade\s*\n\s*-\s*地址:\s*(0x[a-fA-F0-9]{40})/);
+        
+        // 检查是否成功提取所有地址
+        if (!systemAddressMatch) {
+            Logger.error('未找到 RealEstateSystem 合约地址');
+        }
+        if (!propertyManagerAddressMatch) {
+            Logger.error('未找到 PropertyManager 合约地址');
+        }
+        if (!tradingManagerAddressMatch) {
+            Logger.error('未找到 TradingManager 合约地址');
+        }
+        if (!rewardManagerAddressMatch) {
+            Logger.error('未找到 RewardManager 合约地址');
+        }
+        if (!facadeAddressMatch) {
+            Logger.error('未找到 RealEstateFacade 合约地址');
+        }
+        
+        if (!systemAddressMatch || !propertyManagerAddressMatch || !tradingManagerAddressMatch || 
+            !rewardManagerAddressMatch || !facadeAddressMatch) {
+            throw new Error('部署报告中缺少合约地址信息');
+        }
+
+        const addresses = {
+            systemAddress: systemAddressMatch[1],
+            propertyManagerAddress: propertyManagerAddressMatch[1],
+            tradingManagerAddress: tradingManagerAddressMatch[1],
+            rewardManagerAddress: rewardManagerAddressMatch[1],
+            facadeAddress: facadeAddressMatch[1]
+        };
+        
+        Logger.info('成功提取合约地址', addresses);
+        return addresses;
+    } catch (error) {
+        Logger.error('获取部署报告失败', { error: error.message, stack: error.stack });
+        throw error;
+    }
+}
+
+/**
+ * 检查网络连接
+ */
+async function checkNetworkConnection() {
+    try {
+        Logger.info('正在检查网络连接...');
+        const provider = new ethers.JsonRpcProvider('http://localhost:8545');
+        
+        const network = await provider.getNetwork();
+        Logger.info(`连接到网络成功: Chain ID ${network.chainId}, Network: ${network.name}`);
+        
+        const blockNumber = await provider.getBlockNumber();
+        Logger.info(`当前区块高度: ${blockNumber}`);
+        
+        return true;
+    } catch (error) {
+        Logger.error('网络连接失败', { error: error.message, stack: error.stack });
+        throw error;
+    }
+}
+
+/**
+ * 检查系统状态和角色权限
+ */
+async function checkSystemAndRoles(facadeContract, wallet) {
+    try {
+        Logger.info('检查系统状态和角色权限...');
+        
+        // 获取系统合约地址
+        const systemAddress = await facadeContract.system();
+        Logger.info(`系统合约地址: ${systemAddress}`);
+        
+        if (!systemAddress) {
+            throw new Error('无法获取系统合约地址，合约系统属性为空');
+        }
+        
+        // 加载系统合约 ABI
+        const systemAbi = loadContractAbi('RealEstateSystem');
+        const systemContract = new ethers.Contract(systemAddress, systemAbi, wallet);
+        
+        // 1. 检查系统状态
+        const status = await systemContract.getSystemStatus();
+        Logger.info(`系统状态: ${status}`);
+        
+        if (Number(status) !== 2) { // 2 表示 Active 状态
+            Logger.info('系统未处于 Active 状态，正在激活系统...');
+            // 获取 admin 钱包
+            const adminWallet = getWallet('admin');
+            // 使用 admin 钱包激活系统
+            await systemContract.connect(adminWallet).setSystemStatus(2);
+            Logger.info('系统已激活');
+        }
+        
+        // 2. 检查钱包是否有 MANAGER_ROLE 权限
+        const hasManagerRole = await systemContract.hasRole(ROLES.MANAGER_ROLE, wallet.address);
+        Logger.info(`钱包 ${wallet.address} 是否有 MANAGER_ROLE 权限: ${hasManagerRole}`);
+        
+        if (!hasManagerRole) {
+            Logger.info('正在授予钱包 MANAGER_ROLE 权限...');
+            const adminWallet = getWallet('admin');
+            await systemContract.connect(adminWallet).grantRole(ROLES.MANAGER_ROLE, wallet.address);
+            Logger.info('已授予钱包 MANAGER_ROLE 权限');
+        }
+        
+        // 3. 检查合约是否已授权
+        const isContractAuthorized = await systemContract.authorizedContracts(facadeContract.target);
+        Logger.info(`合约 ${facadeContract.target} 是否已授权: ${isContractAuthorized}`);
+        
+        if (!isContractAuthorized) {
+            Logger.info('正在授权合约...');
+            const adminWallet = getWallet('admin');
+            await systemContract.connect(adminWallet).setContractAuthorization(facadeContract.target, true);
+            Logger.info('已授权合约');
+        }
+        
+        return systemContract;
+    } catch (error) {
+        Logger.error('检查系统状态和角色权限失败', { error: error.message, stack: error.stack });
+        throw error;
+    }
+}
+
+/**
+ * 调用合约方法
+ */
+async function callContractMethods(contract, wallet) {
+    try {
+        Logger.info('调用 getVersion 方法...');
+        const version = await contract.getVersion();
+        Logger.info(`合约版本: ${version.toString()}`);
+        
+        // 生成随机房产ID以避免冲突
+        const randomId = `test-property-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        Logger.info(`使用随机房产ID: ${randomId}`);
+        
+        Logger.info('调用 registerPropertyAndCreateToken 方法...');
+        const tx = await contract.connect(wallet).registerPropertyAndCreateToken(
+            randomId,
+            'Japan',
+            'https://example.com/metadata/random',
+            1000000,
+            'Test Property Token Random',
+            'TPTR'
+        );
+        Logger.info('交易已发送，等待确认...');
+        
+        // 避免直接序列化交易收据（包含 BigInt）
+        const receipt = await tx.wait();
+        Logger.info(`交易已确认，交易哈希: ${receipt.hash}`);
+        
+        return true;
+    } catch (error) {
+        // 避免直接序列化错误对象，手动提取需要的信息
+        Logger.error('调用合约方法失败:', { 
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorReason: error.reason,
+            stack: error.stack
         });
-
-    if (files.length === 0) {
-        throw new Error('未找到部署报告');
+        throw error;
     }
-
-    const latestReport = fs.readFileSync(path.join(reportsDir, files[0]), 'utf8');
-    Logger.info('读取部署报告:');
-    console.log(latestReport);  // 直接输出报告内容
-    
-    // 从部署报告中提取合约地址
-    const systemAddressMatch = latestReport.match(/RealEstateSystem\n- 地址: (0x[a-fA-F0-9]{40})/);
-    const propertyManagerAddressMatch = latestReport.match(/PropertyManager\n- 地址: (0x[a-fA-F0-9]{40})/);
-    const tradingManagerAddressMatch = latestReport.match(/TradingManager\n- 地址: (0x[a-fA-F0-9]{40})/);
-    const rewardManagerAddressMatch = latestReport.match(/RewardManager\n- 地址: (0x[a-fA-F0-9]{40})/);
-    const facadeAddressMatch = latestReport.match(/RealEstateFacade\n- 地址: (0x[a-fA-F0-9]{40})/);
-    
-    if (!systemAddressMatch || !propertyManagerAddressMatch || !tradingManagerAddressMatch || 
-        !rewardManagerAddressMatch || !facadeAddressMatch) {
-        throw new Error('部署报告中缺少合约地址信息');
-    }
-
-    return {
-        systemAddress: systemAddressMatch[1],
-        propertyManagerAddress: propertyManagerAddressMatch[1],
-        tradingManagerAddress: tradingManagerAddressMatch[1],
-        rewardManagerAddress: rewardManagerAddressMatch[1],
-        facadeAddress: facadeAddressMatch[1]
-    };
 }
 
 /**
  * 使用指定角色的钱包调用合约
  */
 async function callContractWithRoleWallet(role) {
-    Logger.info(`使用 ${role} 角色的钱包调用合约...`);
-    
-    // 1. 获取钱包
-    const wallet = WalletManager.getRoleWallet(role);
-    Logger.info(`获取到 ${role} 角色的钱包: ${wallet.address}`);
-    
-    // 2. 获取合约地址
-    const { facadeAddress } = getLatestDeploymentReport();
-    Logger.info(`获取到 RealEstateFacade 合约地址: ${facadeAddress}`);
-    
-    // 3. 获取合约实例
-    const contract = await ContractUtils.getContract('RealEstateFacade', facadeAddress);
-    
-    // 4. 检查系统状态和角色权限
-    await checkSystemAndRoles(contract, wallet);
-    
-    // 5. 调用合约方法
     try {
-        Logger.info('调用 getVersion 方法...');
-        const version = await contract.connect(wallet).getVersion();
-        Logger.info(`合约版本: ${version}`);
+        Logger.info(`使用 ${role} 角色的钱包调用合约...`);
         
-        Logger.info('调用 registerPropertyAndCreateToken 方法...');
-        const tx = await contract.connect(wallet).registerPropertyAndCreateToken(
-            'test-property-1',
-            'Japan',
-            'https://example.com/metadata/1',
-            1000000,
-            'Test Property Token',
-            'TPT'
-        );
-        Logger.info('交易已发送，等待确认...');
-        const receipt = await tx.wait();
-        Logger.info('交易已确认:', receipt);
+        // 1. 获取钱包
+        const wallet = getWallet(role);
+        Logger.info(`获取到钱包: ${wallet.address}`);
+        
+        // 2. 网络连接检查
+        await checkNetworkConnection();
+        
+        // 3. 获取合约地址
+        const { facadeAddress } = getLatestDeploymentReport();
+        Logger.info(`获取到 RealEstateFacade 合约地址: ${facadeAddress}`);
+        
+        // 4. 加载合约 ABI
+        const facadeAbi = loadContractAbi('RealEstateFacade');
+        Logger.info('ABI 加载成功');
+        
+        // 5. 创建合约实例
+        const facadeContract = new ethers.Contract(facadeAddress, facadeAbi, wallet);
+        Logger.info('合约实例创建成功');
+        
+        // 6. 检查系统状态和角色权限
+        await checkSystemAndRoles(facadeContract, wallet);
+        
+        // 7. 调用合约方法
+        await callContractMethods(facadeContract, wallet);
+        
+        Logger.info('合约调用成功');
+        return true;
     } catch (error) {
-        Logger.error('调用合约方法失败:', error);
+        Logger.error('使用角色钱包调用合约失败', { error: error.message, stack: error.stack });
         throw error;
     }
 }
 
 /**
- * 主测试函数
+ * 主程序入口
  */
 async function main() {
-  try {
-    // 检查网络连接
-    const isConnected = await checkNetworkConnection();
-    if (!isConnected) {
-      throw new Error('网络连接失败，请确保本地节点正在运行');
+    try {
+        Logger.info('开始执行测试脚本...');
+        
+        // 使用 operator 角色钱包调用合约
+        await callContractWithRoleWallet('operator');
+        
+        Logger.info('测试成功完成!');
+        process.exit(0);
+    } catch (error) {
+        // 避免直接序列化错误对象，手动提取需要的信息
+        Logger.error('测试失败', { 
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorReason: error.reason,
+            stack: error.stack
+        });
+        process.exit(1);
     }
-    
-    // 使用 operator 角色钱包调用合约
-    await callContractWithRoleWallet('operator');
-    
-    Logger.info('测试完成');
-  } catch (error) {
-    Logger.error('测试过程中发生错误', { error: error.message });
-    process.exit(1);
-  }
 }
 
-// 运行测试
-main().catch(error => {
-  Logger.error('测试执行失败', { error: error.message });
-  process.exit(1);
-}); 
+// 执行主程序
+main(); 

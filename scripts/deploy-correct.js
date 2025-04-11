@@ -488,9 +488,28 @@ async function deploy() {
     logger.info(`RealEstateFacade 部署到: ${facadeAddress}`);
     
     // 授予 RealEstateFacade 合约 OPERATOR_ROLE 权限
-    logger.info('授予 RealEstateFacade 合约 OPERATOR_ROLE 权限...');
+    logger.info('授予 RealEstateFacade 合约权限...');
+    await system.connect(adminSigner).grantRole(ROLES.ADMIN_ROLE, facadeAddress);
+    logger.info('已授予 RealEstateFacade 合约 ADMIN_ROLE 权限');
+    
+    await system.connect(adminSigner).grantRole(ROLES.MANAGER_ROLE, facadeAddress);
+    logger.info('已授予 RealEstateFacade 合约 MANAGER_ROLE 权限');
+    
     await system.connect(adminSigner).grantRole(ROLES.OPERATOR_ROLE, facadeAddress);
     logger.info('已授予 RealEstateFacade 合约 OPERATOR_ROLE 权限');
+    
+    // 验证 Facade 是否获得所有必要权限
+    const facadeHasAdmin = await system.hasRole(ROLES.ADMIN_ROLE, facadeAddress);
+    const facadeHasManager = await system.hasRole(ROLES.MANAGER_ROLE, facadeAddress);
+    const facadeHasOperator = await system.hasRole(ROLES.OPERATOR_ROLE, facadeAddress);
+    logger.info(`Facade合约权限验证结果:`);
+    logger.info(`- ADMIN_ROLE: ${facadeHasAdmin ? "已授予" : "未授予"}`);
+    logger.info(`- MANAGER_ROLE: ${facadeHasManager ? "已授予" : "未授予"}`);
+    logger.info(`- OPERATOR_ROLE: ${facadeHasOperator ? "已授予" : "未授予"}`);
+    
+    if (!facadeHasAdmin || !facadeHasManager || !facadeHasOperator) {
+        logger.warn('⚠️ Facade合约权限授予不完整，可能导致权限验证问题');
+    }
     
     // 激活系统
     logger.info('正在激活系统...');
