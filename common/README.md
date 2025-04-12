@@ -229,7 +229,7 @@ app.use((req, res, next) => {
 app.post('/api/property/register', async (req, res) => {
   try {
     const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
-    const tx = await contract.registerProperty(req.body.propertyId, req.body.country, ...);
+    const tx = await contract.registerPropertyAndCreateToken(req.body.propertyId, req.body.country, ...);
     const receipt = await ContractUtils.waitForTransaction(tx);
     
     res.json({ success: true, txHash: receipt.hash });
@@ -403,4 +403,95 @@ new winston.transports.Console({
 
 3. **日志敏感信息**
    - 过滤日志中的敏感信息
-   - 对API密钥和私钥等内容进行遮蔽 
+   - 对API密钥和私钥等内容进行遮蔽
+
+## 与HTTP服务器集成的最佳实践
+
+为了确保HTTP服务器模块(http-server)有效地利用common目录提供的工具，应遵循以下最佳实践：
+
+### 合约交互
+
+1. **使用ContractUtils获取合约实例**
+   ```javascript
+   // 推荐方式
+   const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
+   
+   // 避免直接使用ethers
+   // 不推荐: const contract = new ethers.Contract(address, abi, wallet);
+   ```
+
+2. **使用ContractUtils等待交易确认**
+   ```javascript
+   // 推荐方式
+   const receipt = await ContractUtils.waitForTransaction(tx);
+   
+   // 避免直接调用tx.wait()
+   // 不推荐: const receipt = await tx.wait();
+   ```
+
+3. **充分利用角色分离**
+   ```javascript
+   // 管理员操作
+   const adminContract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
+   
+   // 管理者操作
+   const managerContract = ContractUtils.getContractForController('RealEstateFacade', 'manager');
+   
+   // 运营者操作
+   const operatorContract = ContractUtils.getContractForController('RealEstateFacade', 'operator');
+   ```
+
+### 配置管理
+
+1. **直接使用EnvUtils获取环境变量**
+   ```javascript
+   // 推荐方式
+   const port = EnvUtils.getNumber('PORT', 3000);
+   const apiKey = EnvUtils.getString('API_KEY', 'default');
+   
+   // 避免直接使用process.env
+   // 不推荐: const port = process.env.PORT || 3000;
+   ```
+
+2. **使用EnvUtils获取合约地址**
+   ```javascript
+   // 推荐方式
+   const address = EnvUtils.getContractAddress('RealEstateFacade');
+   
+   // 避免直接硬编码或从其他地方获取地址
+   ```
+
+### 错误处理和日志
+
+1. **使用Logger记录所有重要事件**
+   ```javascript
+   // API请求日志
+   Logger.http(`${req.method} ${req.url}`, { ip: req.ip, params: req.body });
+   
+   // 合约交互日志
+   Logger.info('创建房产交易', { propertyId, user: req.user.address });
+   
+   // 错误日志
+   Logger.error('交易失败', { error: error.message, stack: error.stack });
+   ```
+
+2. **统一的API响应格式**
+   ```javascript
+   // 成功响应
+   res.status(200).json({
+     success: true,
+     message: '操作成功',
+     data: result,
+     timestamp: new Date().toISOString()
+   });
+   
+   // 错误响应
+   res.status(400).json({
+     success: false,
+     error: message,
+     details: { error: error.message },
+     timestamp: new Date().toISOString()
+   });
+   ```
+
+通过遵循这些最佳实践，可以确保HTTP服务器模块能够充分利用common目录提供的工具，减少代码冗余，提高系统的一致性和可维护性。 

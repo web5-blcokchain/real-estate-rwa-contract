@@ -14,9 +14,14 @@ const Logger = {
 };
 
 // 设置基本URL
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'http://localhost:3001'; // 使用3001端口，避免与其他服务冲突
 const API_KEY = '123456'; // 设置API密钥为默认值
 const USER_ROLE = 'admin'; // 设置用户角色
+
+// 创建axios实例
+const api = axios.create({
+  baseURL: BASE_URL
+});
 
 // 创建readline接口用于用户交互
 const rl = readline.createInterface({
@@ -61,22 +66,22 @@ const logError = (error) => {
 
 // API调用函数
 const callApi = async (method, endpoint, data = null) => {
-  let url = `${BASE_URL}${endpoint}`;
+  let url = `${endpoint}`;
   
   // 添加API密钥和角色
   url += (url.includes('?') ? '&' : '?') + `apiKey=${API_KEY}&role=${USER_ROLE}`;
   
-  logRequest(method, url, data);
+  logRequest(method, BASE_URL + url, data);
   
   try {
     let response;
     
     if (method.toLowerCase() === 'get') {
-      response = await axios.get(url, { params: data });
+      response = await api.get(url, { params: data });
     } else if (method.toLowerCase() === 'post') {
-      response = await axios.post(url, data);
+      response = await api.post(url, data);
     } else if (method.toLowerCase() === 'put') {
-      response = await axios.put(url, data);
+      response = await api.put(url, data);
     }
     
     logResponse(response);
@@ -196,16 +201,55 @@ const runTests = async () => {
   try {
     Logger.info('开始测试 RealEstateFacadeController 接口...');
     
+    // 首先检查区块链连接状态
+    try {
+      Logger.info('\n===== 检查区块链连接状态 =====');
+      const response = await axios.post('http://localhost:8545', {
+        jsonrpc: '2.0',
+        method: 'eth_blockNumber',
+        params: [],
+        id: 1
+      });
+      
+      if (response.data && response.data.result) {
+        const blockNumber = parseInt(response.data.result, 16);
+        Logger.info(`区块链连接正常，当前区块高度: ${blockNumber}`);
+      } else {
+        Logger.error('区块链连接异常，请检查Hardhat节点是否运行');
+        return;
+      }
+    } catch (error) {
+      Logger.error('区块链连接检查失败', error);
+      Logger.error('请确保Hardhat节点已启动，运行命令: npx hardhat node');
+      return;
+    }
+    
     let propertyId = null;
     
     // 用户交互，逐个运行测试
     await promptToContinue('开始测试注册房产接口');
-    const registerResult = await tests.registerProperty();
-    if (registerResult && registerResult.data && registerResult.data.propertyId) {
-      propertyId = registerResult.data.propertyId;
-      Logger.info(`已获取房产ID: ${propertyId}`);
-    } else {
-      Logger.warn('无法获取房产ID，使用默认ID: 1');
+    
+    // 首先尝试注册新房产
+    for (let i = 0; i < 3; i++) {
+      try {
+        const newPropertyId = `test-property-${Date.now()}`;
+        Logger.info(`尝试注册新房产ID: ${newPropertyId}`);
+        
+        const registerResult = await tests.registerProperty();
+        if (registerResult && registerResult.data && registerResult.data.propertyId) {
+          propertyId = registerResult.data.propertyId;
+          Logger.info(`已成功注册房产ID: ${propertyId}`);
+          break;
+        } else {
+          Logger.warn(`第${i+1}次注册尝试失败，将重试...`);
+        }
+      } catch (error) {
+        Logger.error(`注册房产失败: ${error.message}`);
+      }
+    }
+    
+    if (!propertyId) {
+      Logger.warn('无法成功注册房产，将使用默认ID: 12345');
       propertyId = '12345';
     }
     

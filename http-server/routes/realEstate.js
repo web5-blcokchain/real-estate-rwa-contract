@@ -7,11 +7,11 @@ const router = express.Router();
 const { RealEstateFacadeController } = require('../controllers');
 const { authMiddleware, roleMiddleware } = require('../middleware');
 
-// 获取不动产信息 - 公开API
+// 获取不动产信息 - 公开API，无需验证
 router.get('/property/:propertyId', RealEstateFacadeController.getPropertyInfo.bind(RealEstateFacadeController));
 
-// 需要认证的API
-router.use(authMiddleware);
+// 以下API无需额外认证中间件，因为已在app.js中全局应用了AuthMiddleware.validateApiKey
+// router.use(authMiddleware);
 
 // 注册新不动产 - 需要manager角色
 router.post('/register-property', 

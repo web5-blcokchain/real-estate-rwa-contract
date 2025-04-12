@@ -7,6 +7,103 @@ const { Logger, ContractUtils } = require('../../common');
 
 class RealEstateFacadeController extends BaseController {
   /**
+   * 构造函数
+   * 初始化控制器
+   */
+  constructor() {
+    super();
+    // 用于存储已注册的房产ID
+    this.registeredProperties = new Map();
+    // 初始化控制器，检查合约状态
+    this.checkContractStatus();
+  }
+
+  /**
+   * 检查合约状态
+   * 验证合约是否存在并可用
+   */
+  async checkContractStatus() {
+    try {
+      // 获取合约实例
+      const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
+      
+      // 获取提供者
+      const provider = contract.runner.provider;
+      if (!provider) {
+        Logger.error('合约没有提供者，可能未正确连接到节点');
+        this.contractAvailable = false;
+        return;
+      }
+      
+      // 获取合约代码
+      const code = await provider.getCode(contract.target);
+      if (code === '0x') {
+        Logger.error(`合约地址 ${contract.target} 上没有代码！请确保已正确部署合约`, {
+          contractAddress: contract.target,
+          network: await provider.getNetwork()
+        });
+        this.contractAvailable = false;
+        return;
+      }
+      
+      // 简单的接口测试
+      try {
+        const isImpl = await contract.getImplementation();
+        Logger.info(`合约是代理合约，实现合约地址: ${isImpl}`);
+      } catch (e) {
+        // 忽略，可能不是代理合约
+      }
+      
+      Logger.info('合约状态检查完成，合约有效');
+      this.contractAvailable = true;
+    } catch (error) {
+      Logger.error('合约状态检查失败', {
+        error: error.message,
+        stack: error.stack
+      });
+      this.contractAvailable = false;
+    }
+  }
+
+  /**
+   * 生成模拟数据
+   * 仅用于测试，不在生产环境使用
+   * @param {string} propertyId - 房产ID
+   */
+  getMockData(propertyId) {
+    if (process.env.NODE_ENV === 'production') {
+      Logger.error('生产环境不允许使用模拟数据', { propertyId });
+      return null;
+    }
+    
+    // 检查是否已经生成了该房产的数据
+    if (this.registeredProperties.has(propertyId)) {
+      return this.registeredProperties.get(propertyId);
+    }
+    
+    // 根据propertyId生成一个稳定的token地址
+    const tokenAddress = `0x${propertyId.padStart(40, '0')}`;
+    
+    // 创建模拟数据
+    const mockData = {
+      propertyId,
+      tokenAddress,
+      status: '1', // 已注册状态
+      valuation: `${parseInt(propertyId) * 10000}`
+    };
+    
+    // 存储模拟数据
+    this.registeredProperties.set(propertyId, mockData);
+    
+    Logger.warn('使用模拟数据，因为合约不可用', {
+      propertyId,
+      contractAvailable: this.contractAvailable
+    });
+    
+    return mockData;
+  }
+
+  /**
    * @swagger
    * /api/v1/real-estate/register-property:
    *   post:
@@ -135,13 +232,47 @@ class RealEstateFacadeController extends BaseController {
       return this.sendError(res, '缺少房产ID参数', 400);
     }
     
-    // 由于获取房产代币地址存在问题，我们将返回模拟数据以完成API测试
-    return this.sendSuccess(res, {
-      propertyId,
-      tokenAddress: '0x1234567890123456789012345678901234567890', // 模拟代币地址
-      status: '2', // 已激活状态
-      valuation: '12000000' // 模拟估值
-    }, `获取房产信息成功: ${propertyId}`);
+    // 如果合约不可用，使用模拟数据
+    if (!this.contractAvailable) {
+      const mockData = this.getMockData(propertyId);
+      if (mockData) {
+        return this.sendSuccess(res, mockData, `获取房产信息成功（模拟数据）: ${propertyId}`);
+      } else {
+        return this.sendError(res, `房产ID ${propertyId} 不存在（模拟数据）`, 404);
+      }
+    }
+    
+    // 使用合约获取真实数据
+    await this.handleContractAction(
+      res,
+      async () => {
+        // 获取合约实例
+        const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
+        
+        // 获取房产代币地址
+        const tokenAddress = await contract.getPropertyTokenAddress(propertyId);
+        
+        if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+          throw new Error(`房产ID ${propertyId} 不存在`);
+        }
+        
+        // 获取房产状态
+        const status = await contract.getPropertyStatus(propertyId);
+        
+        // 获取房产估值
+        const valuation = await contract.getPropertyValuation(propertyId);
+        
+        return {
+          propertyId,
+          tokenAddress,
+          status: status.toString(),
+          valuation: valuation.toString()
+        };
+      },
+      `获取房产信息成功: ${propertyId}`,
+      { propertyId },
+      `获取房产信息失败: ${propertyId}`
+    );
   }
 
   /**

@@ -2,37 +2,9 @@
  * 基础控制器
  * 提供所有控制器共用的功能
  */
-const { ethers } = require('ethers');
-const config = require('../config');
-const { Logger } = require('../../common');
+const { Logger, ContractUtils } = require('../../common');
 
 class BaseController {
-  /**
-   * 获取合约实例
-   * @param {string} role - 调用合约的角色，如manager, admin等
-   * @returns {ethers.Contract} - 合约实例
-   */
-  getContract(role = 'user') {
-    try {
-      // 注意：在实际应用中，应该从配置或环境变量中获取这些值
-      const provider = new ethers.providers.JsonRpcProvider(config.blockchain.rpcUrl);
-      
-      // 根据角色获取相应的私钥和ABI
-      const privateKey = config.blockchain.privateKeys[role];
-      const wallet = new ethers.Wallet(privateKey, provider);
-      
-      // 获取合约ABI和地址
-      const abi = require('../../artifacts/contracts/RealEstateFacade.sol/RealEstateFacade.json').abi;
-      const contractAddress = config.blockchain.contracts.RealEstateFacade;
-      
-      // 创建合约实例
-      return new ethers.Contract(contractAddress, abi, wallet);
-    } catch (error) {
-      Logger.error(`合约获取失败: ${error.message}`);
-      throw new Error(`合约获取失败: ${error.message}`);
-    }
-  }
-
   /**
    * 验证必需的参数是否存在
    * @param {object} res - Express 响应对象
@@ -80,16 +52,6 @@ class BaseController {
       details: data,
       timestamp: new Date().toISOString()
     });
-  }
-
-  /**
-   * 等待交易确认
-   * @param {object} tx - 交易对象
-   * @returns {object} - 交易收据
-   */
-  async waitForTransaction(tx) {
-    Logger.info(`提交交易: ${tx.hash}`);
-    return await tx.wait();
   }
 
   /**

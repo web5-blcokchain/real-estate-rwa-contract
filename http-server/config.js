@@ -4,33 +4,36 @@
  */
 const { EnvUtils } = require('../common');
 
+// 获取当前网络配置
+const networkConfig = EnvUtils.getNetworkConfig();
+
 // 导出配置对象
 module.exports = {
   // 服务器配置
   server: {
-    port: EnvUtils.getPort() || 3000,
-    host: EnvUtils.getHost() || 'localhost'
+    port: EnvUtils.getNumber('PORT', 3000),
+    host: EnvUtils.getString('HOST', 'localhost')
   },
   
   // 认证配置
   auth: {
-    apiKey: EnvUtils.getApiKey() || '123456'
+    apiKey: EnvUtils.getString('API_KEY', '123456')
   },
   
   // 区块链配置
   blockchain: {
     network: EnvUtils.getCurrentNetwork(),
-    rpcUrl: EnvUtils.getNetworkConfig().rpcUrl,
+    rpcUrl: networkConfig.rpcUrl,
     
     // 不同角色的私钥
-    privateKeys: {
-      admin: EnvUtils.getNetworkConfig().privateKeys.admin,
-      manager: EnvUtils.getNetworkConfig().privateKeys.manager,
-      operator: EnvUtils.getNetworkConfig().privateKeys.operator,
-      user: EnvUtils.getNetworkConfig().privateKeys.operator // 普通用户使用operator角色
+    privateKeys: networkConfig.privateKeys || {
+      admin: '',
+      manager: '',
+      operator: '',
+      user: ''
     },
     
-    // 合约地址
+    // 合约地址 - 使用EnvUtils直接获取
     contracts: {
       RealEstateFacade: EnvUtils.getContractAddress('RealEstateFacade'),
       PropertyManager: EnvUtils.getContractAddress('PropertyManager'),
@@ -42,8 +45,8 @@ module.exports = {
   
   // 日志配置
   logger: {
-    level: EnvUtils.getLogLevel() || 'info',
-    format: EnvUtils.getLogFormat() || 'json'
+    level: EnvUtils.getString('LOG_LEVEL', 'info'),
+    format: EnvUtils.getString('LOG_FORMAT', 'json')
   },
   
   // Swagger API文档配置

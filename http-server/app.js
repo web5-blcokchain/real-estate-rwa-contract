@@ -9,14 +9,44 @@ const path = require('path');
 const fs = require('fs');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJSDoc = require('swagger-jsdoc');
+// 移除CSRF中间件
+// const cookieParser = require('cookie-parser');
+// const csrf = require('csurf');
+const { AuthMiddleware } = require('./middleware'); // 导入认证中间件
 
 // 创建Express应用
 const app = express();
 
-// 基本中间件配置 - 移除可能干扰Swagger UI的中间件
+// 基本中间件配置
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// 移除cookie解析器
+// app.use(cookieParser());
+
+// 移除CSRF保护
+// const csrfProtection = csrf({ 
+//   cookie: {
+//     sameSite: 'lax',
+//     secure: false // 开发环境设为false，生产环境应设为true
+//   } 
+// });
+
+// 移除CSRF令牌端点
+// app.get('/csrf-token', (req, res) => {
+//   // 确保创建新的CSRF令牌
+//   const token = csrf.secretSync();
+//   res.cookie('_csrf', token, {
+//     sameSite: 'lax',
+//     secure: false, // 开发环境设为false，生产环境应设为true
+//     httpOnly: true
+//   });
+//   
+//   res.json({ csrfToken: token });
+// });
+
+// 对API路由应用API密钥验证
+app.use('/api/v1', AuthMiddleware.validateApiKey);
 
 // 设置根路由
 app.get('/', (req, res) => {
@@ -44,7 +74,7 @@ try {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:3001',
         description: '本地开发服务器'
       }
     ],
@@ -167,7 +197,7 @@ app.use((err, req, res, next) => {
 });
 
 // 启动服务器
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`服务器已启动，端口: ${PORT}`);
   console.log(`API文档地址: http://localhost:${PORT}/api-docs`);
