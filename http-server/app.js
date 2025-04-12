@@ -8,6 +8,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const swaggerUi = require('swagger-ui-express');
+const swaggerJSDoc = require('swagger-jsdoc');
 
 // 创建Express应用
 const app = express();
@@ -26,25 +27,111 @@ app.get('/', (req, res) => {
   });
 });
 
-// Swagger文档配置 - 使用已验证的有效配置方式
+// 生成Swagger规范并配置Swagger UI
 try {
-  // 使用fs直接读取JSON文件而非require
-  const swaggerJsonPath = path.join(__dirname, 'swagger-spec.json');
-  const swaggerJsonContent = fs.readFileSync(swaggerJsonPath, 'utf8');
-  const swaggerDocument = JSON.parse(swaggerJsonContent);
+  console.log('开始生成Swagger规范...');
+  
+  // 获取项目根目录
+  const rootDir = path.resolve(__dirname, '..');
+  
+  // Swagger定义
+  const swaggerDefinition = {
+    openapi: '3.0.0',
+    info: {
+      title: '区块链房地产代币化系统 API',
+      version: '1.0.0',
+      description: '区块链房地产代币化系统的后端API文档'
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000',
+        description: '本地开发服务器'
+      }
+    ],
+    components: {
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            success: {
+              type: 'boolean',
+              example: false
+            },
+            error: {
+              type: 'string',
+              example: '错误信息'
+            }
+          }
+        },
+        Success: {
+          type: 'object',
+          properties: {
+            success: {
+              type: 'boolean',
+              example: true
+            },
+            data: {
+              type: 'object',
+              example: {}
+            }
+          }
+        }
+      },
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'query',
+          name: 'apiKey'
+        }
+      }
+    }
+  };
+  
+  // 配置选项
+  const options = {
+    definition: swaggerDefinition,
+    apis: [
+      path.join(rootDir, 'http-server/controllers/**/*.js'),
+      path.join(rootDir, 'http-server/routes/**/*.js')
+    ]
+  };
+  
+  // 生成swagger规范
+  const swaggerSpec = swaggerJSDoc(options);
+  
+  // 打印检测到的API路径
+  if (swaggerSpec.paths && Object.keys(swaggerSpec.paths).length > 0) {
+    console.log('检测到的API路径:', Object.keys(swaggerSpec.paths).length, '个');
+  } else {
+    console.warn('警告: 未检测到任何API路径!');
+  }
+  
+  // 仅在开发模式下或文件不存在时才写入文件
+  const specPath = path.join(__dirname, 'swagger-spec.json');
+  if (!fs.existsSync(specPath) || process.env.NODE_ENV === 'development') {
+    fs.writeFileSync(specPath, JSON.stringify(swaggerSpec, null, 2), 'utf8');
+    console.log(`Swagger规范已写入文件: ${specPath}`);
+  } else {
+    console.log('使用现有Swagger规范文件');
+  }
   
   // 使用单一行配置方式
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     explorer: true
   }));
+  
+  // 处理带尾部斜杠的URL
+  app.get('/api-docs/', (req, res) => {
+    res.redirect('/api-docs');
+  });
   
   // 提供swagger.json端点
   app.get('/swagger.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.send(swaggerDocument);
+    res.send(swaggerSpec);
   });
   
-  console.log('Swagger UI已配置，访问路径: /api-docs');
+  console.log('Swagger UI已配置，访问路径: /api-docs 或 /api-docs/');
 } catch (error) {
   console.error('配置Swagger UI失败:', error.message);
 }

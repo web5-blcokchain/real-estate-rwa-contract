@@ -1,0 +1,17 @@
+{
+  "verbose": true,
+  "ignore": [
+    "http-server/swagger-spec.json",
+    "*.log",
+    "logs/*",
+    "node_modules/*"
+  ],
+  "watch": [
+    "http-server/**/*.js",
+    "common/**/*.js"
+  ],
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "ext": "js,json"
+} 

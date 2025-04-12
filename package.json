@@ -21,13 +21,10 @@
     "test:env": "node test-env.js",
     "server:dev": "nodemon server/app.js",
     "server:start": "node server/app.js",
-    "http:dev": "yarn api:docs && nodemon http-server/app.js",
-    "http:start": "yarn api:docs && node http-server/app.js",
-    "api:docs": "node http-server/generate-swagger.js",
-    "api:check": "node http-server/check-swagger.js",
-    "swagger:test": "node http-server/test-swagger.js",
-    "swagger:ui": "node http-server/mini-swagger.js",
-    "api": "node http-test.js"
+    "http:dev": "nodemon --ignore 'http-server/swagger-spec.json' http-server/app.js",
+    "http:start": "node http-server/app.js",
+    "api": "node http-test.js",
+    "test:api": "node test-real-estate-api.js"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.3",
