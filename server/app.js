@@ -2,8 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const swaggerUi = require('swagger-ui-express');
-const swaggerJsdoc = require('swagger-jsdoc');
+const path = require('path');
+const fs = require('fs');
+// 使用项目专门的Swagger配置
+const swaggerSetup = require('./swagger/swagger');
 const routes = require('./routes');
 const ErrorMiddleware = require('./middleware/error');
 const { Logger, EnvUtils } = require('../common');
@@ -11,8 +13,10 @@ const { Logger, EnvUtils } = require('../common');
 // 创建Express应用
 const app = express();
 
-// 中间件
-app.use(helmet()); // 安全头
+// 中间件 - 禁用helmet的CSP以便Swagger UI正常工作
+app.use(helmet({
+  contentSecurityPolicy: false
+}));
 app.use(cors()); // 跨域
 app.use(express.json()); // JSON解析
 app.use(express.urlencoded({ extended: true })); // URL编码
@@ -26,7 +30,6 @@ app.use(morgan('combined', {
 
 // 请求记录中间件，帮助调试
 app.use((req, res, next) => {
-  console.log(`请求: ${req.method} ${req.url}`);
   Logger.info(`请求: ${req.method} ${req.url}`, {
     headers: req.headers,
     query: req.query,
@@ -55,7 +58,7 @@ app.get('/api/test', (req, res) => {
 
 // API Key 测试路由
 app.get('/api/auth-test', (req, res) => {
-  const apiKey = req.headers['x-api-key'];
+  const apiKey = req.query.apiKey;
   const expectedApiKey = EnvUtils.getApiKey() || '123456';
   
   if (!apiKey || apiKey !== expectedApiKey) {
@@ -73,27 +76,29 @@ app.get('/api/auth-test', (req, res) => {
   });
 });
 
-// Swagger配置
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Real Estate Tokenization API',
-      version: '1.0.0',
-      description: '房产代币化系统API文档'
-    },
-    servers: [
-      {
-        url: EnvUtils.getString('API_BASE_URL', 'http://localhost:3000'),
-        description: 'API服务器'
-      }
-    ]
-  },
-  apis: ['./server/routes/**/*.js'] // API文档路径
-};
+// 直接读取预生成的swagger-spec.json文件
+let swaggerSpec;
+try {
+  const swaggerSpecPath = path.join(__dirname, 'swagger-spec.json');
+  const swaggerContent = fs.readFileSync(swaggerSpecPath, 'utf8');
+  swaggerSpec = JSON.parse(swaggerContent);
+} catch (error) {
+  console.error('无法读取swagger-spec.json文件:', error.message);
+  swaggerSpec = {}; // 空对象作为备选
+}
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// 添加直接访问swagger.json的路由
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
+// 设置Swagger文档 - 使用独立脚本生成的spec
+const swaggerUi = require('swagger-ui-express');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }'
+}));
 
 // 路由
 app.use(routes);
@@ -112,7 +117,8 @@ app.use((req, res, next) => {
     availableRoutes: {
       root: '/',
       apiTest: '/api/test',
-      authTest: '/api/auth-test'
+      authTest: '/api/auth-test',
+      apiDocs: '/api-docs'
     },
     timestamp: new Date().toISOString()
   });
@@ -131,6 +137,8 @@ app.set('port', PORT);
 // 启动服务器
 app.listen(PORT, () => {
   console.log(`服务器已启动，端口：${PORT}`);
+  console.log(`API文档可访问: http://localhost:${PORT}/api-docs`);
+  console.log(`Swagger JSON可访问: http://localhost:${PORT}/swagger.json`);
   Logger.info(`服务器已启动，端口：${PORT}`);
 });
 

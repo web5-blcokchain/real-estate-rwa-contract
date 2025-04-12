@@ -11,10 +11,8 @@ class AuthMiddleware {
    * @param {Function} next - 下一个中间件
    */
   static validateApiKey(req, res, next) {
-    // 从请求头或URL查询参数中获取API密钥
-    const headerApiKey = req.headers['x-api-key'];
-    const queryApiKey = req.query.apiKey;
-    const apiKey = headerApiKey || queryApiKey;
+    // 优先从URL查询参数中获取API密钥
+    const apiKey = req.query.apiKey;
     const expectedApiKey = EnvUtils.getApiKey();
 
     if (!apiKey || apiKey !== expectedApiKey) {
@@ -27,7 +25,7 @@ class AuthMiddleware {
       return res.status(401).json({
         success: false,
         error: '无效的API密钥',
-        message: '请在请求头 x-api-key 或 URL 参数 apiKey 中提供有效的API密钥'
+        message: '请在URL参数apiKey中提供有效的API密钥'
       });
     }
 

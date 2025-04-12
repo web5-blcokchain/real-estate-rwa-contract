@@ -1,0 +1,568 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "区块链房地产代币化系统 API",
+    "version": "1.0.0",
+    "description": "区块链房地产代币化系统的后端API文档"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "本地开发服务器"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "example": "错误信息"
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "example": {}
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "apiKey"
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/real-estate/register-property": {
+      "post": {
+        "summary": "注册新房产",
+        "description": "注册新房产并发行对应的代币",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "country",
+                  "metadataURI",
+                  "initialSupply",
+                  "tokenName",
+                  "tokenSymbol"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "country": {
+                    "type": "string",
+                    "description": "国家"
+                  },
+                  "metadataURI": {
+                    "type": "string",
+                    "description": "元数据URI"
+                  },
+                  "initialSupply": {
+                    "type": "string",
+                    "description": "初始代币供应量"
+                  },
+                  "tokenName": {
+                    "type": "string",
+                    "description": "代币名称"
+                  },
+                  "tokenSymbol": {
+                    "type": "string",
+                    "description": "代币符号"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "房产注册成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/property/{propertyId}": {
+      "get": {
+        "summary": "获取房产信息",
+        "description": "获取指定房产ID的详细信息",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "propertyId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房产ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "房产信息获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "房产不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/property-status": {
+      "put": {
+        "summary": "更新房产状态",
+        "description": "更新指定房产的状态，需要MANAGER权限",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "status"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "status": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3,
+                      4
+                    ],
+                    "description": "新的房产状态"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "房产状态更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/property-valuation": {
+      "put": {
+        "summary": "更新房产估值",
+        "description": "更新指定房产的估值，需要MANAGER权限",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "newValue"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "newValue": {
+                    "type": "string",
+                    "description": "新的估值"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "房产估值更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/create-sell-order": {
+      "post": {
+        "summary": "创建卖单",
+        "description": "创建代币卖单",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "amount",
+                  "price"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "卖出金额"
+                  },
+                  "price": {
+                    "type": "string",
+                    "description": "单价"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "卖单创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/create-buy-order": {
+      "post": {
+        "summary": "创建买单",
+        "description": "创建代币买单",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "amount",
+                  "price"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "买入金额"
+                  },
+                  "price": {
+                    "type": "string",
+                    "description": "单价"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "买单创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/create-distribution": {
+      "post": {
+        "summary": "创建奖励分配",
+        "description": "创建房产奖励分配，需要MANAGER权限",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "amount",
+                  "description"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "分配金额"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "分配描述"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建分配成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/withdraw": {
+      "post": {
+        "summary": "提取分红",
+        "description": "提取特定分配的分红奖励",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "distributionId",
+                  "user",
+                  "amount"
+                ],
+                "properties": {
+                  "distributionId": {
+                    "type": "string",
+                    "description": "分配ID"
+                  },
+                  "user": {
+                    "type": "string",
+                    "description": "用户地址"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "提取金额"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "提取分红成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}

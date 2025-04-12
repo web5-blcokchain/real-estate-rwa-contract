@@ -21,6 +21,12 @@
     "test:env": "node test-env.js",
     "server:dev": "nodemon server/app.js",
     "server:start": "node server/app.js",
+    "http:dev": "yarn api:docs && nodemon http-server/app.js",
+    "http:start": "yarn api:docs && node http-server/app.js",
+    "api:docs": "node http-server/generate-swagger.js",
+    "api:check": "node http-server/check-swagger.js",
+    "swagger:test": "node http-server/test-swagger.js",
+    "swagger:ui": "node http-server/mini-swagger.js",
     "api": "node http-test.js"
   },
   "dependencies": {
@@ -29,12 +35,12 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "ethers": "^6.0.0",
-    "express": "^5.1.0",
+    "express": "4.18.2",
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
     "node-fetch": "^2.6.7",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1",
+    "swagger-ui-express": "4.6.3",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   },
