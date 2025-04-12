@@ -7,9 +7,11 @@ const router = express.Router();
 
 // 引入各模块路由
 const realEstateRoutes = require('./realEstate');
+const distributionRoutes = require('./distributionRoutes');
 
 // 注册各模块路由
 router.use('/real-estate', realEstateRoutes);
+router.use('/distribution', distributionRoutes);
 
 // 导出路由
 module.exports = router; 
