@@ -37,6 +37,12 @@ router.post('/create-distribution',
   RealEstateFacadeController.createDistribution.bind(RealEstateFacadeController)
 );
 
+// 激活分配 - 需要manager角色
+router.post('/activate-distribution',
+  roleMiddleware(['manager', 'admin']),
+  RealEstateFacadeController.activateDistribution.bind(RealEstateFacadeController)
+);
+
 // 创建售卖订单 - 需要普通用户权限
 router.post('/create-sell-order',
   RealEstateFacadeController.createSellOrder.bind(RealEstateFacadeController)

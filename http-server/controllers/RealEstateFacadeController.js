@@ -635,6 +635,88 @@ class RealEstateFacadeController extends BaseController {
 
   /**
    * @swagger
+   * /api/v1/real-estate/activate-distribution:
+   *   post:
+   *     summary: 激活奖励分配
+   *     description: 激活指定的奖励分配，允许用户提取奖励
+   *     tags: [RealEstateFacade]
+   *     security:
+   *       - ApiKeyAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - distributionId
+   *             properties:
+   *               distributionId:
+   *                 type: string
+   *                 description: 分配ID
+   *     responses:
+   *       200:
+   *         description: 分配激活成功
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: 参数错误或合约错误
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  async activateDistribution(req, res) {
+    const { distributionId } = req.body;
+    
+    if (!distributionId) {
+      return this.sendError(res, '缺少分配ID参数', 400);
+    }
+    
+    // 如果合约不可用，使用模拟数据
+    if (!this.contractAvailable) {
+      Logger.warn('使用模拟数据激活分配，因为合约不可用', {
+        distributionId,
+        contractAvailable: this.contractAvailable
+      });
+      
+      return this.sendSuccess(
+        res, 
+        {
+          transactionHash: `0x${Math.random().toString(16).substring(2)}`,
+          distributionId
+        }, 
+        `激活分配成功（模拟数据）: ${distributionId}`
+      );
+    }
+    
+    await this.handleContractAction(
+      res,
+      async () => {
+        // 使用ContractUtils获取RewardManager合约实例
+        const contract = ContractUtils.getContractForController('RewardManager', 'manager');
+        
+        // 调用更新分配状态方法，传入状态值1代表Active
+        const tx = await contract.updateDistributionStatus(distributionId, 1);
+        
+        // 等待交易确认
+        const receipt = await ContractUtils.waitForTransaction(tx);
+        
+        return {
+          transactionHash: receipt.hash,
+          distributionId
+        };
+      },
+      `激活分配成功: ${distributionId}`,
+      { distributionId },
+      `激活分配失败: ${distributionId}`
+    );
+  }
+
+  /**
+   * @swagger
    * /api/v1/real-estate/withdraw:
    *   post:
    *     summary: 提取分红

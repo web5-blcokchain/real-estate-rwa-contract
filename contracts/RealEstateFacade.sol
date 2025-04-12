@@ -385,6 +385,21 @@ contract RealEstateFacade is
     }
     
     /**
+     * @dev 更新分配状态 - 需要MANAGER权限
+     */
+    function updateDistributionStatus(
+        uint256 distributionId,
+        uint8 status
+    ) external whenNotPaused nonReentrant {
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
+        
+        // 调用奖励管理器的更新分配状态函数
+        rewardManager.updateDistributionStatus(distributionId, RewardManager.DistributionStatus(status));
+        
+        // Note: rewardManager will emit its own event for this change
+    }
+    
+    /**
      * @dev 提取分红
      */
     function withdraw(

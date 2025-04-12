@@ -98,7 +98,7 @@ const tests = {
   async registerProperty() {
     Logger.info('\n===== 测试注册房产接口 =====');
     const data = {
-      propertyId: '12345',
+      propertyId: '123456',
       country: 'JP',
       metadataURI: 'ipfs://QmXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       initialSupply: '1000',
@@ -152,7 +152,7 @@ const tests = {
     Logger.info('\n===== 测试创建卖单接口 =====');
     const data = {
       propertyId,
-      amount: '100',
+      amount: '1000',  // 增加金额，满足最小交易要求
       price: '11000'
     };
     
@@ -164,7 +164,7 @@ const tests = {
     Logger.info('\n===== 测试创建买单接口 =====');
     const data = {
       propertyId,
-      amount: '50',
+      amount: '1000',  // 增加金额，满足最小交易要求
       price: '10500'
     };
     
@@ -181,6 +181,17 @@ const tests = {
     };
     
     return await callApi('post', '/api/v1/real-estate/create-distribution', data);
+  },
+
+  // 7.1 激活分配
+  async activateDistribution(distributionId) {
+    Logger.info('\n===== 测试激活分配接口 =====');
+    const data = {
+      distributionId
+    };
+    
+    // 尝试调用激活分配的接口
+    return await callApi('post', '/api/v1/real-estate/activate-distribution', data);
   },
   
   // 8. 提取分红
@@ -282,8 +293,12 @@ const runTests = async () => {
     if (distributionResult && distributionResult.data && distributionResult.data.distributionId) {
       distributionId = distributionResult.data.distributionId;
       Logger.info(`已获取分配ID: ${distributionId}`);
+      
+      // 激活分配
+      await promptToContinue('开始测试激活分配接口');
+      await tests.activateDistribution(distributionId);
     } else {
-      distributionId = '1'; // 使用默认ID进行后续测试
+      distributionId = '0'; // 使用默认ID进行后续测试
       Logger.warn(`无法获取分配ID，使用默认ID: ${distributionId}`);
     }
     
