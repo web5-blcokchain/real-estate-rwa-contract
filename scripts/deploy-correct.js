@@ -114,7 +114,12 @@ function generateDeploymentReport(contracts) {
 - 代币信息:
   - 名称: Test Token
   - 符号: TEST
-  - 初始供应量: 1,000,000 TEST
+  - 初始供应量: 100,000,000 TEST (1亿)
+  - 代币分配:
+    - 管理员账户: ${ethers.formatEther(contracts.adminTokenBalance)} TEST (约33.3%)
+    - 经理账户: ${ethers.formatEther(contracts.managerTokenBalance)} TEST (约33.3%)
+    - 操作员账户: ${ethers.formatEther(contracts.operatorTokenBalance)} TEST (约33.3%)
+    - 部署者账户: ${ethers.formatEther(contracts.deployerTokenBalance)} TEST
 
 ### 7. RealEstateFacade
 - 地址: ${contracts.realEstateFacadeAddress}
@@ -464,11 +469,45 @@ async function deploy() {
     const testToken = await SimpleERC20.deploy(
       "Test Token",
       "TEST",
-      ethers.parseEther("1000000") // 初始供应量：1,000,000 TEST
+      ethers.parseEther("100000000") // 初始供应量：100,000,000 TEST (1亿)
     );
     await testToken.waitForDeployment();
     const testTokenAddress = await testToken.getAddress();
     logger.info(`SimpleERC20 部署到: ${testTokenAddress}`);
+    
+    // 将代币平均分配给admin、manager和operator地址
+    // 这样可以确保三个关键角色账户都有足够的代币进行测试
+    // 平均分配可以让角色间在测试时有相同的初始资源
+    logger.info("将测试代币平均分配给角色账户...");
+    const totalSupply = await testToken.totalSupply();
+    const thirdOfSupply = totalSupply / 3n;
+    
+    // 转移给管理员
+    logger.info(`转移 ${ethers.formatEther(thirdOfSupply)} TEST 到管理员账户: ${adminSigner.address}`);
+    let tokenTx = await testToken.transfer(adminSigner.address, thirdOfSupply);
+    await tokenTx.wait();
+    
+    // 转移给经理
+    logger.info(`转移 ${ethers.formatEther(thirdOfSupply)} TEST 到经理账户: ${managerSigner.address}`);
+    tokenTx = await testToken.transfer(managerSigner.address, thirdOfSupply);
+    await tokenTx.wait();
+    
+    // 转移给操作员
+    logger.info(`转移 ${ethers.formatEther(thirdOfSupply)} TEST 到操作员账户: ${operatorSigner.address}`);
+    tokenTx = await testToken.transfer(operatorSigner.address, thirdOfSupply);
+    await tokenTx.wait();
+    
+    // 验证代币分配结果
+    const adminBalance = await testToken.balanceOf(adminSigner.address);
+    const managerBalance = await testToken.balanceOf(managerSigner.address);
+    const operatorBalance = await testToken.balanceOf(operatorSigner.address);
+    const deployerBalance = await testToken.balanceOf(deployer.address);
+    
+    logger.info("代币分配结果:");
+    logger.info(`- 管理员账户余额: ${ethers.formatEther(adminBalance)} TEST`);
+    logger.info(`- 经理账户余额: ${ethers.formatEther(managerBalance)} TEST`);
+    logger.info(`- 操作员账户余额: ${ethers.formatEther(operatorBalance)} TEST`);
+    logger.info(`- 部署者账户余额: ${ethers.formatEther(deployerBalance)} TEST`);
     
     // 5. 部署门面合约
     logger.info("步骤5: 部署门面合约...");
@@ -560,9 +599,15 @@ async function deploy() {
       tradingManagerImplementation,
       rewardManagerAddress,
       rewardManagerImplementation,
+      propertyTokenAddress: "0x0", // 示例代币，实际部署时会生成
+      propertyTokenImplementation: "0x0", // 示例代币，实际部署时会生成
       testTokenAddress,
       realEstateFacadeAddress: facadeAddress,
-      realEstateFacadeImplementation: systemImplementation
+      realEstateFacadeImplementation: await upgrades.erc1967.getImplementationAddress(facadeAddress),
+      adminTokenBalance: adminBalance,
+      managerTokenBalance: managerBalance,
+      operatorTokenBalance: operatorBalance,
+      deployerTokenBalance: deployerBalance
     };
     
     generateDeploymentReport(contracts);
