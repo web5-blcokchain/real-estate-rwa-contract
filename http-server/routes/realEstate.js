@@ -10,6 +10,18 @@ const { authMiddleware, roleMiddleware } = require('../middleware');
 // 获取不动产信息 - 公开API，无需验证
 router.get('/property/:propertyId', RealEstateFacadeController.getPropertyInfo.bind(RealEstateFacadeController));
 
+// 获取所有分配ID - 公开API，无需验证
+router.get('/distributions', RealEstateFacadeController.getAllDistributions.bind(RealEstateFacadeController));
+
+// 获取分配详情 - 公开API，无需验证
+router.get('/distribution/:distributionId', RealEstateFacadeController.getDistributionDetails.bind(RealEstateFacadeController));
+
+// 获取用户代币余额 - 公开API，无需验证
+router.get('/token-balance/:propertyId/:userAddress', RealEstateFacadeController.getUserTokenBalance.bind(RealEstateFacadeController));
+
+// 获取用户分配比例 - 公开API，无需验证
+router.get('/distribution-ratio/:distributionId/:userAddress', RealEstateFacadeController.getDistributionRatio.bind(RealEstateFacadeController));
+
 // 以下API无需额外认证中间件，因为已在app.js中全局应用了AuthMiddleware.validateApiKey
 // router.use(authMiddleware);
 

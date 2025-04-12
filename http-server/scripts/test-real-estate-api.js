@@ -182,7 +182,34 @@ const tests = {
     
     return await callApi('post', '/api/v1/real-estate/create-distribution', data);
   },
-
+  
+  // 查询所有分配ID
+  async getAllDistributions() {
+    Logger.info('\n===== 查询所有分配ID =====');
+    return await callApi('get', '/api/v1/real-estate/distributions');
+  },
+  
+  // 查询用户代币余额
+  async getUserTokenBalance(propertyId, userAddress) {
+    Logger.info('\n===== 查询用户代币余额 =====');
+    const endpoint = `/api/v1/real-estate/token-balance/${propertyId}/${userAddress}`;
+    return await callApi('get', endpoint);
+  },
+  
+  // 查询分配详情
+  async getDistributionDetails(distributionId) {
+    Logger.info('\n===== 查询分配详情 =====');
+    const endpoint = `/api/v1/real-estate/distribution/${distributionId}`;
+    return await callApi('get', endpoint);
+  },
+  
+  // 获取分配比例
+  async getDistributionRatio(distributionId, userAddress) {
+    Logger.info('\n===== 查询用户分配比例 =====');
+    const endpoint = `/api/v1/real-estate/distribution-ratio/${distributionId}/${userAddress}`;
+    return await callApi('get', endpoint);
+  },
+  
   // 7.1 激活分配
   async activateDistribution(distributionId) {
     Logger.info('\n===== 测试激活分配接口 =====');
@@ -197,13 +224,50 @@ const tests = {
   // 8. 提取分红
   async withdraw(distributionId) {
     Logger.info('\n===== 测试提取分红接口 =====');
+    const userAddress = '0x1234567890123456789012345678901234567890'; // 示例用户地址
     const data = {
       distributionId,
-      user: '0x1234567890123456789012345678901234567890', // 示例用户地址
+      user: userAddress,
       amount: '1000'
     };
     
-    return await callApi('post', '/api/v1/real-estate/withdraw', data);
+    // 提取前查询用户余额
+    Logger.info('\n提取分红前用户信息:');
+    try {
+      const propertyResult = await tests.getPropertyInfo();
+      if (propertyResult && propertyResult.data) {
+        const propertyId = propertyResult.data.propertyId;
+        await tests.getUserTokenBalance(propertyId, userAddress);
+      }
+    } catch (error) {
+      Logger.error('查询用户提取前余额失败', error);
+    }
+    
+    // 查询分配详情
+    try {
+      await tests.getDistributionDetails(distributionId);
+      // 查询用户分配比例
+      await tests.getDistributionRatio(distributionId, userAddress);
+    } catch (error) {
+      Logger.error('查询分配详情失败', error);
+    }
+    
+    // 执行提取
+    const result = await callApi('post', '/api/v1/real-estate/withdraw', data);
+    
+    // 提取后查询用户余额
+    Logger.info('\n提取分红后用户信息:');
+    try {
+      const propertyResult = await tests.getPropertyInfo();
+      if (propertyResult && propertyResult.data) {
+        const propertyId = propertyResult.data.propertyId;
+        await tests.getUserTokenBalance(propertyId, userAddress);
+      }
+    } catch (error) {
+      Logger.error('查询用户提取后余额失败', error);
+    }
+    
+    return result;
   }
 };
 
@@ -293,6 +357,9 @@ const runTests = async () => {
     if (distributionResult && distributionResult.data && distributionResult.data.distributionId) {
       distributionId = distributionResult.data.distributionId;
       Logger.info(`已获取分配ID: ${distributionId}`);
+      
+      // 查询所有分配ID以验证为什么总是0
+      await tests.getAllDistributions();
       
       // 激活分配
       await promptToContinue('开始测试激活分配接口');
