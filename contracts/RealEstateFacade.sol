@@ -101,6 +101,8 @@ contract RealEstateFacade is
         uint256 indexed distributionId,
         string indexed propertyId,
         uint256 amount,
+        address stablecoinAddress,
+        bytes32 merkleRoot,
         string description,
         uint40 createTime
     );
@@ -362,14 +364,24 @@ contract RealEstateFacade is
     function createDistribution(
         string memory propertyId,
         uint256 amount,
+        address stablecoinAddress,
+        bytes32 merkleRoot,
+        RewardManager.DistributionType distributionType,
+        uint40 endTime,
         string memory description
     ) external whenNotPaused nonReentrant returns (uint256) {
         system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
         require(amount > 0, "Amount must be greater than 0");
+        require(stablecoinAddress != address(0), "Invalid stablecoin address");
+        require(merkleRoot != bytes32(0), "Invalid merkle root");
         
         uint256 distributionId = rewardManager.createDistribution(
             propertyId,
             amount,
+            stablecoinAddress,
+            merkleRoot,
+            distributionType,
+            endTime,
             description
         );
         
@@ -377,6 +389,8 @@ contract RealEstateFacade is
             distributionId,
             propertyId,
             amount,
+            stablecoinAddress,
+            merkleRoot,
             description,
             uint40(block.timestamp)
         );
@@ -405,10 +419,12 @@ contract RealEstateFacade is
     function withdraw(
         uint256 distributionId,
         address user,
-        uint256 amount
+        uint256 amount,
+        uint256 totalEligible,
+        bytes32[] calldata merkleProof
     ) external whenNotPaused nonReentrant {
         system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        rewardManager.withdraw(distributionId, user, amount);
+        rewardManager.withdraw(distributionId, user, amount, totalEligible, merkleProof);
     }
     
     /**
@@ -461,6 +477,31 @@ contract RealEstateFacade is
     function getPropertyValuation(string memory propertyId) external view returns (uint256) {
         address tokenAddress = propertyManager.propertyTokens(propertyId);
         return tradingManager.getTokenPrice(tokenAddress);
+    }
+    
+    /**
+     * @dev 获取用户已提取金额
+     */
+    function getUserClaimedAmount(uint256 distributionId, address user) external view returns (uint256) {
+        return rewardManager.getUserClaimedAmount(distributionId, user);
+    }
+    
+    /**
+     * @dev 获取分配的已领取总金额
+     */
+    function getDistributionClaimedAmount(uint256 distributionId) external view returns (uint256) {
+        return rewardManager.getDistributionClaimedAmount(distributionId);
+    }
+    
+    /**
+     * @dev 回收未领取的资金 - 需要ADMIN权限
+     */
+    function recoverUnclaimedFunds(
+        uint256 distributionId,
+        address receiver
+    ) external whenNotPaused nonReentrant {
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+        rewardManager.recoverUnclaimedFunds(distributionId, receiver);
     }
     
     /**
