@@ -310,57 +310,7 @@ class ContractUtils {
       throw new Error(`数值转换失败: ${error.message}`);
     }
   }
-  
-  /**
-   * 创建合约工厂
-   * @param {string} contractName - 合约名称
-   * @param {string|ethers.Wallet} [wallet] - 钱包名称或实例，不传则使用默认钱包
-   * @returns {ethers.ContractFactory} 合约工厂
-   */
-  static createContractFactory(contractName, wallet) {
-    try {
-      if (!contractName) {
-        throw new Error('合约名称不能为空');
-      }
-      
-      const abi = AbiUtils.getAbi(contractName);
-      
-      // 尝试从artifacts获取bytecode
-      let bytecode;
-      try {
-        const artifactsPath = path.join(Paths.ROOT, 'artifacts/contracts', 
-          `${contractName}.sol/${contractName}.json`);
-        if (fs.existsSync(artifactsPath)) {
-          const contractJson = JSON.parse(fs.readFileSync(artifactsPath, 'utf8'));
-          bytecode = contractJson.bytecode;
-        }
-      } catch (error) {
-        Logger.warn(`无法从artifacts获取bytecode: ${contractName}`, { error: error.message });
-      }
-      
-      if (!bytecode) {
-        throw new Error(`无法获取合约bytecode: ${contractName}`);
-      }
-      
-      // 处理钱包参数
-      let walletInstance;
-      if (!wallet) {
-        walletInstance = WalletManager.getDefaultWallet();
-      } else if (typeof wallet === 'string') {
-        walletInstance = WalletManager.getCustomWallet(wallet);
-      } else {
-        walletInstance = wallet;
-      }
-      
-      return new ethers.ContractFactory(abi, bytecode, walletInstance);
-    } catch (error) {
-      Logger.error(`创建合约工厂失败: ${contractName}`, { 
-        error: error.message,
-        stack: error.stack 
-      });
-      throw error;
-    }
-  }
+   
 }
 
 module.exports = ContractUtils; 
