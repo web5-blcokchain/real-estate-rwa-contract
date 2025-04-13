@@ -137,10 +137,10 @@ const callApi = async (method, endpoint, data = null) => {
 // 测试函数
 const tests = {
   // 1. 注册房产
-  async registerProperty() {
+  async registerProperty(propertyId) {
     Logger.info('\n===== 测试注册房产接口 =====');
     const data = {
-      propertyId: '123456',
+      propertyId: propertyId,
       country: 'JP',
       metadataURI: 'ipfs://QmXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       initialSupply: '1000',
@@ -377,7 +377,7 @@ const runTests = async () => {
       const newPropertyId = `test-property-${Date.now()}`;
       Logger.info(`尝试注册新房产ID: ${newPropertyId}`);
       
-      const registerResult = await tests.registerProperty();
+      const registerResult = await tests.registerProperty(newPropertyId);
       if (registerResult && registerResult.data && registerResult.data.propertyId) {
         propertyId = registerResult.data.propertyId;
         Logger.info(`已成功注册房产ID: ${propertyId}`);

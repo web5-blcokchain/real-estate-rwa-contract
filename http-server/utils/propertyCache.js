@@ -28,6 +28,30 @@ function getPropertyId() {
 }
 
 /**
+ * 获取指定房产ID的详细信息
+ * 为了兼容现有API保留此方法，但简化实现
+ * @param {string} propertyId - 房产ID
+ * @returns {Object|null} 房产详情对象，如果未找到则返回null
+ */
+function getProperty(propertyId) {
+  try {
+    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+      const cacheData = JSON.parse(fileContent);
+      
+      // 简化版本：如果请求的ID与缓存中的ID匹配，返回整个缓存对象
+      if (cacheData.propertyId && cacheData.propertyId === propertyId) {
+        return cacheData;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error(`获取房产 ${propertyId} 信息时出错: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * 获取缓存的最后更新时间
  * @returns {string|null} 缓存的时间戳字符串，如果缓存不存在则返回null
  */
@@ -94,6 +118,7 @@ function getCacheInfo() {
 
 module.exports = {
   getPropertyId,
+  getProperty,           // 恢复导出此方法以兼容现有调用
   getCacheTimestamp,
   hasCachedProperty,
   getCacheInfo,

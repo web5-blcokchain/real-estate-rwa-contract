@@ -18,6 +18,7 @@ const USER_ROLE = 'admin'; // 设置用户角色
 const STABLECOIN_ADDRESS = EnvConfig.get('CONTRACT_TESTTOKEN_ADDRESS') || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
 const TEST_USER_ADDRESS = '0x1234567890123456789012345678901234567890'; // 测试用户地址
 const RECEIVER_ADDRESS = '0xAdminReceiverAddress0123456789012345678901'; // 接收未领取资金的地址
+const DEFAULT_PROPERTY_ID = '1234567'; // 默认房产ID，与已注册的保持一致
 
 // 分配测试配置
 const NORMAL_DISTRIBUTION = {
@@ -58,6 +59,7 @@ Logger.info('===== 测试配置信息 =====');
 Logger.info(`API地址: ${BASE_URL}`);
 Logger.info(`稳定币合约地址: ${STABLECOIN_ADDRESS}`);
 Logger.info(`测试用户地址: ${TEST_USER_ADDRESS}`);
+Logger.info(`默认房产ID: ${DEFAULT_PROPERTY_ID}`);
 Logger.info('');
 
 // 创建axios实例
@@ -147,8 +149,8 @@ const tests = {
     }
     
     // 如果没有缓存，使用默认ID
-    Logger.warn('未找到缓存的房产ID，使用默认ID: 123456');
-    return '123456';
+    Logger.warn(`未找到缓存的房产ID，使用默认ID: ${DEFAULT_PROPERTY_ID}`);
+    return DEFAULT_PROPERTY_ID;
   },
   
   // 查询所有分配
