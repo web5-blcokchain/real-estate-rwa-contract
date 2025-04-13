@@ -18,7 +18,7 @@ const BASE_URL = 'http://localhost:3001'; // 使用3001端口，避免与其他�
 const API_KEY = '123456'; // 设置API密钥为默认值
 const USER_ROLE = 'admin'; // 设置用户角色
 
-// 缓存文件路径
+// 缓存文件路径 - 简化为只有一个文件
 const CACHE_DIR = path.resolve(__dirname, '../../cache');
 const PROPERTY_CACHE_FILE = path.join(CACHE_DIR, 'property-cache.json');
 
@@ -28,26 +28,16 @@ if (!fs.existsSync(CACHE_DIR)) {
   Logger.info(`创建缓存目录: ${CACHE_DIR}`);
 }
 
-// 更新房产缓存
+// 更新房产缓存 - 简化为只保存房产ID
 const updatePropertyCache = (propertyData) => {
   try {
-    // 如果缓存文件存在，读取它
-    let cacheData = {};
-    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
-      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
-      try {
-        cacheData = JSON.parse(fileContent);
-      } catch (e) {
-        Logger.warn(`解析房产缓存文件失败，创建新缓存: ${e.message}`);
-        cacheData = {};
-      }
-    }
-    
-    // 更新/添加新的房产数据
+    // 如果房产数据有效
     if (propertyData && propertyData.data && propertyData.data.propertyId) {
       const propertyId = propertyData.data.propertyId;
-      cacheData[propertyId] = {
-        ...propertyData.data,
+      
+      // 简单的缓存结构: 只保存最新的一个房产ID和时间戳
+      const cacheData = {
+        propertyId: propertyId,
         cachedAt: new Date().toISOString()
       };
       
@@ -58,9 +48,7 @@ const updatePropertyCache = (propertyData) => {
         'utf8'
       );
       
-      Logger.info(`房产数据已更新到缓存文件: ${PROPERTY_CACHE_FILE}`);
-      Logger.info(`缓存的房产ID: ${Object.keys(cacheData).join(', ')}`);
-      
+      Logger.info(`房产数据已缓存: ${propertyId}`);
       return true;
     } else {
       Logger.warn('未能更新房产缓存，数据格式无效');
@@ -69,25 +57,6 @@ const updatePropertyCache = (propertyData) => {
   } catch (error) {
     Logger.error(`更新房产缓存时出错: ${error.message}`, error);
     return false;
-  }
-};
-
-// 从缓存获取房产信息
-const getPropertyFromCache = (propertyId) => {
-  try {
-    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
-      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
-      const cacheData = JSON.parse(fileContent);
-      
-      if (cacheData[propertyId]) {
-        Logger.info(`从缓存获取房产信息: ${propertyId}`);
-        return cacheData[propertyId];
-      }
-    }
-    return null;
-  } catch (error) {
-    Logger.error(`从缓存获取房产信息时出错: ${error.message}`, error);
-    return null;
   }
 };
 
@@ -181,10 +150,9 @@ const tests = {
     
     const result = await callApi('post', '/api/v1/real-estate/register-property', data);
     
-    // 如果注册成功，更新缓存
+    // 只在注册成功时写入缓存
     if (result && result.success) {
-      // 获取新注册的房产详情
-      await this.getPropertyInfo(data.propertyId);
+      updatePropertyCache(result);
     }
     
     return result;
@@ -203,22 +171,7 @@ const tests = {
       Logger.warn(`未指定房产ID，使用默认ID: ${propertyId}`);
     }
     
-    // 查询房产缓存
-    const cachedProperty = getPropertyFromCache(propertyId);
-    if (cachedProperty) {
-      Logger.info(`找到缓存的房产数据: ${propertyId}`);
-      Logger.info(`缓存时间: ${cachedProperty.cachedAt}`);
-    }
-    
-    // 无论是否有缓存，都从API获取最新数据
-    const result = await callApi('get', endpoint);
-    
-    // 如果获取成功，更新缓存
-    if (result && result.success && result.data) {
-      updatePropertyCache(result);
-    }
-    
-    return result;
+    return await callApi('get', endpoint);
   },
   
   // 3. 更新房产状态
@@ -313,7 +266,6 @@ const tests = {
       distributionId
     };
     
-    // 尝试调用激活分配的接口
     return await callApi('post', '/api/v1/real-estate/activate-distribution', data);
   },
   
@@ -364,6 +316,23 @@ const tests = {
     }
     
     return result;
+  },
+  
+  // 显示当前缓存
+  showCurrentCache() {
+    Logger.info('\n===== 当前房产缓存 =====');
+    try {
+      if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+        const cacheData = JSON.parse(fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8'));
+        Logger.info(`缓存文件: ${PROPERTY_CACHE_FILE}`);
+        Logger.info(`当前缓存的房产ID: ${cacheData.propertyId}`);
+        Logger.info(`缓存时间: ${cacheData.cachedAt}`);
+      } else {
+        Logger.info(`缓存文件不存在: ${PROPERTY_CACHE_FILE}`);
+      }
+    } catch (error) {
+      Logger.error(`读取缓存失败: ${error.message}`);
+    }
   }
 };
 
@@ -395,32 +364,32 @@ const runTests = async () => {
       return;
     }
     
+    // 显示测试开始前的缓存状态
+    tests.showCurrentCache();
+    
     let propertyId = null;
     
     // 用户交互，逐个运行测试
     await promptToContinue('开始测试注册房产接口');
     
-    // 首先尝试注册新房产
-    for (let i = 0; i < 3; i++) {
-      try {
-        const newPropertyId = `test-property-${Date.now()}`;
-        Logger.info(`尝试注册新房产ID: ${newPropertyId}`);
+    // 尝试注册新房产
+    try {
+      const newPropertyId = `test-property-${Date.now()}`;
+      Logger.info(`尝试注册新房产ID: ${newPropertyId}`);
+      
+      const registerResult = await tests.registerProperty();
+      if (registerResult && registerResult.data && registerResult.data.propertyId) {
+        propertyId = registerResult.data.propertyId;
+        Logger.info(`已成功注册房产ID: ${propertyId}`);
         
-        const registerResult = await tests.registerProperty();
-        if (registerResult && registerResult.data && registerResult.data.propertyId) {
-          propertyId = registerResult.data.propertyId;
-          Logger.info(`已成功注册房产ID: ${propertyId}`);
-          break;
-        } else {
-          Logger.warn(`第${i+1}次注册尝试失败，将重试...`);
-        }
-      } catch (error) {
-        Logger.error(`注册房产失败: ${error.message}`);
+        // 显示注册后的缓存状态
+        tests.showCurrentCache();
+      } else {
+        Logger.warn(`注册尝试失败，将使用默认ID`);
+        propertyId = '12345';
       }
-    }
-    
-    if (!propertyId) {
-      Logger.warn('无法成功注册房产，将使用默认ID: 12345');
+    } catch (error) {
+      Logger.error(`注册房产失败: ${error.message}`);
       propertyId = '12345';
     }
     
@@ -454,7 +423,7 @@ const runTests = async () => {
       distributionId = distributionResult.data.distributionId;
       Logger.info(`已获取分配ID: ${distributionId}`);
       
-      // 查询所有分配ID以验证为什么总是0
+      // 查询所有分配ID
       await tests.getAllDistributions();
       
       // 激活分配

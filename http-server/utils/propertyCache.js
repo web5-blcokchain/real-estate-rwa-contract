@@ -1,5 +1,5 @@
 /**
- * 房产缓存工具
+ * 简单的房产缓存工具
  * 提供读取房产缓存的方法
  */
 const fs = require('fs');
@@ -10,48 +10,38 @@ const CACHE_DIR = path.resolve(__dirname, '../../cache');
 const PROPERTY_CACHE_FILE = path.join(CACHE_DIR, 'property-cache.json');
 
 /**
- * 获取所有缓存的房产信息
- * @returns {Object} 包含所有房产ID作为键的对象
+ * 获取缓存的房产ID
+ * @returns {string|null} 房产ID，如果缓存不存在则返回null
  */
-function getAllProperties() {
+function getPropertyId() {
   try {
     if (fs.existsSync(PROPERTY_CACHE_FILE)) {
       const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
-      return JSON.parse(fileContent);
+      const cacheData = JSON.parse(fileContent);
+      return cacheData.propertyId || null;
     }
-    return {};
+    return null;
   } catch (error) {
     console.error(`读取房产缓存时出错: ${error.message}`);
-    return {};
-  }
-}
-
-/**
- * 获取指定房产ID的详细信息
- * @param {string} propertyId - 房产ID
- * @returns {Object|null} 房产详情对象，如果未找到则返回null
- */
-function getProperty(propertyId) {
-  try {
-    const properties = getAllProperties();
-    return properties[propertyId] || null;
-  } catch (error) {
-    console.error(`获取房产 ${propertyId} 信息时出错: ${error.message}`);
     return null;
   }
 }
 
 /**
- * 获取所有房产ID的列表
- * @returns {Array} 房产ID数组
+ * 获取缓存的最后更新时间
+ * @returns {string|null} 缓存的时间戳字符串，如果缓存不存在则返回null
  */
-function getPropertyIds() {
+function getCacheTimestamp() {
   try {
-    const properties = getAllProperties();
-    return Object.keys(properties);
+    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+      const cacheData = JSON.parse(fileContent);
+      return cacheData.cachedAt || null;
+    }
+    return null;
   } catch (error) {
-    console.error(`获取房产ID列表时出错: ${error.message}`);
-    return [];
+    console.error(`读取房产缓存时间戳时出错: ${error.message}`);
+    return null;
   }
 }
 
@@ -59,9 +49,14 @@ function getPropertyIds() {
  * 判断房产缓存是否存在
  * @returns {boolean} 如果缓存文件存在且有效则返回true
  */
-function hasCachedProperties() {
+function hasCachedProperty() {
   try {
-    return fs.existsSync(PROPERTY_CACHE_FILE);
+    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+      const cacheData = JSON.parse(fileContent);
+      return !!cacheData.propertyId;
+    }
+    return false;
   } catch (error) {
     console.error(`检查房产缓存是否存在时出错: ${error.message}`);
     return false;
@@ -69,27 +64,38 @@ function hasCachedProperties() {
 }
 
 /**
- * 获取缓存的最后更新时间
- * @returns {Date|null} 缓存文件的最后修改时间，如果文件不存在则返回null
+ * 获取缓存文件信息
+ * @returns {Object} 包含缓存文件信息的对象
  */
-function getCacheLastUpdated() {
+function getCacheInfo() {
   try {
     if (fs.existsSync(PROPERTY_CACHE_FILE)) {
       const stats = fs.statSync(PROPERTY_CACHE_FILE);
-      return stats.mtime;
+      return {
+        exists: true,
+        path: PROPERTY_CACHE_FILE,
+        size: stats.size,
+        lastModified: stats.mtime
+      };
     }
-    return null;
+    return {
+      exists: false,
+      path: PROPERTY_CACHE_FILE
+    };
   } catch (error) {
-    console.error(`获取缓存更新时间时出错: ${error.message}`);
-    return null;
+    console.error(`获取缓存文件信息时出错: ${error.message}`);
+    return {
+      exists: false,
+      path: PROPERTY_CACHE_FILE,
+      error: error.message
+    };
   }
 }
 
 module.exports = {
-  getAllProperties,
-  getProperty,
-  getPropertyIds,
-  hasCachedProperties,
-  getCacheLastUpdated,
+  getPropertyId,
+  getCacheTimestamp,
+  hasCachedProperty,
+  getCacheInfo,
   PROPERTY_CACHE_FILE
 }; 

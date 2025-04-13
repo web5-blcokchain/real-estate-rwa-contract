@@ -181,6 +181,14 @@ class RewardManagerController extends BaseController {
         };
         formattedDistribution.statusDescription = statusMap[formattedDistribution.status] || '未知状态';
         
+        // 添加分配类型描述
+        const typeMap = {
+          0: '分红',
+          1: '租金',
+          2: '奖金'
+        };
+        formattedDistribution.typeDescription = typeMap[formattedDistribution.distributionType] || '未知类型';
+        
         return formattedDistribution;
       },
       `获取分配详情成功: ID=${distributionId}`,
