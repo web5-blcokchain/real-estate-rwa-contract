@@ -18,6 +18,79 @@ const BASE_URL = 'http://localhost:3001'; // 使用3001端口，避免与其他�
 const API_KEY = '123456'; // 设置API密钥为默认值
 const USER_ROLE = 'admin'; // 设置用户角色
 
+// 缓存文件路径
+const CACHE_DIR = path.resolve(__dirname, '../../cache');
+const PROPERTY_CACHE_FILE = path.join(CACHE_DIR, 'property-cache.json');
+
+// 确保缓存目录存在
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  Logger.info(`创建缓存目录: ${CACHE_DIR}`);
+}
+
+// 更新房产缓存
+const updatePropertyCache = (propertyData) => {
+  try {
+    // 如果缓存文件存在，读取它
+    let cacheData = {};
+    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+      try {
+        cacheData = JSON.parse(fileContent);
+      } catch (e) {
+        Logger.warn(`解析房产缓存文件失败，创建新缓存: ${e.message}`);
+        cacheData = {};
+      }
+    }
+    
+    // 更新/添加新的房产数据
+    if (propertyData && propertyData.data && propertyData.data.propertyId) {
+      const propertyId = propertyData.data.propertyId;
+      cacheData[propertyId] = {
+        ...propertyData.data,
+        cachedAt: new Date().toISOString()
+      };
+      
+      // 写入缓存文件
+      fs.writeFileSync(
+        PROPERTY_CACHE_FILE, 
+        JSON.stringify(cacheData, null, 2), 
+        'utf8'
+      );
+      
+      Logger.info(`房产数据已更新到缓存文件: ${PROPERTY_CACHE_FILE}`);
+      Logger.info(`缓存的房产ID: ${Object.keys(cacheData).join(', ')}`);
+      
+      return true;
+    } else {
+      Logger.warn('未能更新房产缓存，数据格式无效');
+      return false;
+    }
+  } catch (error) {
+    Logger.error(`更新房产缓存时出错: ${error.message}`, error);
+    return false;
+  }
+};
+
+// 从缓存获取房产信息
+const getPropertyFromCache = (propertyId) => {
+  try {
+    if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+      const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+      const cacheData = JSON.parse(fileContent);
+      
+      if (cacheData[propertyId]) {
+        Logger.info(`从缓存获取房产信息: ${propertyId}`);
+        return cacheData[propertyId];
+      }
+    }
+    return null;
+  } catch (error) {
+    Logger.error(`从缓存获取房产信息时出错: ${error.message}`, error);
+    return null;
+  }
+};
+
 // 创建axios实例
 const api = axios.create({
   baseURL: BASE_URL
@@ -106,7 +179,15 @@ const tests = {
       tokenSymbol: 'TEST'
     };
     
-    return await callApi('post', '/api/v1/real-estate/register-property', data);
+    const result = await callApi('post', '/api/v1/real-estate/register-property', data);
+    
+    // 如果注册成功，更新缓存
+    if (result && result.success) {
+      // 获取新注册的房产详情
+      await this.getPropertyInfo(data.propertyId);
+    }
+    
+    return result;
   },
   
   // 2. 获取房产信息
@@ -122,7 +203,22 @@ const tests = {
       Logger.warn(`未指定房产ID，使用默认ID: ${propertyId}`);
     }
     
-    return await callApi('get', endpoint);
+    // 查询房产缓存
+    const cachedProperty = getPropertyFromCache(propertyId);
+    if (cachedProperty) {
+      Logger.info(`找到缓存的房产数据: ${propertyId}`);
+      Logger.info(`缓存时间: ${cachedProperty.cachedAt}`);
+    }
+    
+    // 无论是否有缓存，都从API获取最新数据
+    const result = await callApi('get', endpoint);
+    
+    // 如果获取成功，更新缓存
+    if (result && result.success && result.data) {
+      updatePropertyCache(result);
+    }
+    
+    return result;
   },
   
   // 3. 更新房产状态

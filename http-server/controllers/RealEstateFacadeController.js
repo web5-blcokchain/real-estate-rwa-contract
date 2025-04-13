@@ -213,42 +213,141 @@ class RealEstateFacadeController extends BaseController {
       return this.sendError(res, '缺少房产ID参数', 400);
     }
     
-    // 如果合约不可用，返回错误
-    if (!this.contractAvailable) {
-      return this.sendError(res, '区块链合约不可用，无法获取房产信息', 503);
-    }
-    
-    // 使用合约获取真实数据
-    await this.handleContractAction(
-      res,
-      async () => {
-        // 获取合约实例
-        const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
-        
-        // 获取房产代币地址
-        const tokenAddress = await contract.getPropertyTokenAddress(propertyId);
-        
-        if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
-          throw new Error(`房产ID ${propertyId} 不存在`);
+    try {
+      // 检查本地缓存
+      const propertyCache = require('../utils/propertyCache');
+      const cachedProperty = propertyCache.getProperty(propertyId);
+      
+      // 如果找到缓存，并且不是强制刷新模式，返回缓存数据
+      if (cachedProperty && req.query.refresh !== 'true') {
+        Logger.info(`从缓存获取房产信息: ${propertyId}`);
+        return this.sendSuccess(res, '获取房产信息成功', {
+          propertyId: propertyId,
+          ...cachedProperty,
+          fromCache: true,
+          cachedAt: cachedProperty.cachedAt
+        });
+      }
+      
+      // 如果没有缓存或者是强制刷新模式，从链上获取
+      if (!this.contractAvailable) {
+        // 如果合约不可用但有缓存，返回缓存数据并加上警告
+        if (cachedProperty) {
+          Logger.warn(`区块链合约不可用，返回缓存数据: ${propertyId}`);
+          return this.sendSuccess(res, '获取房产信息成功(从缓存)', {
+            propertyId: propertyId,
+            ...cachedProperty,
+            fromCache: true,
+            cachedAt: cachedProperty.cachedAt,
+            warning: '区块链合约不可用，返回的是缓存数据'
+          });
         }
-        
-        // 获取房产状态
-        const status = await contract.getPropertyStatus(propertyId);
-        
-        // 获取房产估值
-        const valuation = await contract.getPropertyValuation(propertyId);
-        
-        return {
-          propertyId,
-          tokenAddress,
-          status: status.toString(),
-          valuation: valuation.toString()
-        };
-      },
-      `获取房产信息成功: ${propertyId}`,
-      { propertyId },
-      `获取房产信息失败: ${propertyId}`
-    );
+        return this.sendError(res, '区块链合约不可用，无法获取房产信息', 503);
+      }
+      
+      // 从链上获取房产信息
+      return await this.handleContractAction(
+        res,
+        async () => {
+          const contract = ContractUtils.getReadonlyContractWithProvider('PropertyManager');
+          const exists = await contract.propertyExists(propertyId);
+          
+          if (!exists) {
+            // 如果链上不存在但缓存存在，返回缓存并加上警告
+            if (cachedProperty) {
+              Logger.warn(`链上未找到房产 ${propertyId}，返回缓存数据`);
+              return {
+                propertyId: propertyId,
+                ...cachedProperty,
+                fromCache: true,
+                cachedAt: cachedProperty.cachedAt,
+                warning: '链上未找到此房产，返回的是缓存数据'
+              };
+            }
+            throw new Error(`房产ID ${propertyId} 不存在`);
+          }
+          
+          const property = await contract.getProperty(propertyId);
+          const facadeContract = ContractUtils.getReadonlyContractWithProvider('RealEstateFacade');
+          const tokenAddress = await facadeContract.getPropertyTokenAddress(propertyId);
+          
+          // 格式化返回数据
+          const formattedProperty = {
+            propertyId: propertyId,
+            status: Number(property.status),
+            country: property.country,
+            metadataURI: property.metadataURI,
+            initialSupply: property.initialSupply.toString(),
+            valuation: property.valuation.toString(),
+            tokenAddress: tokenAddress,
+            statusDescription: this.getStatusDescription(Number(property.status)),
+            createdAt: Number(property.creationTime) * 1000, // 转换为毫秒
+            fromChain: true,
+            updatedAt: new Date().toISOString()
+          };
+          
+          // 更新本地缓存
+          try {
+            // 组装缓存数据格式
+            const cacheData = {
+              success: true,
+              data: formattedProperty
+            };
+            
+            // 确保缓存目录存在
+            const fs = require('fs');
+            const path = require('path');
+            const CACHE_DIR = path.resolve(__dirname, '../../cache');
+            if (!fs.existsSync(CACHE_DIR)) {
+              fs.mkdirSync(CACHE_DIR, { recursive: true });
+            }
+            
+            // 更新缓存
+            let cacheExists = false;
+            let existingCache = {};
+            const PROPERTY_CACHE_FILE = path.join(CACHE_DIR, 'property-cache.json');
+            
+            if (fs.existsSync(PROPERTY_CACHE_FILE)) {
+              try {
+                const fileContent = fs.readFileSync(PROPERTY_CACHE_FILE, 'utf8');
+                existingCache = JSON.parse(fileContent);
+                cacheExists = true;
+              } catch (e) {
+                Logger.warn(`解析房产缓存文件失败: ${e.message}`);
+              }
+            }
+            
+            // 更新或添加房产数据
+            existingCache[propertyId] = {
+              ...formattedProperty,
+              cachedAt: new Date().toISOString()
+            };
+            
+            // 写入缓存文件
+            fs.writeFileSync(
+              PROPERTY_CACHE_FILE,
+              JSON.stringify(existingCache, null, 2),
+              'utf8'
+            );
+            
+            Logger.info(`房产数据已更新到缓存: ${propertyId}`);
+          } catch (cacheError) {
+            Logger.error(`更新房产缓存失败: ${cacheError.message}`, cacheError);
+          }
+          
+          return formattedProperty;
+        },
+        `获取房产信息成功: ${propertyId}`,
+        { propertyId },
+        `获取房产信息失败: ${propertyId}`
+      );
+    } catch (error) {
+      Logger.error(`获取房产信息时出错: ${error.message}`, {
+        propertyId,
+        error: error.stack
+      });
+      return this.sendError(res, `获取房产信息失败: ${error.message}`, 500);
+    }
   }
 
   /**
@@ -786,6 +885,25 @@ class RealEstateFacadeController extends BaseController {
    * 
    * 请使用RewardManagerController中对应的方法和/api/reward/路由
    */
+
+  /**
+   * 获取房产状态描述
+   * @param {Number} status - 房产状态数值
+   * @returns {String} 状态描述
+   */
+  getStatusDescription(status) {
+    const statusMap = {
+      0: '未初始化',
+      1: '已注册',
+      2: '可售',
+      3: '交易中',
+      4: '已售出',
+      5: '暂停交易',
+      6: '已下架'
+    };
+    
+    return statusMap[status] || '未知状态';
+  }
 }
 
 module.exports = new RealEstateFacadeController(); 
