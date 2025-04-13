@@ -49,6 +49,303 @@
     }
   },
   "paths": {
+    "/api/v1/distribution/create": {
+      "post": {
+        "summary": "创建新的分配",
+        "description": "根据代币持有者创建新的分配并生成默克尔树",
+        "tags": [
+          "Distribution"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "tokenAddress",
+                  "totalAmount",
+                  "distributionType",
+                  "description",
+                  "endTime"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string"
+                  },
+                  "tokenAddress": {
+                    "type": "string"
+                  },
+                  "totalAmount": {
+                    "type": "string"
+                  },
+                  "distributionType": {
+                    "type": "number",
+                    "enum": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "description": "0=Dividend, 1=Rent, 2=Bonus"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "endTime": {
+                    "type": "number",
+                    "description": "分配结束时间的unix时间戳（秒）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "分配创建成功"
+          },
+          "400": {
+            "description": "无效的请求参数"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/v1/distribution/{id}": {
+      "get": {
+        "summary": "获取分配信息",
+        "description": "获取特定分配的详细信息",
+        "tags": [
+          "Distribution"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分配信息"
+          },
+          "404": {
+            "description": "未找到分配"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/v1/distribution/{id}/user/{address}": {
+      "get": {
+        "summary": "获取用户分配信息",
+        "description": "获取特定用户在特定分配中的详细信息",
+        "tags": [
+          "Distribution"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "用户分配信息"
+          },
+          "404": {
+            "description": "未找到分配或用户没有分配"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/v1/distribution/{id}/withdraw": {
+      "post": {
+        "summary": "提取分配",
+        "description": "用户提取特定分配中的奖励",
+        "tags": [
+          "Distribution"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userAddress",
+                  "amount"
+                ],
+                "properties": {
+                  "userAddress": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "提取成功"
+          },
+          "400": {
+            "description": "无效的请求参数"
+          },
+          "404": {
+            "description": "未找到分配或用户没有分配"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/v1/distribution/{id}/status": {
+      "put": {
+        "summary": "更新分配状态",
+        "description": "管理员可以更新分配的状态（激活、取消或完成）",
+        "tags": [
+          "Distribution"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      1,
+                      2,
+                      3
+                    ],
+                    "description": "1=Active, 2=Completed, 3=Cancelled"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "状态更新成功"
+          },
+          "400": {
+            "description": "无效的请求参数"
+          },
+          "404": {
+            "description": "未找到分配"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/v1/distribution/{id}/recover": {
+      "post": {
+        "summary": "回收未领取资金",
+        "description": "管理员可以回收过期或已取消分配中的未领取资金",
+        "tags": [
+          "Distribution"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "receiver"
+                ],
+                "properties": {
+                  "receiver": {
+                    "type": "string",
+                    "description": "接收回收资金的地址"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "资金回收成功"
+          },
+          "400": {
+            "description": "无效的请求参数"
+          },
+          "404": {
+            "description": "未找到分配"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
     "/api/v1/real-estate/register-property": {
       "post": {
         "summary": "注册新房产",
@@ -433,12 +730,228 @@
         }
       }
     },
-    "/api/v1/real-estate/create-distribution": {
-      "post": {
-        "summary": "创建奖励分配",
-        "description": "创建房产奖励分配，需要MANAGER权限",
+    "/api/v1/real-estate/contract-info/{contractName}": {
+      "get": {
+        "summary": "获取合约接口信息",
+        "description": "获取指定合约的接口信息，包括方法和事件",
         "tags": [
           "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contractName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约名称"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "获取合约接口信息成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/env-info": {
+      "get": {
+        "summary": "获取环境配置信息",
+        "description": "返回当前环境的配置信息，包括网络ID、合约地址等",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "responses": {
+          "200": {
+            "description": "环境配置信息获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "network": {
+                      "type": "object",
+                      "description": "网络信息"
+                    },
+                    "contracts": {
+                      "type": "object",
+                      "description": "合约地址信息"
+                    },
+                    "merkleDistribution": {
+                      "type": "boolean",
+                      "description": "是否支持Merkle树分配"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "获取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/token-balance/{propertyId}/{userAddress}": {
+      "get": {
+        "summary": "获取用户代币余额",
+        "description": "获取指定用户在特定房产代币中的余额",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "propertyId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房产ID"
+          },
+          {
+            "in": "path",
+            "name": "userAddress",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "用户地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "代币余额获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distributions": {
+      "get": {
+        "summary": "获取所有分配ID",
+        "description": "获取系统中所有分配的ID列表",
+        "tags": [
+          "RewardManager"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取分配ID列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "获取分配ID失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{distributionId}": {
+      "get": {
+        "summary": "获取分配详情",
+        "description": "获取特定分配ID的详细信息",
+        "tags": [
+          "RewardManager"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "distributionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取分配详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "获取分配详情失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/create-distribution": {
+      "post": {
+        "summary": "创建新的分配",
+        "description": "创建新的分配，包括分红、租金或奖金",
+        "tags": [
+          "RewardManager"
         ],
         "security": [
           {
@@ -454,6 +967,7 @@
                 "required": [
                   "propertyId",
                   "amount",
+                  "stablecoinAddress",
                   "description"
                 ],
                 "properties": {
@@ -464,6 +978,25 @@
                   "amount": {
                     "type": "string",
                     "description": "分配金额"
+                  },
+                  "stablecoinAddress": {
+                    "type": "string",
+                    "description": "稳定币合约地址"
+                  },
+                  "distributionType": {
+                    "type": "number",
+                    "enum": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "description": "分配类型，0=分红，1=租金，2=奖金",
+                    "default": 0
+                  },
+                  "endTime": {
+                    "type": "number",
+                    "description": "结束时间戳（秒），0表示永不过期",
+                    "default": 0
                   },
                   "description": {
                     "type": "string",
@@ -476,7 +1009,7 @@
         },
         "responses": {
           "200": {
-            "description": "创建分配成功",
+            "description": "分配创建成功",
             "content": {
               "application/json": {
                 "schema": {
@@ -498,67 +1031,12 @@
         }
       }
     },
-    "/api/v1/real-estate/activate-distribution": {
+    "/api/v1/reward/update-merkle-root": {
       "post": {
-        "summary": "激活奖励分配",
-        "description": "激活指定的奖励分配，允许用户提取奖励",
+        "summary": "更新分配的默克尔根",
+        "description": "为特定分配更新默克尔根，用于验证用户提取资格",
         "tags": [
-          "RealEstateFacade"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "distributionId"
-                ],
-                "properties": {
-                  "distributionId": {
-                    "type": "string",
-                    "description": "分配ID"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "分配激活成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Success"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "参数错误或合约错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/real-estate/withdraw": {
-      "post": {
-        "summary": "提取分红",
-        "description": "提取特定分配的分红奖励",
-        "tags": [
-          "RealEstateFacade"
+          "RewardManager"
         ],
         "security": [
           {
@@ -573,15 +1051,153 @@
                 "type": "object",
                 "required": [
                   "distributionId",
-                  "user",
-                  "amount"
+                  "merkleRoot"
                 ],
                 "properties": {
                   "distributionId": {
                     "type": "string",
                     "description": "分配ID"
                   },
-                  "user": {
+                  "merkleRoot": {
+                    "type": "string",
+                    "description": "默克尔根（32字节十六进制字符串）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "默克尔根更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{id}/status": {
+      "put": {
+        "summary": "更新分配状态",
+        "description": "更新分配的状态（激活、完成或取消）",
+        "tags": [
+          "RewardManager"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3
+                    ],
+                    "description": "0=待定, 1=激活, 2=完成, 3=取消"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "状态更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{id}/withdraw": {
+      "post": {
+        "summary": "使用默克尔证明提取分红",
+        "description": "使用默克尔证明提取特定分配的分红奖励",
+        "tags": [
+          "RewardManager"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userAddress",
+                  "amount"
+                ],
+                "properties": {
+                  "userAddress": {
                     "type": "string",
                     "description": "用户地址"
                   },
@@ -597,6 +1213,123 @@
         "responses": {
           "200": {
             "description": "提取分红成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{id}/user/{address}": {
+      "get": {
+        "summary": "获取用户分配信息",
+        "description": "获取用户在特定分配中的信息，包括可提取金额和已提取金额",
+        "tags": [
+          "RewardManager"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          },
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "用户地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "用户分配信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{id}/recover": {
+      "post": {
+        "summary": "回收未领取的资金",
+        "description": "管理员可以回收分配中未被领取的资金",
+        "tags": [
+          "RewardManager"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "receiver"
+                ],
+                "properties": {
+                  "receiver": {
+                    "type": "string",
+                    "description": "接收地址"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "资金回收成功",
             "content": {
               "application/json": {
                 "schema": {

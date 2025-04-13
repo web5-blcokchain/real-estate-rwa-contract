@@ -10,20 +10,8 @@ const { authMiddleware, roleMiddleware } = require('../middleware');
 // 获取不动产信息 - 公开API，无需验证
 router.get('/property/:propertyId', RealEstateFacadeController.getPropertyInfo.bind(RealEstateFacadeController));
 
-// 获取所有分配ID - 公开API，无需验证
-router.get('/distributions', RealEstateFacadeController.getAllDistributions.bind(RealEstateFacadeController));
-
-// 获取分配详情 - 公开API，无需验证
-router.get('/distribution/:distributionId', RealEstateFacadeController.getDistributionDetails.bind(RealEstateFacadeController));
-
 // 获取用户代币余额 - 公开API，无需验证
 router.get('/token-balance/:propertyId/:userAddress', RealEstateFacadeController.getUserTokenBalance.bind(RealEstateFacadeController));
-
-// 获取用户分配比例 - 公开API，无需验证
-router.get('/distribution-ratio/:distributionId/:userAddress', RealEstateFacadeController.getDistributionRatio.bind(RealEstateFacadeController));
-
-// 获取用户分配信息（Merkle分配）- 公开API，无需验证
-router.get('/distribution/:id/user/:address', RealEstateFacadeController.getUserDistribution.bind(RealEstateFacadeController));
 
 // 以下API无需额外认证中间件，因为已在app.js中全局应用了AuthMiddleware.validateApiKey
 // router.use(authMiddleware);
@@ -46,30 +34,6 @@ router.put('/property-valuation',
   RealEstateFacadeController.updatePropertyValuation.bind(RealEstateFacadeController)
 );
 
-// 创建默克尔树分配 - 需要manager角色
-router.post('/create-merkle-distribution',
-  roleMiddleware(['manager', 'admin']),
-  RealEstateFacadeController.createMerkleDistribution.bind(RealEstateFacadeController)
-);
-
-// 更新分配状态 - 需要manager角色
-router.put('/distribution/:id/status',
-  roleMiddleware(['manager', 'admin']),
-  RealEstateFacadeController.updateDistributionStatus.bind(RealEstateFacadeController)
-);
-
-// 激活分配 - 需要manager角色（兼容旧API）
-router.post('/activate-distribution',
-  roleMiddleware(['manager', 'admin']),
-  RealEstateFacadeController.activateDistribution.bind(RealEstateFacadeController)
-);
-
-// 回收未领取的资金 - 需要admin角色
-router.post('/distribution/:id/recover',
-  roleMiddleware(['admin']),
-  RealEstateFacadeController.recoverUnclaimedFunds.bind(RealEstateFacadeController)
-);
-
 // 创建售卖订单 - 需要普通用户权限
 router.post('/create-sell-order',
   RealEstateFacadeController.createSellOrder.bind(RealEstateFacadeController)
@@ -80,9 +44,7 @@ router.post('/create-buy-order',
   RealEstateFacadeController.createBuyOrder.bind(RealEstateFacadeController)
 );
 
-// 使用默克尔证明提取分红 - 需要普通用户权限
-router.post('/distribution/:id/withdraw',
-  RealEstateFacadeController.withdrawMerkleDistribution.bind(RealEstateFacadeController)
-);
+// 注释: 分红提取相关功能已移至reward路由模块
+// 请使用 /api/reward/distribution/:id/withdraw 端点
 
 module.exports = router; 

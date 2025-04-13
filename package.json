@@ -5,10 +5,6 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
-    "test:shared": "mocha test/shared/**/*.test.js",
-    "shared:test": "mocha shared/test/**/*.test.js",
-    "test:coverage": "hardhat coverage",
     "lint": "eslint 'contracts/**/*.{js,ts}'",
     "lint:fix": "eslint 'contracts/**/*.{js,ts}' --fix",
     "format": "prettier --write 'contracts/**/*.{js,ts,sol}'",
@@ -16,15 +12,10 @@
     "deploy:local": "hardhat run scripts/deploy-correct.js --network localhost",
     "deploy:test": "hardhat run  scripts/deploy-correct.js --network testnet",
     "deploy:main": "hardhat run  scripts/deploy-correct.js --network mainnet",
-    "verify": "hardhat verify --network testnet",
-    "start:node": "hardhat node",
-    "test:env": "node test-env.js",
-    "server:dev": "nodemon server/app.js",
-    "server:start": "node server/app.js",
+    "node:start": "hardhat node",
     "http:dev": "cross-env PORT=3001 nodemon http-server/app.js",
     "http:start": "cross-env PORT=3001 node http-server/app.js",
-    "test:api-estate": "node http-server/scripts/test-real-estate-api.js",
-    "test:register-property": "node http-server/scripts/test-register-property.js"
+    "http:test:facade": "node http-server/scripts/test-real-estate-api.js"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.3",
