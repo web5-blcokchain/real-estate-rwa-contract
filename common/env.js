@@ -199,7 +199,7 @@ class EnvUtils {
       testnet: {
         name: 'testnet',
         chainId: 11155111,
-        rpcUrl: this.getString('SEPOLIA_RPC_URL', 'https://rpc.sepolia.org'),
+        rpcUrl: this.getString('TESTNET_RPC_URL', 'https://rpc.sepolia.org'),
         // 为不同角色配置私钥
         privateKeys: {
           admin: adminPrivateKey || '',

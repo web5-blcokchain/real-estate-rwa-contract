@@ -344,7 +344,7 @@ const runTests = async () => {
     // 首先检查区块链连接状态
     try {
       Logger.info('\n===== 检查区块链连接状态 =====');
-      const response = await axios.post('http://localhost:8545', {
+      const response = await axios.post('https://test-hardhat-node.usdable.com', {
         jsonrpc: '2.0',
         method: 'eth_blockNumber',
         params: [],
