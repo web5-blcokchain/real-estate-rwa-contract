@@ -12,8 +12,32 @@ import "./TradingManager.sol";
 import "./RewardManager.sol";
 
 /**
- * @title RealEstateSystem
- * @dev 系统核心合约，管理系统状态和权限
+ * @title RealEstateSystem - 日本房地产数字化平台系统核心控制合约
+ * @author Fashi Shijian团队
+ * @notice 本合约是整个房地产代币化系统的核心控制中心，负责权限管理、系统状态维护及紧急响应机制
+ * 
+ * @dev 合约功能描述：
+ * 1. 权限管理：实现了基于角色的三级权限结构（ADMIN, MANAGER, OPERATOR），支持权限继承关系
+ * 2. 系统状态控制：管理整个平台的运行状态（激活、测试、运行、暂停、升级中）
+ * 3. 紧急响应机制：提供紧急暂停功能，应对潜在安全事件
+ * 4. 合约授权机制：管理哪些合约可以与系统交互
+ * 5. 可升级性：支持合约升级，确保系统可持续发展
+ * 
+ * @dev 与其他模块的关联：
+ * - PropertyManager：房产管理模块，依赖本合约进行权限验证和状态检查
+ * - TradingManager：交易管理模块，依赖本合约进行权限验证和系统状态控制
+ * - RewardManager：奖励管理模块，依赖本合约进行权限验证
+ * - RealEstateFacade：前端接口合约，通过本合约验证调用权限
+ * 
+ * @dev 部署和升级注意事项：
+ * - 需要使用代理模式部署（UUPS模式）
+ * - 合约升级需要ADMIN角色权限
+ * - 初始化时需设置初始管理员地址
+ * 
+ * @dev 安全考虑：
+ * - 实现了重入攻击防护（ReentrancyGuard）
+ * - 权限分级控制，防止权限滥用
+ * - 紧急暂停机制，用于处理紧急情况
  */
 contract RealEstateSystem is 
     Initializable, 

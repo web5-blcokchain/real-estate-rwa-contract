@@ -12,12 +12,46 @@ import "./RealEstateSystem.sol";
 import "./utils/SafeMath.sol";
 
 /**
- * @title PropertyToken
- * @dev 优化的房产代币合约，继承自ERC20标准
- * 权限说明：
- * - ADMIN: 最高权限，包含所有权限
- * - MANAGER: 管理权限，包含OPERATOR权限
- * - OPERATOR: 基础操作权限
+ * @title PropertyToken - 日本房产资产代币化合约
+ * @author Fashi Shijian团队
+ * @notice 本合约实现了单个房产资产的代币化，将实物房产转化为可交易的数字资产代币
+ * 
+ * @dev 合约功能描述：
+ * 1. 资产代币化：基于ERC20标准将房产价值转化为可分割、可交易的代币
+ * 2. 代币供应管理：控制代币的最大供应量，支持动态调整
+ * 3. 安全特性：
+ *    - 实现黑名单机制，防止恶意账户参与交易
+ *    - 支持暂停功能，应对紧急情况
+ *    - 支持快照功能，记录特定时间点的代币分布状态
+ * 4. 合规要求：满足日本房产法规的相关要求，支持KYC/AML合规
+ * 5. 可升级性：支持合约升级，确保系统可持续发展
+ * 
+ * @dev 继承关系：
+ * - ERC20Upgradeable：提供标准ERC20代币功能
+ * - ERC20BurnableUpgradeable：支持代币销毁
+ * - ERC20SnapshotUpgradeable：支持代币余额快照
+ * - PausableUpgradeable：支持紧急暂停功能
+ * - UUPSUpgradeable：支持可升级合约模式
+ * 
+ * @dev 与其他模块的关联：
+ * - RealEstateSystem：依赖核心系统合约进行权限验证
+ * - PropertyManager：由资产管理合约创建和部署
+ * - TradingManager：与交易管理合约协作，支持代币交易和转移
+ * 
+ * @dev 权限控制：
+ * - ADMIN：可管理最大供应量、暂停/恢复代币交易、升级合约
+ * - MANAGER：可管理黑名单、监控代币流动
+ * - OPERATOR：可创建代币快照、查询代币状态
+ * 
+ * @dev 业务规则：
+ * - 代币总量取决于房产估值和代币化比例
+ * - 代币转移受黑名单和暂停状态的限制
+ * - 最大供应量不可低于当前流通量
+ * 
+ * @dev 部署流程：
+ * - 由PropertyManager合约在房产注册时创建
+ * - 初始代币分配给房产所有者或平台
+ * - 后续通过二级市场流通
  */
 contract PropertyToken is 
     Initializable,

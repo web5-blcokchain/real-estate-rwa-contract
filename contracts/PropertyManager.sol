@@ -11,12 +11,38 @@ import "./RealEstateSystem.sol";
 import "./PropertyToken.sol";
 
 /**
- * @title PropertyManager
- * @dev 优化的房产管理合约，提高存储效率和安全性
- * 权限说明：
- * - ADMIN: 最高权限，包含所有权限
- * - MANAGER: 管理权限，包含OPERATOR权限
- * - OPERATOR: 基础操作权限
+ * @title PropertyManager - 日本房地产数字化平台资产管理合约
+ * @author Fashi Shijian团队
+ * @notice 本合约负责管理平台上所有房产资产的登记、审核、状态更新及代币化流程
+ * 
+ * @dev 合约功能描述：
+ * 1. 房产资产登记：支持添加新房产，包括基本信息录入和元数据存储
+ * 2. 房产状态管理：追踪每个房产的当前状态（未注册、待审核、已批准、已拒绝、已下架）
+ * 3. 代币化处理：为每个房产创建对应的ERC20代币合约，实现资产数字化
+ * 4. 所有权管理：记录并管理房产的所有者信息，支持所有权转移
+ * 5. 元数据管理：维护每个房产的详细信息和外部数据链接
+ * 
+ * @dev 数据结构优化：
+ * - 使用紧凑的数据类型（uint8, uint40等）减少存储消耗
+ * - 优化映射和数组结构，提高数据访问效率
+ * - 事件设计考虑索引和数据检索需求
+ * 
+ * @dev 与其他模块的关联：
+ * - RealEstateSystem：依赖核心系统合约进行权限验证和状态检查
+ * - PropertyToken：为每个房产创建独立的代币合约实例，实现资产代币化
+ * - TradingManager：与交易管理合约协作，支持代币化资产的交易
+ * - RealEstateFacade：通过外观模式合约暴露功能给外部调用
+ * 
+ * @dev 权限控制：
+ * - ADMIN：可执行所有操作，包括紧急资产处理和高风险操作
+ * - MANAGER：可审核房产、更新房产状态、管理元数据
+ * - OPERATOR：可注册新房产、查询资产信息
+ * 
+ * @dev 安全考虑：
+ * - 实现了重入攻击防护（ReentrancyGuard）
+ * - 状态变更受权限控制保护
+ * - 可暂停功能，应对紧急情况
+ * - 房产唯一性验证，防止重复注册
  */
 contract PropertyManager is 
     Initializable, 
