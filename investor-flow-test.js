@@ -43,7 +43,7 @@ const TEST_PROPERTY_NAME = "东京银座高级公寓";
 const TEST_PROPERTY_SYMBOL = "TKO";
 const TEST_PROPERTY_COUNTRY = "Japan";
 const TEST_PROPERTY_METADATA_URI = "ipfs://QmTestPropertyMetadata";
-const TEST_PROPERTY_INITIAL_SUPPLY = ethers.parseUnits("1000", 18);
+const TEST_PROPERTY_INITIAL_SUPPLY = ethers.parseUnits("10000", 18); // 修改为10000个代币
 const TEST_PROPERTY_INITIAL_VALUATION = ethers.parseUnits("1000000", 18); // 100万美元
 
 // 从artifacts加载ABI
@@ -1335,8 +1335,8 @@ async function investorBuyPropertyToken() {
       }
     }
     
-    // 购买数量为卖单的一半
-    const purchaseAmount = sellOrderInfo.amount / 2n;
+    // 购买固定100个代币
+    const purchaseAmount = ethers.parseUnits("100", testState.tokenDecimals);
     const price = sellOrderInfo.price;
     
     // 计算总成本
@@ -1408,12 +1408,12 @@ async function investorBuyPropertyToken() {
     const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.balance(`投资者新 ${testState.tokenSymbol}`, formatAmount(newTokenBalance, testState.tokenDecimals));
     
-    // 检查USDT余额变化
-    const newUsdtBalance = await usdtContract.balanceOf(investorAddress);
-    log.balance(`投资者新 ${usdtSymbol}`, formatAmount(newUsdtBalance, usdtDecimals));
+    // 计算实际获得的代币数量
+    const tokensReceived = newTokenBalance - initialTokenBalance;
+    log.info(`实际获得代币: ${formatAmount(tokensReceived, testState.tokenDecimals)} ${testState.tokenSymbol}`);
     
-    if (newTokenBalance > initialTokenBalance) {
-      log.success(`交易成功！投资者获得了 ${formatAmount(newTokenBalance - initialTokenBalance, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+    if (tokensReceived > 0n) {
+      log.success(`交易成功！投资者获得了 ${formatAmount(tokensReceived, testState.tokenDecimals)} ${testState.tokenSymbol}`);
       log.role('投资者', '代币购买成功');
       return true;
     } else {
