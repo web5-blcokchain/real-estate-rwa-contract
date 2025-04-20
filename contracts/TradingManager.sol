@@ -339,12 +339,10 @@ contract TradingManager is
      */
     function createSellOrder(
         address token,
-        address seller,
         uint256 amount,
         uint256 price
     ) external whenNotPaused nonReentrant returns (uint256) {
         require(token != address(0), "Invalid token address");
-        require(seller != address(0), "Invalid seller address");
         require(amount > 0, "Invalid amount");
         require(price > 0, "Invalid price");
         
@@ -353,13 +351,13 @@ contract TradingManager is
         require(amount <= maxTradeAmount, "Amount above maximum");
         
         // 检查黑名单
-        require(!blacklist[seller], "Seller is blacklisted");
+        require(!blacklist[msg.sender], "Seller is blacklisted");
         
         // 创建订单
         uint256 orderId = _nextOrderId++;
         _orders[orderId] = Order({
             id: orderId,
-            seller: seller,
+            seller: msg.sender,
             token: token,
             amount: amount,
             price: price,
@@ -368,12 +366,12 @@ contract TradingManager is
             isSellOrder: true
         });
         
-        _userOrders[seller].push(orderId);
+        _userOrders[msg.sender].push(orderId);
         _tokenTrades[token].push(orderId);
         
         emit OrderCreated(
             orderId,
-            seller,
+            msg.sender,
             token,
             amount,
             price,

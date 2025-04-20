@@ -317,38 +317,6 @@ contract RealEstateFacade is
     }
     
     /**
-     * @dev 创建卖单
-     */
-    function createSellOrder(
-        string memory propertyId,
-        uint256 amount,
-        uint256 price
-    ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        
-        address token = propertyManager.getPropertyToken(propertyId);
-        require(token != address(0), "Property token not found");
-        
-        tradingManager.createSellOrder(token, msg.sender, amount, price);
-    }
-
-    /**
-     * @dev 创建买单
-     */
-    function createBuyOrder(
-        string memory propertyId,
-        uint256 amount,
-        uint256 price
-    ) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        
-        address token = propertyManager.getPropertyToken(propertyId);
-        require(token != address(0), "Property token not found");
-        
-        tradingManager.createBuyOrder(token, msg.sender, amount, price);
-    }
-    
-    /**
      * @dev 更新房产估值 - 需要MANAGER权限
      */
     function updatePropertyValuation(

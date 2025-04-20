@@ -99,7 +99,17 @@ async function getContract(contractName, address, wallet) {
       return null;
     }
 
-    return new ethers.Contract(address, abi, wallet);
+    // 在本地测试网络上，直接使用合约地址
+    const contract = new ethers.Contract(address, abi, wallet);
+    
+    // 验证合约是否有效
+    try {
+      await contract.getAddress();
+      return contract;
+    } catch (error) {
+      log.error(`合约 ${contractName} 地址无效: ${error.message}`);
+      return null;
+    }
   } catch (error) {
     log.error(`创建 ${contractName} 合约实例失败: ${error.message}`);
     return null;
@@ -117,7 +127,7 @@ async function ensureEthBalance(fromWallet, toAddress, minBalance = ethers.parse
     
     const tx = await fromWallet.sendTransaction({
       to: toAddress,
-      value: neededAmount
+      value: formattedMinBalance
     });
     await tx.wait();
     
@@ -317,14 +327,13 @@ async function createSellOrder() {
   log.step(5, '创建卖单');
   
   try {
-    const facadeContract = await getContract('RealEstateFacade', REAL_ESTATE_FACADE_ADDRESS, state.adminWallet);
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
     
     // 创建卖单
-    const sellOrderId = await facadeContract.createSellOrder(
-      state.propertyId,
-      state.propertyTokenAddress,
-      TEST_PROPERTY_TOKEN_PRICE,
-      TEST_PROPERTY_INITIAL_SUPPLY
+    const sellOrderId = await tradingManagerContract.createSellOrder(
+      state.propertyTokenAddress,  // token 地址
+      10,  // amount
+      2  // price
     );
     
     state.sellOrderId = sellOrderId;
@@ -388,7 +397,7 @@ async function investorBuyPropertyToken() {
     
     return true;
   } catch (error) {
-    log.error(`投资者购买失败: ${error.message}`);
+    log.error(`投资者购买房产代币失败: ${error.message}`);
     return false;
   }
 }
@@ -426,6 +435,7 @@ async function investorClaimReward() {
     
     // 领取收益
     const claimTx = await rewardManagerContract.claimReward(
+      state.propertyId,
       state.distributionId
     );
     
@@ -444,19 +454,34 @@ async function investorSellPropertyToken() {
   log.step(9, '投资者出售房产代币');
   
   try {
-    const facadeContract = await getContract('RealEstateFacade', REAL_ESTATE_FACADE_ADDRESS, state.adminWallet);
+    const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, state.investorWallet);
+    const propertyTokenContract = state.propertyToken;
+    const investorAddress = await state.investorWallet.getAddress();
     
-    // 出售房产代币
-    const sellTx = await facadeContract.sellPropertyToken(
+    // 检查投资者代币余额
+    const tokenBalance = await propertyTokenContract.balanceOf(investorAddress);
+    log.balance(`投资者 ${state.tokenSymbol}`, ethers.formatUnits(tokenBalance, state.tokenDecimals));
+    
+    // 设置出售数量 - 100个代币
+    const sellAmount = ethers.parseUnits("100", state.tokenDecimals);
+    
+    log.info(`出售信息:`);
+    log.info(`- 房产ID: ${state.propertyId}`);
+    log.info(`- 代币: ${state.tokenSymbol}`);
+    log.info(`- 数量: ${ethers.formatUnits(sellAmount, state.tokenDecimals)}`);
+    
+    // 执行出售
+    const sellTx = await propertyManagerContract.sellPropertyToken(
       state.propertyId,
-      state.propertyTokenAddress,
-      TEST_PROPERTY_TOKEN_PRICE,
-      TEST_PROPERTY_INITIAL_SUPPLY
+      sellAmount
     );
     
     await sellTx.wait();
     
-    log.success('房产代币出售成功');
+    // 检查投资者新的代币余额
+    const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
+    log.balance(`投资者新 ${state.tokenSymbol}`, ethers.formatUnits(newTokenBalance, state.tokenDecimals));
+    
     return true;
   } catch (error) {
     log.error(`投资者出售房产代币失败: ${error.message}`);
@@ -464,72 +489,61 @@ async function investorSellPropertyToken() {
   }
 }
 
-// 主函数
-async function main() {
+// 测试流程
+async function testFlow() {
   try {
-    log.info('开始执行房产代币化流程测试...');
-    
-    // 1. 系统初始化
-    if (!await initializeSystem()) {
-      log.error('系统初始化失败，退出测试');
-      return;
-    }
-    
-    // 2. 注册房产
-    if (!await registerProperty()) {
-      log.error('房产注册失败，退出测试');
-      return;
-    }
-    
-    // 3. 更新房产状态为可交易
-    if (!await updatePropertyStatus()) {
-      log.error('更新房产状态失败，退出测试');
-      return;
-    }
+    // 初始化系统
+    await initializeSystem();
+    log.success('系统初始化成功');
 
-    // 4. 投资者初始购买房产代币
-    if (!await initialInvestorBuy()) {
-      log.error('更新房产状态失败，退出测试');
-      return;
-    }
-    
-    // 5. 创建卖单
-    if (!await createSellOrder()) {
-      log.error('创建卖单失败，退出测试');
-      return;
-    }
-    
-    // 6. 投资者购买房产代币
-    if (!await investorBuyPropertyToken()) {
-      log.error('投资者购买房产代币失败，退出测试');
-      return;
-    }
-    
-    // 7. 创建收益分配
-    if (!await createDistribution()) {
-      log.error('创建收益分配失败，退出测试');
-      return;
-    }
-    
-    // 8. 投资者领取收益
-    if (!await investorClaimReward()) {
-      log.error('投资者领取收益失败，退出测试');
-      return;
-    }
-    
-    // 9. 投资者出售房产代币
-    if (!await investorSellPropertyToken()) {
-      log.error('投资者出售房产代币失败，退出测试');
-      return;
-    }
-    
-    log.success('房产代币化流程测试完成！');
+    // 注册房产
+    await registerProperty();
+    log.success('房产注册成功');
+
+    // 更新房产状态
+    await updatePropertyStatus();
+    log.success('房产状态更新成功');
+
+    // 投资者初始购买房产代币
+    await initialInvestorBuy();
+    log.success('投资者初始购买房产代币成功');
+
+    // 创建卖单
+    await createSellOrder();
+    log.success('卖单创建成功');
+
+    // 投资者购买房产代币
+    await investorBuyPropertyToken();
+    log.success('投资者购买房产代币成功');
+
+    // 创建收益分配
+    await createDistribution();
+    log.success('收益分配创建成功');
+
+    // 投资者领取收益
+    await investorClaimReward();
+    log.success('收益领取成功');
+
+    // 投资者出售房产代币
+    await investorSellPropertyToken();
+    log.success('房产代币出售成功');
+
+    return true;
   } catch (error) {
-    log.error(`测试过程中发生错误: ${error.message}`);
+    log.error(`测试流程失败: ${error.message}`);
+    return false;
   }
 }
 
-// 执行主函数
-main().catch(error => {
-  log.error(`主函数执行失败: ${error.message}`);
-});
+// 运行测试流程
+async function runTest() {
+  try {
+    await testFlow();
+    log.success('测试流程完成');
+  } catch (error) {
+    log.error(`运行测试流程失败: ${error.message}`);
+  }
+}
+
+// 运行测试流程
+runTest();
