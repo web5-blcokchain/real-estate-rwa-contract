@@ -1,0 +1,8 @@
+[
+  "function createBuyOrder(address token, uint256 amount, uint256 price) returns (uint256)",
+  "function createSellOrder(address token, uint256 amount, uint256 price) returns (uint256)",
+  "function executeOrder(uint256 orderId, uint256 amount) returns (uint256)",
+  "function getOrderInfo(uint256 orderId) view returns (tuple(uint256 id, address seller, address token, uint256 amount, uint256 price, uint256 timestamp, bool active, bool isSellOrder))",
+  "function getUserOrders(address user) view returns (uint256[])",
+  "function cancel(uint256 orderId) returns (bool)"
+]

@@ -1,0 +1,9 @@
+[
+  "function registerPropertyAndCreateToken(string propertyId, string country, string metadataURI, uint256 initialSupply, string tokenName, string tokenSymbol) returns (bool)",
+  "function getPropertyInfo(string propertyId) view returns (tuple(string id, uint8 status, address tokenAddress, string metadataURI, uint256 currentValuation, uint256 initialSupply))",
+  "function getAvailableProperties() view returns (string[])",
+  "function buyPropertyToken(address propertyToken, uint256 amount, uint256 price, address paymentToken) returns (uint256)",
+  "function getPropertyTokenAddress(string propertyId) view returns (address)",
+  "function updatePropertyStatus(string propertyId, uint8 newStatus) returns (bool)",
+  "function updatePropertyValuation(string propertyId, uint256 newValuation) returns (bool)"
+]

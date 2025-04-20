@@ -1,0 +1,8 @@
+[
+  "function createDistribution(string propertyId, uint256 amount, address tokenAddress, string description) returns (uint256)",
+  "function activateDistribution(uint256 distributionId) returns (bool)",
+  "function getDistributionInfo(uint256 distributionId) view returns (tuple(uint256 id, string propertyId, uint256 amount, uint256 timestamp, uint8 status, string description, address tokenAddress))",
+  "function getDistributionsForProperty(string propertyId) view returns (uint256[])",
+  "function estimateReward(uint256 distributionId, address account) view returns (uint256)",
+  "function claimReward(uint256 distributionId) returns (bool)"
+]

@@ -485,12 +485,29 @@ contract RealEstateFacade is
             uint40(block.timestamp)
         );
     }
-    
+     
+     
     /**
      * @dev 获取房产代币地址
      */
     function getPropertyTokenAddress(string memory propertyId) external view returns (address) {
-        return propertyManager.propertyTokens(propertyId);
+        return propertyManager.getPropertyTokenAddress(propertyId);
+    }
+    
+    /**
+     * @dev 获取房产信息
+     */
+    function getPropertyInfo(string memory propertyId) external view returns (
+        string memory id,
+        uint8 status,
+        uint40 registrationTime,
+        string memory country,
+        string memory metadataURI,
+        address tokenAddress
+    ) {
+        (id, status, registrationTime, country, metadataURI) = propertyManager.getProperty(propertyId);
+        tokenAddress = propertyManager.getPropertyTokenAddress(propertyId);
+        return (id, status, registrationTime, country, metadataURI, tokenAddress);
     }
     
     /**

@@ -1,0 +1,7 @@
+[
+  "function version() view returns (uint8)",
+  "function checkRole(bytes32 role, address account) view returns (bool)",
+  "function hasRole(bytes32 role, address account) view returns (bool)",
+  "function grantRole(bytes32 role, address account)",
+  "function revokeRole(bytes32 role, address account)"
+]

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
 import "./PropertyToken.sol";
@@ -121,6 +122,12 @@ contract PropertyManager is
         string indexed propertyId,
         address indexed oldOwner,
         address indexed newOwner
+    );
+    event InitialPropertyTokenPurchased(
+        string indexed propertyId,
+        address indexed buyer,
+        uint256 amount,
+        uint40 purchaseTime
     );
     
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -445,6 +452,54 @@ contract PropertyManager is
      * @dev 获取房产代币地址
      */
     function getPropertyToken(string memory propertyId) external view returns (address) {
+        require(_properties[propertyId].exists, "Property not exist");
+        return propertyTokens[propertyId];
+    }
+    
+    /**
+     * @dev 初始购买房产代币 - 简化版本，不需要支付代币地址
+     * @param propertyId 房产ID
+     * @param amount 购买数量
+     * @return success 是否购买成功
+     */
+    function initialBuyPropertyToken(
+        string memory propertyId,
+        uint256 amount
+    ) external whenNotPaused nonReentrant returns (bool) {
+        // 验证房产状态是否为已批准（可交易）
+        require(_properties[propertyId].exists, "Property does not exist");
+        require(_properties[propertyId].status == uint8(PropertyStatus.Approved), "Property is not in trading status");
+        
+        // 获取房产代币合约
+        address tokenAddress = propertyTokens[propertyId];
+        require(tokenAddress != address(0), "Property token not found");
+        
+        // 创建代币合约实例
+        PropertyToken token = PropertyToken(tokenAddress);
+        
+        // 检查购买数量是否合理
+        uint256 initialSupply = token.maxSupply();
+        require(amount <= initialSupply, "Purchase amount exceeds available supply");
+        
+        // 转移代币给购买者
+        bool success = token.transfer(msg.sender, amount);
+        require(success, "Token transfer failed");
+        
+        // 发出事件
+        emit InitialPropertyTokenPurchased(
+            propertyId,
+            msg.sender,
+            amount,
+            uint40(block.timestamp)
+        );
+        
+        return true;
+    }
+
+    /**
+     * @dev 获取房产代币地址
+     */
+    function getPropertyTokenAddress(string memory propertyId) external view returns (address) {
         require(_properties[propertyId].exists, "Property not exist");
         return propertyTokens[propertyId];
     }
