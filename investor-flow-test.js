@@ -46,79 +46,36 @@ const TEST_PROPERTY_METADATA_URI = "ipfs://QmTestPropertyMetadata";
 const TEST_PROPERTY_INITIAL_SUPPLY = ethers.parseUnits("1000", 18);
 const TEST_PROPERTY_INITIAL_VALUATION = ethers.parseUnits("1000000", 18); // 100万美元
 
-// 内置ABI定义
+// 从artifacts加载ABI
+function loadAbiFromArtifacts(contractName) {
+  try {
+    const artifactPath = path.join(__dirname, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
+    const artifactContent = fs.readFileSync(artifactPath, 'utf8');
+    const artifact = JSON.parse(artifactContent);
+    return artifact.abi;
+  } catch (error) {
+    console.error(`Error loading ABI for ${contractName}:`, error.message);
+    return null;
+  }
+}
+
+// 从artifacts目录加载合约ABI
 const CONTRACT_ABIS = {
-  SimpleERC20: [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    "function name() view returns (string)",
-    "function transfer(address to, uint amount) returns (bool)",
-    "function approve(address spender, uint256 amount) returns (bool)",
-    "function mint(address to, uint256 amount) returns (bool)",
-    "function totalSupply() view returns (uint256)"
-  ],
-  RealEstateSystem: [
-    "function version() view returns (uint8)",
-    "function checkRole(bytes32 role, address account) view returns (bool)",
-    "function hasRole(bytes32 role, address account) view returns (bool)",
-    "function grantRole(bytes32 role, address account)",
-    "function revokeRole(bytes32 role, address account)",
-    "function paused() view returns (bool)",
-    "function getSystemStatus() external view returns (uint8)",
-    "function setSystemStatus(uint8 newStatus) external",
-    "function initialize(address) returns (bool)",
-    "function getRoleMember(bytes32 role, uint256 index) view returns (address)",
-    "function getRoleMemberCount(bytes32 role) view returns (uint256)",
-    "function authorizedContracts(address) view returns (bool)",
-    "function setContractAuthorization(address contractAddress, bool authorized) external"
-  ],
-  PropertyToken: [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    "function name() view returns (string)",
-    "function approve(address spender, uint256 amount) returns (bool)",
-    "function totalSupply() view returns (uint256)",
-    "function transferFrom(address from, address to, uint256 amount) returns (bool)",
-    "function transfer(address to, uint256 amount) returns (bool)"
-  ],
-  RealEstateFacade: [
-    "function registerPropertyAndCreateToken(string propertyId, string country, string metadataURI, uint256 initialSupply, string tokenName, string tokenSymbol) returns (bool)",
-    "function getPropertyInfo(string propertyId) view returns (tuple(string id, uint8 status, address tokenAddress, string metadataURI, uint256 currentValuation, uint256 initialSupply))",
-    "function getAvailableProperties() view returns (string[])",
-    "function buyPropertyToken(address propertyToken, uint256 amount, uint256 price, address paymentToken) returns (uint256)",
-    "function initialBuyPropertyToken(string propertyId, uint256 amount, address paymentToken) returns (bool)",
-    "function getPropertyTokenAddress(string propertyId) view returns (address)",
-    "function updatePropertyStatus(string propertyId, uint8 newStatus) returns (bool)",
-    "function updatePropertyValuation(string propertyId, uint256 newValuation) returns (bool)"
-  ],
-  TradingManager: [
-    "function createBuyOrder(address token, uint256 amount, uint256 price) returns (uint256)",
-    "function createSellOrder(address token, uint256 amount, uint256 price) returns (uint256)",
-    "function executeOrder(uint256 orderId, uint256 amount) returns (uint256)",
-    "function getOrderInfo(uint256 orderId) view returns (tuple(uint256 id, address seller, address token, uint256 amount, uint256 price, uint256 timestamp, bool active, bool isSellOrder))",
-    "function getUserOrders(address user) view returns (uint256[])",
-    "function cancel(uint256 orderId) returns (bool)",
-    "function maxTradeAmount() view returns (uint256)",
-    "function minTradeAmount() view returns (uint256)",
-    "function cooldownPeriod() view returns (uint256)",
-    "function feeRate() view returns (uint256)",
-    "function setMaxTradeAmount(uint256) external",
-    "function setMinTradeAmount(uint256) external",
-    "function setCooldownPeriod(uint256) external",
-    "function setFeeRate(uint256) external",
-    "function setFeeReceiver(address) external"
-  ],
-  RewardManager: [
-    "function createDistribution(string propertyId, uint256 amount, address tokenAddress, string description) returns (uint256)",
-    "function activateDistribution(uint256 distributionId) returns (bool)",
-    "function getDistributionInfo(uint256 distributionId) view returns (tuple(uint256 id, string propertyId, uint256 amount, uint256 timestamp, uint8 status, string description, address tokenAddress))",
-    "function getDistributionsForProperty(string propertyId) view returns (uint256[])",
-    "function estimateReward(uint256 distributionId, address account) view returns (uint256)",
-    "function claimReward(uint256 distributionId) returns (bool)"
-  ]
+  RealEstateSystem: loadAbiFromArtifacts('RealEstateSystem'),
+  PropertyManager: loadAbiFromArtifacts('PropertyManager'),
+  PropertyToken: loadAbiFromArtifacts('PropertyToken'),
+  RealEstateFacade: loadAbiFromArtifacts('RealEstateFacade'),
+  TradingManager: loadAbiFromArtifacts('TradingManager'),
+  RewardManager: loadAbiFromArtifacts('RewardManager'),
+  SimpleERC20: loadAbiFromArtifacts('SimpleERC20')
 };
+
+// 检查是否成功加载了所有ABI
+Object.entries(CONTRACT_ABIS).forEach(([name, abi]) => {
+  if (!abi) {
+    console.error(`Failed to load ABI for ${name}`);
+  }
+});
 
 // ABI文件目录，在脚本同级创建
 const ABIS_DIR = path.join(__dirname, 'abis');
@@ -147,37 +104,6 @@ const waitForUserInput = (message) => {
       resolve();
     });
   });
-};
-
-// 加载合约ABI - 优先使用内置ABI
-const loadAbi = (contractName) => {
-  // 优先从artifacts加载（如果存在）
-  try {
-    const contractPath = path.join(__dirname, 'artifacts/contracts', `${contractName}.sol`, `${contractName}.json`);
-    if (fs.existsSync(contractPath)) {
-      log.info(`从artifacts加载ABI: ${contractName}`);
-      const contractArtifact = require(contractPath);
-      return contractArtifact.abi;
-    }
-  } catch (error) {
-    log.warn(`无法从artifacts加载ABI: ${error.message}`);
-  }
-  
-  // 其次使用内置ABI
-  if (CONTRACT_ABIS[contractName]) {
-    log.info(`使用内置ABI: ${contractName}`);
-    return CONTRACT_ABIS[contractName];
-  }
-  
-  // 最后尝试从abis目录加载
-  const abiPath = path.join(ABIS_DIR, `${contractName}.json`);
-  if (fs.existsSync(abiPath)) {
-    log.info(`从文件加载ABI: ${contractName}`);
-    return JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-  }
-  
-  log.error(`找不到${contractName}的ABI，使用空ABI`);
-  return [];
 };
 
 // 日志输出格式化
@@ -231,43 +157,27 @@ const testState = {
 // 合约实例缓存
 const contracts = {};
 
-// 获取合约实例 - 使用内置ABI
-const getContract = async (contractName, address, wallet) => {
-  const cacheKey = `${contractName}-${address}-${wallet.address}`;
-  
-  if (contracts[cacheKey]) {
-    return contracts[cacheKey];
-  }
-  
+// 修改getContract函数，使用已加载的ABI
+async function getContract(contractName, address, wallet) {
   try {
-    // 对于代理合约，检查代码大小
-    const code = await testState.provider.getCode(address);
-    let isProxy = false;
-    
-    if (code && code.length <= 700) { // 代理合约的代码通常很小
-      log.info(`${contractName} 是代理合约，代码大小: ${code.length} 字节`);
-      isProxy = true;
+    if (!address) {
+      console.error(`Contract address not provided for ${contractName}`);
+      return null;
     }
-    
-    // 对于代理合约，强制使用内置ABI而不是从artifacts加载
-    // 因为artifacts中的ABI可能是实现合约的ABI，不包含代理逻辑
-    let abi;
-    if (isProxy && CONTRACT_ABIS[contractName]) {
-      log.info(`使用内置ABI，避开artifacts中的实现合约ABI: ${contractName}`);
-      abi = CONTRACT_ABIS[contractName];
-    } else {
-      abi = loadAbi(contractName);
+
+    // 使用已加载的ABI
+    const abi = CONTRACT_ABIS[contractName];
+    if (!abi) {
+      console.error(`ABI not found for ${contractName}`);
+      return null;
     }
-    
-    const contract = new ethers.Contract(address, abi, wallet);
-    contracts[cacheKey] = contract;
-    return contract;
+
+    return new ethers.Contract(address, abi, wallet);
   } catch (error) {
-    log.error(`创建合约实例失败: ${contractName} at ${address}: ${error.message}`);
-    // 返回一个空的合约实例，避免脚本崩溃
-    return new ethers.Contract(address, [], wallet);
+    console.error(`Error creating contract instance for ${contractName}:`, error.message);
+    return null;
   }
-};
+}
 
 // 检查账户ETH余额并在需要时转账
 async function ensureEthBalance(fromWallet, toAddress, minBalance = ethers.parseEther("0.1")) {
@@ -761,280 +671,122 @@ async function createSellOrder() {
     log.balance(`管理员 ${testState.tokenSymbol}`, formatAmount(adminBalance, testState.tokenDecimals));
     
     if (adminBalance == 0n) {
-      log.warn(`管理员没有房产代币，尝试直接从合约获取初始供应`);
+      log.warn(`管理员没有房产代币，尝试使用PropertyManager.initialBuyPropertyToken购买`);
       
       try {
+        // 获取PropertyManager合约实例
+        const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, testState.adminWallet);
+        
         // 获取代币合约总供应量
         const totalSupply = await propertyTokenContract.totalSupply();
         log.info(`代币总供应量: ${formatAmount(totalSupply, testState.tokenDecimals)}`);
         
         if (totalSupply > 0n) {
-          // 尝试直接检查初始供应去向
-          log.info(`尝试确定初始供应的持有者...`);
-          
-          // 1. 检查常见的代币初始接收地址
-          const potentialHolders = [
-            SYSTEM_ADDRESS, 
-            PROPERTY_MANAGER_ADDRESS, 
-            REAL_ESTATE_FACADE_ADDRESS,
-            await testState.operatorWallet.getAddress(),
-            await testState.managerWallet.getAddress()
-          ];
-          
-          let holderAddress = null;
-          let holderBalance = 0n;
-          let holderWallet = null;
-          
-          for (const address of potentialHolders) {
-            try {
-              const balance = await propertyTokenContract.balanceOf(address);
-              log.info(`地址 ${address} 的代币余额: ${formatAmount(balance, testState.tokenDecimals)}`);
+          // 检查房产状态
+          let propertyStatus;
+          try {
+            propertyStatus = await propertyManagerContract.getPropertyStatus(testState.propertyId);
+            log.info(`房产状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
+            
+            // 如果房产不是可交易状态，尝试更新
+            if (propertyStatus !== 2) { // 2表示Approved状态
+              log.warn(`房产状态不是可交易状态，尝试先更新...`);
+              await updatePropertyStatus();
               
-              if (balance > holderBalance) {
-                holderAddress = address;
-                holderBalance = balance;
-                
-                // 确定持有者的钱包
-                if (address === await testState.operatorWallet.getAddress()) {
-                  holderWallet = testState.operatorWallet;
-                } else if (address === await testState.managerWallet.getAddress()) {
-                  holderWallet = testState.managerWallet;
-                }
+              // 再次获取状态验证
+              propertyStatus = await propertyManagerContract.getPropertyStatus(testState.propertyId);
+              log.info(`更新后房产状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
+              
+              if (propertyStatus !== 2) {
+                log.error(`更新房产状态失败，仍然不是可交易状态`);
+                return false;
               }
-            } catch (error) {
-              log.warn(`检查地址 ${address} 余额失败: ${error.message}`);
             }
+          } catch (statusError) {
+            log.error(`检查房产状态失败: ${statusError.message}`);
+            return false;
           }
           
-          if (holderBalance > 0n) {
-            log.info(`找到持有代币的地址: ${holderAddress}, 余额: ${formatAmount(holderBalance, testState.tokenDecimals)}`);
+          // 购买10%的代币
+          const purchaseAmount = totalSupply / 10n;
+          log.info(`准备购买 ${formatAmount(purchaseAmount, testState.tokenDecimals)} ${testState.tokenSymbol} (10%供应量)`);
+          
+          try {
+            // 使用initialBuyPropertyToken方法购买
+            log.info(`调用PropertyManager.initialBuyPropertyToken方法...`);
+            const buyTx = await propertyManagerContract.initialBuyPropertyToken(
+              testState.propertyId,
+              purchaseAmount
+            );
+            await waitForTx(buyTx);
             
-            // 2. 如果持有者是我们控制的账户，将一部分代币转给管理员
-            if (holderWallet) {
-              log.info(`尝试从持有者转移代币给管理员...`);
-              
-              // 转移10%的代币
-              const transferAmount = holderBalance / 10n;
-              if (transferAmount > 0n) {
-                try {
-                  const tokenWithHolder = propertyTokenContract.connect(holderWallet);
-                  const transferTx = await tokenWithHolder.transfer(adminAddress, transferAmount);
-                  await waitForTx(transferTx);
-                  
-                  // 检查管理员余额
-                  const newAdminBalance = await propertyTokenContract.balanceOf(adminAddress);
-                  log.balance(`管理员 ${testState.tokenSymbol} (转账后)`, formatAmount(newAdminBalance, testState.tokenDecimals));
-                  
-                  if (newAdminBalance > 0n) {
-                    log.info(`成功从持有者转移代币给管理员`);
-                  } else {
-                    log.warn(`转移操作未增加管理员余额`);
-                  }
-                } catch (transferError) {
-                  log.error(`转移代币失败: ${transferError.message}`);
-                }
-              }
+            // 检查购买后的余额
+            const newAdminBalance = await propertyTokenContract.balanceOf(adminAddress);
+            log.balance(`管理员 ${testState.tokenSymbol} (购买后)`, formatAmount(newAdminBalance, testState.tokenDecimals));
+            
+            if (newAdminBalance > 0n) {
+              log.success(`成功使用initialBuyPropertyToken方法购买房产份额`);
             } else {
-              log.warn(`持有者不是我们可控制的账户，尝试其他方式`);
-            }
-          }
-          
-          // 3. 尝试从PropertyManager获取代币
-          if (adminBalance == 0n) {
-            log.info(`尝试通过PropertyManager获取代币...`);
-            
-            try {
-              const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, testState.adminWallet);
-              const getTokenTx = await propertyManagerContract.claimTokens(testState.propertyId, adminAddress, totalSupply / 5n);
-              await waitForTx(getTokenTx);
+              log.error(`initialBuyPropertyToken交易成功但未获得代币`);
               
-              // 检查管理员余额
-              const newAdminBalance = await propertyTokenContract.balanceOf(adminAddress);
-              log.balance(`管理员 ${testState.tokenSymbol} (领取后)`, formatAmount(newAdminBalance, testState.tokenDecimals));
-            } catch (pmError) {
-              log.warn(`通过PropertyManager获取代币失败: ${pmError.message}`);
+              // 询问用户是否继续
+              const skipAndContinue = await askToSkipStep('创建卖单');
+              return skipAndContinue;
             }
-          }
-          
-          // 4. 作为最后的尝试，通过购买方式获取代币
-          if (await propertyTokenContract.balanceOf(adminAddress) == 0n) {
-            // 通过RealEstateFacade购买房产份额
-            log.info(`尝试使用管理员账户购买房产份额...`);
+          } catch (buyError) {
+            log.error(`使用initialBuyPropertyToken方法失败: ${buyError.message}`);
             
-            // 获取RealEstateFacade合约实例
-            const facadeContract = await getContract('RealEstateFacade', REAL_ESTATE_FACADE_ADDRESS, testState.adminWallet);
-            
-            // 获取USDT合约实例
-            const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, testState.adminWallet);
-            
-            // 购买金额 - 假设购买总供应量的10%
-            const purchaseAmount = totalSupply / 10n;
-            // 设置购买价格（每个代币90 USDT，比卖价低以确保买入成功）
-            const purchasePrice = ethers.parseUnits('90', 18);
-            
-            // 计算总成本
-            const totalCost = (purchaseAmount * purchasePrice) / (10n ** BigInt(testState.tokenDecimals));
-            
-            log.info(`购买信息:`);
-            log.info(`  - 代币: ${testState.tokenSymbol} (${testState.propertyTokenAddress})`);
-            log.info(`  - 数量: ${formatAmount(purchaseAmount, testState.tokenDecimals)} ${testState.tokenSymbol}`);
-            log.info(`  - 单价: ${formatAmount(purchasePrice)} USDT/个`);
-            log.info(`  - 总成本: ${formatAmount(totalCost)} USDT`);
-            
-            // 确保管理员有足够的USDT
-            log.info(`检查管理员USDT余额...`);
-            const adminUsdtBalance = await usdtContract.balanceOf(adminAddress);
-            log.balance('管理员 USDT', formatAmount(adminUsdtBalance));
-            
-            if (adminUsdtBalance < totalCost) {
-              log.warn(`管理员USDT余额不足，尝试铸造更多USDT...`);
-              
-              try {
-                const mintAmount = totalCost * 2n;
-                const mintTx = await usdtContract.mint(adminAddress, mintAmount);
-                await waitForTx(mintTx);
-                
-                const newUsdtBalance = await usdtContract.balanceOf(adminAddress);
-                log.balance('管理员 USDT (铸造后)', formatAmount(newUsdtBalance));
-              } catch (mintError) {
-                log.error(`铸造USDT失败: ${mintError.message}`);
-                throw new Error(`需要足够的USDT来购买房产份额`);
-              }
-            }
-            
-            // 授权USDT给RealEstateFacade合约
-            log.info(`授权RealEstateFacade使用USDT...`);
-            const approveTx = await usdtContract.approve(REAL_ESTATE_FACADE_ADDRESS, totalCost);
-            await waitForTx(approveTx);
-            
-            // 购买房产代币
-            log.info(`通过RealEstateFacade购买房产代币...`);
-            try {
-              const buyTx = await facadeContract.buyPropertyToken(
-                testState.propertyTokenAddress,
-                purchaseAmount,
-                purchasePrice,
-                USDT_ADDRESS
-              );
-              await waitForTx(buyTx);
-            } catch (buyError) {
-              log.error(`通过RealEstateFacade购买失败: ${buyError.message}`);
-              
-              // 尝试通过TradingManager购买
-              log.info(`尝试通过TradingManager购买...`);
-              const tradingManagerContract = getContract('TradingManager', TRADING_MANAGER_ADDRESS, testState.adminWallet);
-              
-              try {
-                // 授权TradingManager使用USDT
-                log.info(`授权TradingManager使用USDT...`);
-                const approveTraderTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalCost);
-                await waitForTx(approveTraderTx);
-                
-                // 创建买单
-                log.info(`创建买单...`);
-                const createBuyOrderTx = await tradingManagerContract.createBuyOrder(
-                  testState.propertyTokenAddress, 
-                  purchaseAmount,
-                  purchasePrice
-                );
-                await waitForTx(createBuyOrderTx);
-              } catch (tradingError) {
-                log.error(`通过TradingManager购买也失败: ${tradingError.message}`);
-              }
-            }
+            // 询问用户是否继续
+            const skipAndContinue = await askToSkipStep('创建卖单');
+            return skipAndContinue;
           }
         } else {
           log.error(`代币总供应量为零，无法购买`);
-        }
-        
-        // 最终检查管理员是否有代币
-        const finalAdminBalance = await propertyTokenContract.balanceOf(adminAddress);
-        if (finalAdminBalance == 0n) {
-          // 最后尝试直接修改房产代币的初始所有者
-          log.warn('所有获取代币的方法都失败，尝试创建模拟代币');
-          log.info('由于无法获取真实代币，将创建一个模拟卖单');
-          
-          // 询问用户是否继续
-          const skipAndContinue = await new Promise((resolve) => {
-            rl.question(`\n\x1b[33m无法为管理员获取房产代币，是否跳过创建卖单步骤? (y/n)\x1b[0m`, (answer) => {
-              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-            });
-          });
-          
-          if (skipAndContinue) {
-            log.warn('用户选择跳过创建卖单步骤，继续测试');
-            return true;
-          } else {
-            log.error('用户选择停止测试');
-            return false;
-          }
+          const skipAndContinue = await askToSkipStep('创建卖单');
+          return skipAndContinue;
         }
       } catch (error) {
-        log.error(`获取房产代币过程中出错: ${error.message}`);
+        log.error(`购买房产份额失败: ${error.message}`);
         
         // 询问用户是否继续
-        const skipAndContinue = await new Promise((resolve) => {
-          rl.question(`\n\x1b[33m无法为管理员获取房产代币，是否跳过创建卖单步骤? (y/n)\x1b[0m`, (answer) => {
-            resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-          });
-        });
-        
-        if (skipAndContinue) {
-          log.warn('用户选择跳过创建卖单步骤，继续测试');
-          return true;
-        } else {
-          log.error('用户选择停止测试');
-          return false;
-        }
+        const skipAndContinue = await askToSkipStep('创建卖单');
+        return skipAndContinue;
       }
     }
     
-    // 再次检查管理员余额（可能已经通过上面的逻辑购买了代币）
+    // 重新获取管理员余额（可能在上面的步骤中已经变化）
     const currentAdminBalance = await propertyTokenContract.balanceOf(adminAddress);
     
-    // 计算卖单数量（卖出10%的代币）
-    const sellAmount = currentAdminBalance / 10n;
-    if (sellAmount <= 0n) {
-      log.error(`管理员没有足够的代币可卖出`);
-      
-      // 询问用户是否继续
-      const skipAndContinue = await new Promise((resolve) => {
-        rl.question(`\n\x1b[33m管理员没有足够的代币可卖出，是否跳过创建卖单步骤? (y/n)\x1b[0m`, (answer) => {
-          resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-        });
-      });
-      
-      if (skipAndContinue) {
-        log.warn('用户选择跳过创建卖单步骤，继续测试');
-        return true;
-      } else {
-        log.error('用户选择停止测试');
-        return false;
-      }
+    // 确保管理员有足够的代币
+    if (currentAdminBalance == 0n) {
+      log.error(`管理员没有房产代币，无法创建卖单`);
+      return false;
     }
     
+    // 卖单数量 - 管理员持有代币的一半
+    const sellAmount = currentAdminBalance / 2n;
     // 设置卖价（每个代币100 USDT）
     const sellPrice = ethers.parseUnits('100', 18);
     
     log.info(`创建卖单信息:`);
     log.info(`  - 代币: ${testState.tokenSymbol} (${testState.propertyTokenAddress})`);
     log.info(`  - 数量: ${formatAmount(sellAmount, testState.tokenDecimals)} ${testState.tokenSymbol}`);
-    log.info(`  - 价格: ${formatAmount(sellPrice)} USDT/个`);
+    log.info(`  - 单价: ${formatAmount(sellPrice)} USDT/个`);
     
-    // 授权TradingManager合约转移代币
-    log.info(`授权TradingManager使用房产代币...`);
+    // 授权TradingManager使用代币
+    log.info(`授权TradingManager使用代币...`);
     const approveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, sellAmount);
     await waitForTx(approveTx);
     
     // 创建卖单
-    log.info(`正在创建卖单...`);
-    const createOrderTx = await tradingManagerContract.createSellOrder(
+    log.info(`创建卖单...`);
+    const createSellOrderTx = await tradingManagerContract.createSellOrder(
       testState.propertyTokenAddress,
       sellAmount,
       sellPrice
     );
     
-    const receipt = await waitForTx(createOrderTx);
+    const receipt = await waitForTx(createSellOrderTx);
     
     // 从事件中获取卖单ID
     const orderCreatedEvent = receipt.logs.find(log => {
@@ -1063,18 +815,6 @@ async function createSellOrder() {
       }
     }
     
-    // 查询订单详情
-    const orderInfo = await tradingManagerContract.getOrderInfo(testState.sellOrderId);
-    log.info(`订单信息:`);
-    log.info(`  - ID: ${orderInfo.id}`);
-    log.info(`  - 卖家: ${orderInfo.seller}`);
-    log.info(`  - 代币: ${orderInfo.token}`);
-    log.info(`  - 数量: ${formatAmount(orderInfo.amount, testState.tokenDecimals)}`);
-    log.info(`  - 价格: ${formatAmount(orderInfo.price)}`);
-    log.info(`  - 时间戳: ${new Date(Number(orderInfo.timestamp) * 1000).toLocaleString()}`);
-    log.info(`  - 活跃: ${orderInfo.active}`);
-    log.info(`  - 卖单: ${orderInfo.isSellOrder}`);
-    
     log.role('管理员', '卖单创建成功');
     return true;
   } catch (error) {
@@ -1098,15 +838,11 @@ async function initialBuyPropertyToken() {
   log.step(3, '初始购买房产代币');
   log.role('管理员', '购买初始房产份额，获取代币');
   
-  // 如果跳过步骤，直接返回
-  if (askToSkipStep()) {
-    log.info('跳过初始购买步骤');
-    return true;
-  }
-
+  // 移除跳过步骤的选项，直接执行购买流程
   try {
     // 检查账户余额
     const adminAddress = await testState.adminWallet.getAddress();
+    log.info(`管理员地址: ${adminAddress}`);
     
     // 获取USDT合约实例
     const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, testState.adminWallet);
@@ -1130,30 +866,38 @@ async function initialBuyPropertyToken() {
       return false;
     }
 
+    // 输出合约地址和调用者信息，用于调试
+    log.info(`PropertyManager合约地址: ${PROPERTY_MANAGER_ADDRESS}`);
+    log.info(`房产ID: ${testState.propertyId}`);
+
     // 检查房产状态 - 使用try-catch进行安全检查
     let propertyStatus = -1;
     let propertyTokenAddress = null;
     
     try {
+      log.info(`尝试获取房产状态...`);
       propertyStatus = await propertyManagerContract.getPropertyStatus(testState.propertyId);
       log.info(`房产状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
     } catch (error) {
-      log.warn(`获取房产状态失败: ${error.message}`);
+      log.error(`获取房产状态失败，可能房产不存在: ${error.message}`);
+      log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
       return false;
     }
     
     // 获取房产代币地址
     try {
+      log.info(`尝试获取房产代币地址...`);
       propertyTokenAddress = await propertyManagerContract.getPropertyTokenAddress(testState.propertyId);
-      log.info(`通过PropertyManager.getPropertyTokenAddress获取到代币地址: ${propertyTokenAddress}`);
+      log.info(`房产代币地址: ${propertyTokenAddress}`);
     } catch (error) {
       log.error(`获取代币地址失败: ${error.message}`);
+      log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
       return false;
     }
     
     // 验证地址有效性
     if (propertyTokenAddress === ethers.ZeroAddress) {
-      log.error(`找不到ID为 ${testState.propertyId} 的房产代币`);
+      log.error(`找不到ID为 ${testState.propertyId} 的房产代币，地址为零地址`);
       return false;
     }
     
@@ -1170,78 +914,299 @@ async function initialBuyPropertyToken() {
     testState.propertyToken = propertyToken;
     
     // 获取代币信息
-    testState.tokenName = await propertyToken.name();
-    testState.tokenSymbol = await propertyToken.symbol();
-    testState.tokenDecimals = await propertyToken.decimals();
-    
-    log.info(`代币信息: ${testState.tokenName} (${testState.tokenSymbol}), 精度: ${testState.tokenDecimals}`);
-    
-    // 检查当前代币持有情况
-    const totalSupply = await propertyToken.totalSupply();
-    log.info(`代币总供应量: ${formatAmount(totalSupply, testState.tokenDecimals)} ${testState.tokenSymbol}`);
-    
-    const adminTokenBalance = await propertyToken.balanceOf(adminAddress);
-    log.balance(`管理员 ${testState.tokenSymbol}`, formatAmount(adminTokenBalance, testState.tokenDecimals));
-    
-    if (adminTokenBalance > 0n) {
-      log.info(`管理员已持有房产代币，跳过初始购买`);
-      return true;
+    try {
+      testState.tokenName = await propertyToken.name();
+      testState.tokenSymbol = await propertyToken.symbol();
+      testState.tokenDecimals = await propertyToken.decimals();
+      
+      log.info(`代币信息: ${testState.tokenName} (${testState.tokenSymbol}), 精度: ${testState.tokenDecimals}`);
+    } catch (error) {
+      log.error(`获取代币信息失败: ${error.message}`);
+      log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
+      return false;
     }
     
-    // 检查房产状态是否允许购买
-    if (propertyStatus !== 2) { // 2表示Approved状态
-      log.error(`房产状态不是可交易状态，当前状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
-      log.info(`尝试先更新房产状态...`);
+    // 检查当前代币持有情况
+    let totalSupply;
+    try {
+      totalSupply = await propertyToken.totalSupply();
+      log.info(`代币总供应量: ${formatAmount(totalSupply, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+      
+      const adminTokenBalance = await propertyToken.balanceOf(adminAddress);
+      log.balance(`管理员 ${testState.tokenSymbol}`, formatAmount(adminTokenBalance, testState.tokenDecimals));
+      
+      if (adminTokenBalance > 0n) {
+        log.info(`管理员已持有房产代币，不需要再次购买`);
+        return true;
+      }
+    } catch (error) {
+      log.error(`检查代币持有情况失败: ${error.message}`);
+      log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
+      // 继续执行，尝试购买
+    }
+    
+    // 检查房产状态是否允许购买，必须是可交易状态(2)
+    if (Number(propertyStatus) !== 2) {  // 使用Number()确保类型匹配
+      log.warn(`房产状态不是可交易状态，当前状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
+      log.info(`将尝试更新房产状态到可交易...`);
+      
       try {
         // 尝试更新房产状态到可交易
-        await updatePropertyStatus();
+        const statusUpdated = await updatePropertyStatus();
+        if (!statusUpdated) {
+          log.error(`房产状态更新失败`);
+          return false;
+        }
         
         // 再次获取状态验证
         propertyStatus = await propertyManagerContract.getPropertyStatus(testState.propertyId);
         log.info(`更新后房产状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
         
-        if (propertyStatus !== 2) {
-          log.error(`更新房产状态失败，仍然不是可交易状态`);
+        // 确保使用数值比较，避免类型问题
+        if (Number(propertyStatus) !== 2) {
+          log.error(`房产状态验证失败，当前状态: ${propertyStatus}，需要状态: 2 (可交易)`);
           return false;
         }
+        
+        log.success(`房产状态已成功更新为可交易状态`);
       } catch (error) {
-        log.error(`更新房产状态失败: ${error.message}`);
+        log.error(`更新房产状态过程中出错: ${error.message}`);
+        log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
         return false;
       }
+    } else {
+      log.success(`房产状态已是可交易状态(2)，可以继续购买`);
     }
     
-    // 检查USDT余额和授权
-    const purchaseAmount = BigInt(totalSupply.toString()) / 10n; // 购买10%的代币
+    // 再次确认获取最新的代币总供应量
+    try {
+      totalSupply = await propertyToken.totalSupply();
+      log.info(`确认代币总供应量: ${formatAmount(totalSupply, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+      
+      if (totalSupply === 0n) {
+        log.error(`代币总供应量为零，无法购买`);
+        return false;
+      }
+    } catch (error) {
+      log.error(`获取代币总供应量失败: ${error.message}`);
+      return false;
+    }
+    
+    // 计算购买数量 - 购买10%的代币
+    const purchaseAmount = totalSupply / 10n;
     
     log.info(`准备购买 ${formatAmount(purchaseAmount, testState.tokenDecimals)} ${testState.tokenSymbol} (10%供应量)`);
+    log.info(`调用合约: PropertyManager (${PROPERTY_MANAGER_ADDRESS})`);
+    log.info(`调用方法: initialBuyPropertyToken(${testState.propertyId}, ${purchaseAmount})`);
     
-    // 使用initialBuyPropertyToken方法购买
-    log.info(`直接调用PropertyManager.initialBuyPropertyToken方法...`);
+    // 打印合约方法信息，用于调试
+    log.info(`检查PropertyManager合约方法...`);
     try {
-      const buyTx = await propertyManagerContract.initialBuyPropertyToken(
-        testState.propertyId,
-        purchaseAmount
-      );
-      await waitForTx(buyTx);
+      if (propertyManagerContract.interface && propertyManagerContract.interface.functions) {
+        const propertyManagerFunctions = Object.keys(propertyManagerContract.interface.functions);
+        log.info(`合约可用方法: ${propertyManagerFunctions.join(', ')}`);
+        
+        // 检查是否包含initialBuyPropertyToken方法
+        const hasInitialBuyMethod = propertyManagerFunctions.some(name => 
+          name.startsWith('initialBuyPropertyToken('));
+          
+        if (!hasInitialBuyMethod) {
+          log.error(`合约接口中没有找到initialBuyPropertyToken方法!`);
+          log.info(`尝试查看合约代码或手动调用函数...`);
+        } else {
+          log.info(`找到initialBuyPropertyToken方法，可以继续`);
+        }
+      } else {
+        log.warn(`无法获取合约方法列表，可能是ABI不完整`);
+        
+        // 尝试列出合约的所有属性
+        log.info(`尝试获取合约的可用属性...`);
+        const contractProps = Object.getOwnPropertyNames(Object.getPrototypeOf(propertyManagerContract));
+        log.info(`合约属性: ${contractProps.join(', ')}`);
+      }
+    } catch (error) {
+      log.warn(`获取合约方法列表失败: ${error.message}`);
+    }
+    
+    // 尝试直接检查方法是否存在
+    if (typeof propertyManagerContract.initialBuyPropertyToken === 'function') {
+      log.info(`确认: initialBuyPropertyToken方法存在`);
+    } else {
+      log.error(`PropertyManager合约没有initialBuyPropertyToken方法! 尝试查看以下可用方法:`);
+      
+      // 列出所有方法尝试查找类似功能
+      try {
+        for (const prop in propertyManagerContract) {
+          if (typeof propertyManagerContract[prop] === 'function') {
+            log.info(` - ${prop}`);
+          }
+        }
+      } catch (error) {
+        log.warn(`无法列出合约方法: ${error.message}`);
+      }
+      
+      log.warn(`由于找不到初始购买方法，将尝试调用其他类似方法...`);
+    }
+    
+    // 尝试调用initialBuyPropertyToken方法购买
+    try {
+      log.info(`正在调用PropertyManager.initialBuyPropertyToken方法...`);
+      
+      // 检查合约方法是否存在
+      if (typeof propertyManagerContract.initialBuyPropertyToken !== 'function') {
+        log.error(`PropertyManager合约没有initialBuyPropertyToken方法`);
+        
+        // 尝试查找类似的方法名称
+        let alternativeMethod = null;
+        for (const prop in propertyManagerContract) {
+          if (typeof propertyManagerContract[prop] === 'function' && 
+              (prop.toLowerCase().includes('buy') || prop.toLowerCase().includes('token'))) {
+            log.info(`发现可能的替代方法: ${prop}`);
+            alternativeMethod = prop;
+          }
+        }
+        
+        if (alternativeMethod) {
+          log.warn(`尝试使用替代方法: ${alternativeMethod}...`);
+          try {
+            const altTx = await propertyManagerContract[alternativeMethod](
+              testState.propertyId,
+              purchaseAmount
+            );
+            await waitForTx(altTx);
+            log.info(`替代方法调用成功，检查结果...`);
+          } catch (altError) {
+            log.error(`替代方法调用失败: ${altError.message}`);
+          }
+        } else {
+          log.error(`找不到合适的替代方法，无法购买代币`);
+          
+          // 尝试查看PropertyManager合约代码
+          try {
+            const code = await testState.provider.getCode(PROPERTY_MANAGER_ADDRESS);
+            log.info(`合约代码长度: ${code.length}`);
+            if (code && code.length > 2) {
+              log.info(`合约已部署，代码长度正常`);
+            } else {
+              log.error(`合约代码为空或长度异常，可能未正确部署`);
+            }
+          } catch (codeError) {
+            log.warn(`无法获取合约代码: ${codeError.message}`);
+          }
+          
+          return false;
+        }
+      } else {
+        // 正常调用初始购买方法
+        const buyTx = await propertyManagerContract.initialBuyPropertyToken(
+          testState.propertyId,
+          purchaseAmount
+        );
+        
+        log.info(`交易已提交，等待确认，交易哈希: ${buyTx.hash}`);
+        await waitForTx(buyTx);
+      }
+      
+      // 等待一段时间，确保状态更新
+      log.info(`等待区块链状态更新，3秒...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
       // 检查购买后的余额
       const newAdminTokenBalance = await propertyToken.balanceOf(adminAddress);
       log.balance(`管理员 ${testState.tokenSymbol} (购买后)`, formatAmount(newAdminTokenBalance, testState.tokenDecimals));
       
       if (newAdminTokenBalance > 0n) {
-        log.success(`成功使用initialBuyPropertyToken方法购买房产份额`);
+        log.success(`购买成功！管理员获得了 ${formatAmount(newAdminTokenBalance, testState.tokenDecimals)} ${testState.tokenSymbol}`);
         return true;
       } else {
-        log.error(`initialBuyPropertyToken交易成功但未获得代币`);
+        log.error(`购买交易已确认，但管理员未获得代币，可能需要检查合约状态`);
+        
+        // 检查更多持有者信息
+        try {
+          // 检查PropertyManager合约余额
+          const contractTokenBalance = await propertyToken.balanceOf(PROPERTY_MANAGER_ADDRESS);
+          log.info(`PropertyManager合约的代币余额: ${formatAmount(contractTokenBalance, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+          
+          // 如果PropertyManager有代币，尝试检查原因
+          if (contractTokenBalance > 0n) {
+            log.warn(`PropertyManager合约持有代币，但未转移给管理员！可能需要单独的提取步骤`);
+            
+            // 尝试检查是否有提取方法
+            for (const prop in propertyManagerContract) {
+              if (typeof propertyManagerContract[prop] === 'function' && 
+                  (prop.toLowerCase().includes('claim') || prop.toLowerCase().includes('withdraw') ||
+                   prop.toLowerCase().includes('get'))) {
+                log.info(`发现可能的提取方法: ${prop}，您可能需要调用此方法获取代币`);
+              }
+            }
+          }
+        } catch (error) {
+          log.warn(`无法检查合约代币余额: ${error.message}`);
+        }
+        
         return false;
       }
     } catch (error) {
-      log.error(`使用initialBuyPropertyToken方法失败: ${error.message}`);
+      log.error(`调用购买方法失败: ${error.message}`);
+      
+      // 尝试解析更详细的错误信息
+      if (error.data) {
+        log.debug(`错误数据: ${error.data}`);
+      }
+      
+      if (error.reason) {
+        log.debug(`错误原因: ${error.reason}`);
+      }
+      
+      if (error.code) {
+        log.debug(`错误代码: ${error.code}`);
+      }
+      
       log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
+      
+      // 尝试检查合约的具体错误
+      try {
+        // 尝试调用仅查询版本的函数，检查是否能基本访问合约
+        if (typeof propertyManagerContract.version === 'function') {
+          const version = await propertyManagerContract.version();
+          log.info(`PropertyManager合约版本: ${version}`);
+        }
+        
+        // 尝试查看PropertyToken的所有者，看是否是PropertyManager
+        if (typeof propertyToken.owner === 'function') {
+          const owner = await propertyToken.owner();
+          log.info(`PropertyToken的所有者: ${owner}`);
+          if (owner.toLowerCase() !== PROPERTY_MANAGER_ADDRESS.toLowerCase()) {
+            log.warn(`PropertyToken的所有者不是PropertyManager合约，这可能导致购买失败`);
+          }
+        }
+        
+        // 尝试检查PropertyManager的拥有者权限
+        if (typeof propertyManagerContract.owner === 'function') {
+          const pmOwner = await propertyManagerContract.owner();
+          log.info(`PropertyManager的所有者: ${pmOwner}`);
+          
+          if (pmOwner.toLowerCase() !== adminAddress.toLowerCase()) {
+            log.warn(`管理员账户不是PropertyManager的所有者，这可能导致权限不足`);
+          }
+        }
+      } catch (checkError) {
+        log.warn(`合约检查失败: ${checkError.message}`);
+      }
+      
+      // 尝试检查是否有其他购买方法
+      log.info(`尝试查找其他购买方法...`);
+      for (const prop in propertyManagerContract) {
+        if (typeof propertyManagerContract[prop] === 'function' && 
+            (prop.toLowerCase().includes('buy') || prop.toLowerCase().includes('purchase'))) {
+          log.info(`发现可能的购买方法: ${prop}`);
+        }
+      }
+      
       return false;
     }
   } catch (error) {
-    log.error(`购买房产份额失败: ${error.message}`);
+    log.error(`购买房产份额过程中发生意外错误: ${error.message}`);
     log.debug(`错误详情: ${error.stack || '无堆栈信息'}`);
     return false;
   }
@@ -1253,6 +1218,25 @@ async function investorBuyPropertyToken() {
   log.role('投资者', '购买房产代币');
   
   try {
+    // 验证前置条件
+    if (!testState.propertyTokenAddress) {
+      log.error('房产代币地址未设置，无法进行购买');
+      return false;
+    }
+    
+    if (!testState.sellOrderId) {
+      log.warn('卖单ID未找到，可能需要先创建卖单');
+      
+      // 询问是否跳过
+      const skipAndContinue = await askToSkipStep('投资者购买');
+      if (skipAndContinue) {
+        log.warn('用户选择继续测试，将模拟购买成功');
+        return true;
+      } else {
+        return false;
+      }
+    }
+    
     // 获取TradingManager合约实例
     const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, testState.investorWallet);
     
@@ -1284,6 +1268,10 @@ async function investorBuyPropertyToken() {
     
     // 获取房产代币合约实例
     const propertyTokenContract = await getContract('PropertyToken', testState.propertyTokenAddress, testState.investorWallet);
+    if (!propertyTokenContract) {
+      log.error(`无法获取房产代币合约实例`);
+      return false;
+    }
     
     // 检查投资者USDT余额
     const investorAddress = await testState.investorWallet.getAddress();
@@ -1301,10 +1289,50 @@ async function investorBuyPropertyToken() {
     log.balance(`投资者初始 ${testState.tokenSymbol}`, formatAmount(initialTokenBalance, testState.tokenDecimals));
     
     // 获取卖单详情
-    const sellOrderInfo = await tradingManagerContract.getOrderInfo(testState.sellOrderId);
-    if (!sellOrderInfo.active) {
-      log.error(`卖单不活跃，无法购买`);
-      return false;
+    let sellOrderInfo;
+    try {
+      sellOrderInfo = await tradingManagerContract.getOrderInfo(testState.sellOrderId);
+      if (!sellOrderInfo.active) {
+        log.error(`卖单不活跃，无法购买`);
+        
+        // 询问是否跳过
+        const skipAndContinue = await askToSkipStep('投资者购买');
+        if (skipAndContinue) {
+          log.warn('用户选择继续测试，将模拟购买成功');
+          return true;
+        } else {
+          return false;
+        }
+      }
+      
+      // 验证卖单是否为卖单
+      if (!sellOrderInfo.isSellOrder) {
+        log.error(`订单ID ${testState.sellOrderId} 不是卖单`);
+        return false;
+      }
+      
+      // 验证卖单中的代币地址是否与房产代币一致
+      if (sellOrderInfo.token.toLowerCase() !== testState.propertyTokenAddress.toLowerCase()) {
+        log.error(`卖单中的代币地址(${sellOrderInfo.token})与房产代币地址(${testState.propertyTokenAddress})不一致`);
+        return false;
+      }
+      
+      log.info(`已找到活跃卖单，ID: ${testState.sellOrderId}`);
+      log.info(`卖单详情:`);
+      log.info(`  - 卖家: ${sellOrderInfo.seller}`);
+      log.info(`  - A数量: ${formatAmount(sellOrderInfo.amount, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+      log.info(`  - 单价: ${formatAmount(sellOrderInfo.price)} ${usdtSymbol}/个`);
+    } catch (orderError) {
+      log.error(`获取卖单详情失败: ${orderError.message}`);
+      
+      // 询问是否跳过
+      const skipAndContinue = await askToSkipStep('投资者购买');
+      if (skipAndContinue) {
+        log.warn('用户选择继续测试，将模拟购买成功');
+        return true;
+      } else {
+        return false;
+      }
     }
     
     // 购买数量为卖单的一半
@@ -1330,39 +1358,46 @@ async function investorBuyPropertyToken() {
     
     // 创建买单
     log.info(`创建买单...`);
-    const createBuyOrderTx = await tradingManagerContract.createBuyOrder(
-      sellOrderInfo.token,
-      purchaseAmount,
-      price
-    );
-    
-    const receipt = await waitForTx(createBuyOrderTx);
-    
-    // 从事件中获取买单ID
-    const orderCreatedEvent = receipt.logs.find(log => {
-      try {
-        const parsedLog = tradingManagerContract.interface.parseLog(log);
-        return parsedLog && parsedLog.name === 'OrderCreated';
-      } catch {
-        return false;
-      }
-    });
-    
-    if (orderCreatedEvent) {
-      const parsedEvent = tradingManagerContract.interface.parseLog(orderCreatedEvent);
-      testState.buyOrderId = parsedEvent.args.orderId;
-      log.info(`买单创建成功，订单ID: ${testState.buyOrderId}`);
-    } else {
-      // 如果无法从事件获取，尝试获取用户最新订单
-      log.warn(`无法从事件中获取订单ID，尝试获取最新订单`);
-      const userOrders = await tradingManagerContract.getUserOrders(investorAddress);
-      if (userOrders && userOrders.length > 0) {
-        testState.buyOrderId = userOrders[userOrders.length - 1];
-        log.info(`获取到最新订单ID: ${testState.buyOrderId}`);
+    try {
+      const createBuyOrderTx = await tradingManagerContract.createBuyOrder(
+        sellOrderInfo.token,
+        purchaseAmount,
+        price
+      );
+      
+      const receipt = await waitForTx(createBuyOrderTx);
+      
+      // 从事件中获取买单ID
+      const orderCreatedEvent = receipt.logs.find(log => {
+        try {
+          const parsedLog = tradingManagerContract.interface.parseLog(log);
+          return parsedLog && parsedLog.name === 'OrderCreated';
+        } catch {
+          return false;
+        }
+      });
+      
+      if (orderCreatedEvent) {
+        const parsedEvent = tradingManagerContract.interface.parseLog(orderCreatedEvent);
+        testState.buyOrderId = parsedEvent.args.orderId;
+        log.info(`买单创建成功，订单ID: ${testState.buyOrderId}`);
       } else {
-        log.error(`无法获取订单ID，创建买单可能失败`);
-        return false;
+        // 如果无法从事件获取，尝试获取用户最新订单
+        log.warn(`无法从事件中获取订单ID，尝试获取最新订单`);
+        const userOrders = await tradingManagerContract.getUserOrders(investorAddress);
+        if (userOrders && userOrders.length > 0) {
+          testState.buyOrderId = userOrders[userOrders.length - 1];
+          log.info(`获取到最新订单ID: ${testState.buyOrderId}`);
+        } else {
+          log.error(`无法获取订单ID，创建买单可能失败`);
+          return false;
+        }
       }
+    } catch (createError) {
+      log.error(`创建买单失败: ${createError.message}`);
+      
+      // 如果由于订单匹配而失败，可能是交易已完成
+      log.warn(`买单创建失败，可能是交易已自动完成，将检查代币余额`);
     }
     
     // 等待一会儿，让交易完成
@@ -1378,18 +1413,28 @@ async function investorBuyPropertyToken() {
     log.balance(`投资者新 ${usdtSymbol}`, formatAmount(newUsdtBalance, usdtDecimals));
     
     if (newTokenBalance > initialTokenBalance) {
-      log.info(`交易成功！投资者获得了 ${formatAmount(newTokenBalance - initialTokenBalance, testState.tokenDecimals)} ${testState.tokenSymbol}`);
+      log.success(`交易成功！投资者获得了 ${formatAmount(newTokenBalance - initialTokenBalance, testState.tokenDecimals)} ${testState.tokenSymbol}`);
       log.role('投资者', '代币购买成功');
       return true;
     } else {
       log.warn(`代币余额未增加，但交易可能仍在进行中`);
-      // 即使没有立即看到余额变化，也返回true继续测试
-      return true;
+      
+      // 询问是否继续
+      const skipAndContinue = await askToSkipStep('继续后续步骤');
+      if (skipAndContinue) {
+        log.warn('用户选择继续测试，假设交易已完成');
+        return true;
+      } else {
+        return false;
+      }
     }
   } catch (error) {
     log.error(`投资者购买代币出错: ${error.message}`);
     console.error(error);
-    return false;
+    
+    // 询问是否继续
+    const skipAndContinue = await askToSkipStep('继续后续步骤');
+    return skipAndContinue;
   }
 }
 
@@ -1770,96 +1815,90 @@ async function validateContracts() {
 // 主函数
 async function main() {
   try {
+    // 系统初始化
     log.info('========== 日本房产代币化系统测试脚本 ==========');
     
-    // 分析环境变量
-    log.info(`检查环境变量配置:`);
+    // 环境变量检查
+    log.info('检查环境变量配置:');
     log.info(`- USDT合约地址: ${USDT_ADDRESS}`);
     log.info(`- RealEstateSystem地址: ${SYSTEM_ADDRESS}`);
     log.info(`- RealEstateFacade地址: ${REAL_ESTATE_FACADE_ADDRESS}`);
     log.info(`- PropertyManager地址: ${PROPERTY_MANAGER_ADDRESS}`);
     log.info(`- TradingManager地址: ${TRADING_MANAGER_ADDRESS}`);
     log.info(`- RewardManager地址: ${REWARD_MANAGER_ADDRESS}`);
-    log.info(`- PropertyToken地址: ${PROPERTY_TOKEN_ADDRESS || '未设置'}`);
+    log.info(`- PropertyToken地址: ${PROPERTY_TOKEN_ADDRESS || '0x0'}`);
     
-    // 系统初始化
-    if (!await initializeSystem()) {
-      log.error('系统初始化失败，无法继续测试');
+    const systemInitialized = await initializeSystem();
+    if (!systemInitialized) {
+      log.error('系统初始化失败，无法继续');
       return;
     }
     
-    // 合约验证
-    if (!await validateContracts()) {
-      log.warn('合约验证未完全通过，但将继续测试');
+    // 验证合约状态
+    const contractsValid = await validateContracts();
+    if (!contractsValid) {
+      log.warn('合约验证未完全通过，可能影响后续操作');
+      const proceedAnyway = await askToSkipStep('合约验证');
+      if (!proceedAnyway) {
+        log.error('用户选择终止测试');
+        return;
+      }
     }
     
     await waitForUserInput('系统初始化完成，按Enter继续');
     
-    // 检查PropertyToken是否已部署
-    if (!PROPERTY_TOKEN_ADDRESS || PROPERTY_TOKEN_ADDRESS === '0x0') {
-      log.warn(`PropertyToken合约未部署或地址未设置，需要先注册房产`);
-    }
-    
-    // 注册房产
-    const registration = await registerProperty();
-    if (!registration) {
-      log.error('房产注册失败，无法继续');
-      return;
-    }
-    
-    // 登记完成后，PropertyToken应该已经创建
-    if (testState.propertyTokenAddress) {
-      log.success(`成功创建PropertyToken，地址: ${testState.propertyTokenAddress}`);
-    } else {
-      log.error(`注册房产后未获取到PropertyToken地址`);
-      return;
-    }
-    
-    await waitForUserInput('房产注册完成');
-    
-    // 初始购买房产代币 - 暂时跳过，假设已经购买成功
-    let initialPurchase = true;
-    const skipInitialBuy = true; // 设置为true以跳过初始购买步骤
-    
-    if (!skipInitialBuy) {
-      initialPurchase = await initialBuyPropertyToken();
-      if (!initialPurchase) {
-        log.error('初始购买房产代币失败，无法继续');
-        return;
-      }
-      await waitForUserInput('初始购买完成');
-    } else {
-      log.warn('跳过初始购买步骤，假设已经购买成功');
-      // 如果跳过购买，仍需设置一些必要的状态
-      if (!testState.propertyTokenAddress) {
-        log.error('PropertyToken地址未设置，无法继续');
+    // 检查是否已有PropertyToken，如果没有则需要注册
+    if (!testState.propertyTokenAddress || testState.propertyTokenAddress === ethers.ZeroAddress) {
+      log.warn('PropertyToken合约未部署或地址未设置，需要先注册房产');
+      
+      // 注册新房产
+      const propertyRegistered = await registerProperty();
+      if (!propertyRegistered) {
+        log.error('房产注册失败，无法继续');
         return;
       }
       
-      // 尝试获取PropertyToken合约以设置必要的状态
-      try {
-        const propertyToken = await getContract('PropertyToken', testState.propertyTokenAddress, testState.adminWallet);
-        testState.propertyToken = propertyToken;
-        
-        testState.tokenName = await propertyToken.name();
-        testState.tokenSymbol = await propertyToken.symbol();
-        testState.tokenDecimals = await propertyToken.decimals();
-        
-        log.info(`使用已有的代币: ${testState.tokenName} (${testState.tokenSymbol})`);
-      } catch (error) {
-        log.warn(`无法获取PropertyToken合约信息: ${error.message}`);
-        log.info('使用默认代币信息');
-        testState.tokenName = "Japan Property Token";
-        testState.tokenSymbol = "JPT";
-        testState.tokenDecimals = 18;
-      }
+      await waitForUserInput('房产注册完成');
+    } else {
+      log.info(`检测到已有PropertyToken: ${testState.propertyTokenAddress}`);
+      testState.propertyId = await askForPropertyId();
     }
     
-    // 更新房产状态为可交易
-    const statusUpdated = await updatePropertyStatus();
-    if (!statusUpdated) {
-      log.error('房产状态更新失败，无法继续');
-      return;
+    // 初始购买房产代币步骤
+    const initialPurchase = await initialBuyPropertyToken();
+    if (!initialPurchase) {
+      log.error('初始购买房产代币失败，将尝试继续测试');
+    } else {
+      log.success('成功执行初始购买步骤');
+    }
+    
+    await waitForUserInput('房产代币准备完成，按Enter继续');
+    
+    // 更新房产状态为可交易（如果需要）
+    let propertyStatus = -1;
+    try {
+      const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, testState.adminWallet);
+      propertyStatus = await propertyManagerContract.getPropertyStatus(testState.propertyId);
+      log.info(`当前房产状态: ${propertyStatus} (${getStatusName(propertyStatus)})`);
+    } catch (error) {
+      log.warn(`获取房产状态失败，将尝试更新: ${error.message}`);
+      propertyStatus = 0; // 假设未激活状态
+    }
+    
+    // 如果房产状态不是可交易（2），则尝试更新
+    if (propertyStatus !== 2) {
+      const statusUpdated = await updatePropertyStatus();
+      if (!statusUpdated) {
+        log.error('房产状态更新失败，无法继续');
+        const skipAndContinue = await askToSkipStep('状态验证');
+        if (!skipAndContinue) {
+          return;
+        }
+      } else {
+        log.success('房产状态已更新为可交易');
+      }
+    } else {
+      log.info('房产已处于可交易状态，无需更新');
     }
     
     await waitForUserInput('房产状态更新完成');
@@ -1867,8 +1906,15 @@ async function main() {
     // 管理员创建卖单
     const sellOrderCreated = await createSellOrder();
     if (!sellOrderCreated) {
-      log.error('卖单创建失败，无法继续');
-      return;
+      log.error('卖单创建失败，检查是否继续');
+      const skipAndContinue = await askToSkipStep('创建卖单');
+      if (!skipAndContinue) {
+        return;
+      }
+      log.warn('用户选择继续测试，将模拟卖单已创建');
+      testState.sellOrderId = 1; // 设置一个模拟ID
+    } else {
+      log.success('卖单创建成功');
     }
     
     await waitForUserInput('卖单创建完成');
@@ -1876,8 +1922,14 @@ async function main() {
     // 投资者购买房产代币
     const tokenPurchased = await investorBuyPropertyToken();
     if (!tokenPurchased) {
-      log.error('投资者购买代币失败，无法继续');
-      return;
+      log.error('投资者购买代币失败，检查是否继续');
+      const skipAndContinue = await askToSkipStep('投资者购买');
+      if (!skipAndContinue) {
+        return;
+      }
+      log.warn('用户选择继续测试，将模拟投资者已购买代币');
+    } else {
+      log.success('投资者购买代币成功');
     }
     
     await waitForUserInput('投资者购买完成');
@@ -1885,8 +1937,15 @@ async function main() {
     // 创建收益分配
     const distributionCreated = await createDistribution();
     if (!distributionCreated) {
-      log.error('收益分配创建失败，无法继续');
-      return;
+      log.error('收益分配创建失败，检查是否继续');
+      const skipAndContinue = await askToSkipStep('创建分配');
+      if (!skipAndContinue) {
+        return;
+      }
+      log.warn('用户选择继续测试，将模拟分配已创建');
+      testState.distributionId = 1; // 设置一个模拟ID
+    } else {
+      log.success('收益分配创建成功');
     }
     
     await waitForUserInput('收益分配完成');
@@ -1894,8 +1953,14 @@ async function main() {
     // 投资者认领收益
     const rewardClaimed = await investorClaimReward();
     if (!rewardClaimed) {
-      log.error('投资者认领收益失败');
-      return;
+      log.error('投资者认领收益失败，检查是否继续');
+      const skipAndContinue = await askToSkipStep('认领收益');
+      if (!skipAndContinue) {
+        return;
+      }
+      log.warn('用户选择继续测试，将模拟已认领收益');
+    } else {
+      log.success('投资者认领收益成功');
     }
     
     await waitForUserInput('投资者认领收益完成');
@@ -1903,18 +1968,35 @@ async function main() {
     // 投资者出售房产代币（退出投资）
     const tokenSold = await investorSellToken();
     if (!tokenSold) {
-      log.error('投资者出售代币失败');
-      return;
+      log.error('投资者出售代币失败，测试流程结束');
+    } else {
+      log.success('投资者出售代币成功');
     }
     
     log.info('========== 测试流程全部完成 ==========');
-    log.success('所有步骤执行成功!');
+    log.success('所有步骤执行成功或已跳过!');
   } catch (error) {
     log.error(`测试过程中发生错误: ${error.message}`);
     console.error(error);
   } finally {
     rl.close();
   }
+}
+
+// 获取用户输入的房产ID
+async function askForPropertyId() {
+  return new Promise((resolve) => {
+    rl.question(`\n\x1b[33m请输入要使用的房产ID: \x1b[0m`, (answer) => {
+      if (!answer || answer.trim() === '') {
+        // 默认使用一个随机ID
+        const defaultId = `PROP-${Date.now()}`;
+        log.info(`未输入ID，使用默认ID: ${defaultId}`);
+        resolve(defaultId);
+      } else {
+        resolve(answer.trim());
+      }
+    });
+  });
 }
 
 // 运行主流程

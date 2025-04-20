@@ -113,18 +113,35 @@ const getActiveNetworks = () => {
 module.exports = {
   // Solidity 编译器配置
   solidity: {
-    version: "0.8.20",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 50,
+    compilers: [
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 50,
+          },
+          viaIR: true,
+          evmVersion: "paris",
+          metadata: {
+            bytecodeHash: "none"
+          },
+        },
       },
-      viaIR: true,
-      evmVersion: "paris",
-      metadata: {
-        bytecodeHash: "none"
-      },
-    },
+      {
+        version: "0.8.29",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 50,
+          },
+          evmVersion: "paris",
+          metadata: {
+            bytecodeHash: "none"
+          },
+        },
+      }
+    ],
   },
 
   // 网络配置

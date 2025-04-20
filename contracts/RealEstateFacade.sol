@@ -488,13 +488,6 @@ contract RealEstateFacade is
      
      
     /**
-     * @dev 获取房产代币地址
-     */
-    function getPropertyTokenAddress(string memory propertyId) external view returns (address) {
-        return propertyManager.getPropertyTokenAddress(propertyId);
-    }
-    
-    /**
      * @dev 获取房产信息
      */
     function getPropertyInfo(string memory propertyId) external view returns (
@@ -558,6 +551,13 @@ contract RealEstateFacade is
     ) external whenNotPaused nonReentrant {
         system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         rewardManager.recoverUnclaimedFunds(distributionId, receiver);
+    }
+    
+    /**
+     * @dev 获取房产代币地址
+     */
+    function getPropertyTokenAddress(string memory propertyId) external view returns (address) {
+        return propertyManager.propertyTokens(propertyId);
     }
     
     /**
