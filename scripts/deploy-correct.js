@@ -497,6 +497,12 @@ async function deploy() {
     tokenTx = await testToken.transfer(operatorSigner.address, thirdOfSupply);
     await tokenTx.wait();
     
+    // 设置 TradingManager 的 USDT 地址
+    logger.info("设置 TradingManager 的 USDT 地址...");
+    tx = await tradingManager.setUsdtAddress(testTokenAddress);
+    await tx.wait();
+    logger.info(`TradingManager USDT 地址已设置为: ${testTokenAddress}`);
+    
     // 验证代币分配结果
     const adminBalance = await testToken.balanceOf(adminSigner.address);
     const managerBalance = await testToken.balanceOf(managerSigner.address);

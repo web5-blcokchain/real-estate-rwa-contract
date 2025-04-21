@@ -327,16 +327,32 @@ async function createSellOrder() {
   log.step(5, '创建卖单');
   
   try {
-    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.operatorWallet);
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
+    const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
+    const propertyTokenContract = state.propertyToken;
     
     // 创建卖单参数 - 确保金额满足最小要求
-    const amount = ethers.parseUnits("10", 18); // 10个代币
-    const price = ethers.parseUnits("10", 18); // 10单位价格
+    const amount = ethers.parseUnits("2", 18); // 2个代币
+    const price = ethers.parseUnits("2", 18); // 2单位价格
+    const requiredUsdt = amount * price;
     
     log.info("创建卖单参数:");
     log.info(`- 代币地址: ${state.propertyTokenAddress}`);
     log.info(`- 数量: ${ethers.formatUnits(amount, 18)} (原始值: ${amount})`);
     log.info(`- 价格: ${ethers.formatUnits(price, 18)} (原始值: ${price})`);
+    log.info(`- 需要 USDT: ${ethers.formatUnits(requiredUsdt, 18)}`);
+    
+    // 授权 USDT
+    log.info("\n授权 USDT...");
+    const usdtApproveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS,  ethers.parseUnits("1000", 18));//多授权下次都不用执行了
+    await usdtApproveTx.wait();
+    log.info("USDT 授权成功");
+    
+    // 授权代币
+    log.info("\n授权代币...");
+    const tokenApproveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, ethers.parseUnits("1000", 18) );// 多授权下次都不用执行了
+    await tokenApproveTx.wait();
+    log.info("代币授权成功");
     
     // 创建卖单
     log.info("\n发送交易...");

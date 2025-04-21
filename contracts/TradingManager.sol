@@ -72,6 +72,9 @@ contract TradingManager is
     // 系统合约引用
     RealEstateSystem public system;
     
+    // USDT 合约地址
+    address public usdtAddress;
+    
     // 订单和交易状态
     mapping(uint256 => Order) private _orders;
     mapping(uint256 => Trade) private _trades;
@@ -272,6 +275,14 @@ contract TradingManager is
         system = RealEstateSystem(_systemAddress);
     }
     
+    /**
+     * @dev 设置 USDT 合约地址 - 需要ADMIN权限
+     */
+    function setUsdtAddress(address _usdtAddress) external onlyAdmin {
+        require(_usdtAddress != address(0), "Invalid USDT address");
+        usdtAddress = _usdtAddress;
+    }
+    
     // 修饰符
     modifier notBlacklisted(address account) {
         require(!blacklist[account], "Account is blacklisted");
@@ -351,6 +362,7 @@ contract TradingManager is
         require(token != address(0), "Invalid token address");
         require(amount > 0, "Invalid amount");
         require(price > 0, "Invalid price");
+        require(usdtAddress != address(0), "USDT address not set");
         
         // 检查交易限制
         require(amount >= minTradeAmount, "Amount below minimum");
@@ -358,6 +370,29 @@ contract TradingManager is
         
         // 检查黑名单
         require(!blacklist[msg.sender], "Seller is blacklisted");
+        
+        // 计算需要的 USDT 数量
+        uint256 requiredUsdt = amount * price;
+        
+        // 获取 USDT 合约实例
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        
+        // 检查用户是否已授权足够的 USDT
+        uint256 allowance = usdt.allowance(msg.sender, address(this));
+        require(allowance >= requiredUsdt, "Insufficient USDT allowance");
+        
+        // 转移 USDT
+        require(usdt.transferFrom(msg.sender, address(this), requiredUsdt), "USDT transfer failed");
+        
+        // 获取代币合约实例
+        IERC20Upgradeable propertyToken = IERC20Upgradeable(token);
+        
+        // 检查用户是否已授权足够的代币
+        uint256 tokenAllowance = propertyToken.allowance(msg.sender, address(this));
+        require(tokenAllowance >= amount, "Insufficient token allowance");
+        
+        // 转移代币
+        require(propertyToken.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
         
         // 创建订单
         uint256 orderId = _nextOrderId++;
