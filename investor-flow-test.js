@@ -384,15 +384,20 @@ async function createSellOrder() {
     // 创建卖单
     log.info("\n发送交易...");
     const tx = await tradingManagerContract.createSellOrder(
-      state.propertyTokenAddress,
-      state.propertyId,
-      tokenAmount,
-      tokenPrice
+        state.propertyTokenAddress,
+        state.propertyId,
+        tokenAmount,
+        tokenPrice
     );
     
     log.info(`交易已发送，等待确认... 交易哈希: ${tx.hash}`);
     const receipt = await tx.wait();
     log.info(`交易已确认，区块号: ${receipt.blockNumber}`);
+    
+    // 获取并保存卖单ID
+    const orderIds = await tradingManagerContract.getUserOrders(state.investorWallet.address);
+    state.sellOrderId = orderIds[orderIds.length - 1];
+    log.info(`卖单创建成功，订单ID: ${state.sellOrderId}`);
     
     // 创建卖单后检查余额
     const afterTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
@@ -523,13 +528,18 @@ async function  createBuyOrder() {
     // 创建买单
     log.info("\n发送交易...");
     const buyTx = await tradingManagerContract.createBuyOrder(
-      state.propertyTokenAddress,
-      state.propertyId,
-      purchaseAmount,
-      tokenPrice
+        state.propertyTokenAddress,
+        state.propertyId,
+        purchaseAmount,
+        tokenPrice
     );
     
     await buyTx.wait();
+    
+    // 获取并保存买单ID
+    const orderIds = await tradingManagerContract.getUserOrders(state.investorWallet.address);
+    state.buyOrderId = orderIds[orderIds.length - 1];
+    log.info(`买单创建成功，订单ID: ${state.buyOrderId}`);
     
     // 创建买单后检查余额
     const afterUsdtBalance = await usdtContract.balanceOf(investorAddress);
@@ -552,9 +562,201 @@ async function  createBuyOrder() {
   }
 }
 
+/**
+ * @dev 购买卖单
+ */
+async function buyOrder() {
+  log.step(7, '购买卖单');
+  
+  try {
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
+    const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
+    
+    // 获取卖单信息
+    const sellOrder = await tradingManagerContract.getOrder(state.sellOrderId);
+    log.info("卖单信息:", {
+      id: sellOrder.id.toString(),
+      seller: sellOrder.seller,
+      token: sellOrder.token,
+      amount: sellOrder.amount.toString(),
+      price: sellOrder.price.toString(),
+      active: sellOrder.active
+    });
+    
+    // 计算需要的 USDT 数量（包含手续费）
+    const usdtAmount = sellOrder.amount * sellOrder.price;
+    const feeRate = await tradingManagerContract.feeRate();
+    const usdtFee = (usdtAmount * feeRate) / 10000n;
+    const totalUsdt = usdtAmount + usdtFee;
+    
+    // 检查 USDT 余额
+    const usdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    log.info(`USDT 余额: ${ethers.formatUnits(usdtBalance, 18)}`);
+    
+    if (usdtBalance < totalUsdt) {
+      throw new Error(`USDT 余额不足，需要 ${ethers.formatUnits(totalUsdt, 18)}，当前余额 ${ethers.formatUnits(usdtBalance, 18)}`);
+    }
+    
+    // 检查 USDT 授权
+    const usdtAllowance = await usdtContract.allowance(state.investorWallet.address, TRADING_MANAGER_ADDRESS);
+    log.info(`USDT 授权额度: ${ethers.formatUnits(usdtAllowance, 18)}`);
+    
+    if (usdtAllowance < totalUsdt) {
+      log.info("授权 USDT...");
+      const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalUsdt);
+      await approveTx.wait();
+      log.info("USDT 授权成功");
+    }
+    
+    // 记录交易前余额
+    const beforeUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const beforeTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    
+    // 购买卖单
+    log.info("购买卖单...");
+    const tx = await tradingManagerContract.buyOrder(state.sellOrderId);
+    const receipt = await tx.wait();
+    log.info(`购买成功，交易哈希: ${tx.hash}，区块号: ${receipt.blockNumber}`);
+    
+    // 记录交易后余额
+    const afterUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const afterTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    
+    // 计算余额变化
+    const usdtChange = beforeUsdtBalance - afterUsdtBalance;
+    const tokenChange = afterTokenBalance - beforeTokenBalance;
+    
+    log.info("余额变化:", {
+      usdt: `${ethers.formatUnits(usdtChange, 18)} USDT`,
+      token: `${ethers.formatUnits(tokenChange, 18)} 个代币`
+    });
+    
+    // 获取交易信息
+    const tradeId = await tradingManagerContract.getUserTrades(state.investorWallet.address);
+    const trade = await tradingManagerContract.getTrade(tradeId[tradeId.length - 1]);
+    log.info("交易信息:", {
+      id: trade.id.toString(),
+      buyer: trade.buyer,
+      seller: trade.seller,
+      token: trade.token,
+      amount: trade.amount.toString(),
+      price: trade.price.toString()
+    });
+    
+    log.success("购买卖单成功!");
+    return true;
+  } catch (error) {
+    log.error(`购买卖单失败: ${error.message}`);
+    if (error.reason) {
+      log.error(`错误原因: ${error.reason}`);
+    }
+    if (error.data) {
+      log.error(`错误数据: ${error.data}`);
+    }
+    if (error.transaction) {
+      log.error(`交易内容:`, error.transaction);
+    }
+    return false;
+  }
+}
+
+/**
+ * @dev 出售给买单
+ */
+async function sellOrder() {
+  log.step(8, '出售给买单');
+  
+  try {
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
+    const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
+    
+    // 获取买单信息
+    const buyOrder = await tradingManagerContract.getOrder(state.buyOrderId);
+    log.info("买单信息:", {
+      id: buyOrder.id.toString(),
+      buyer: buyOrder.seller,
+      token: buyOrder.token,
+      amount: buyOrder.amount.toString(),
+      price: buyOrder.price.toString(),
+      active: buyOrder.active
+    });
+    
+    // 检查代币余额
+    const tokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    log.info(`代币余额: ${ethers.formatUnits(tokenBalance, 18)}`);
+    
+    if (tokenBalance < buyOrder.amount) {
+      throw new Error(`代币余额不足，需要 ${ethers.formatUnits(buyOrder.amount, 18)}，当前余额 ${ethers.formatUnits(tokenBalance, 18)}`);
+    }
+    
+    // 检查代币授权
+    const tokenAllowance = await propertyTokenContract.allowance(state.investorWallet.address, TRADING_MANAGER_ADDRESS);
+    log.info(`代币授权额度: ${ethers.formatUnits(tokenAllowance, 18)}`);
+    
+    if (tokenAllowance < buyOrder.amount) {
+      log.info("授权代币...");
+      const approveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, buyOrder.amount);
+      await approveTx.wait();
+      log.info("代币授权成功");
+    }
+    
+    // 记录交易前余额
+    const beforeUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const beforeTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    
+    // 出售给买单
+    log.info("出售给买单...");
+    const tx = await tradingManagerContract.sellOrder(state.buyOrderId);
+    const receipt = await tx.wait();
+    log.info(`出售成功，交易哈希: ${tx.hash}，区块号: ${receipt.blockNumber}`);
+    
+    // 记录交易后余额
+    const afterUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const afterTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    
+    // 计算余额变化
+    const usdtChange = afterUsdtBalance - beforeUsdtBalance;
+    const tokenChange = beforeTokenBalance - afterTokenBalance;
+    
+    log.info("余额变化:", {
+      usdt: `${ethers.formatUnits(usdtChange, 18)} USDT`,
+      token: `${ethers.formatUnits(tokenChange, 18)} 个代币`
+    });
+    
+    // 获取交易信息
+    const tradeId = await tradingManagerContract.getUserTrades(state.investorWallet.address);
+    const trade = await tradingManagerContract.getTrade(tradeId[tradeId.length - 1]);
+    log.info("交易信息:", {
+      id: trade.id.toString(),
+      buyer: trade.buyer,
+      seller: trade.seller,
+      token: trade.token,
+      amount: trade.amount.toString(),
+      price: trade.price.toString()
+    });
+    
+    log.success("出售给买单成功!");
+    return true;
+  } catch (error) {
+    log.error(`出售给买单失败: ${error.message}`);
+    if (error.reason) {
+      log.error(`错误原因: ${error.reason}`);
+    }
+    if (error.data) {
+      log.error(`错误数据: ${error.data}`);
+    }
+    if (error.transaction) {
+      log.error(`交易内容:`, error.transaction);
+    }
+    return false;
+  }
+}
+
 // 创建收益分配
 async function createDistribution() {
-  log.step(7, '创建收益分配');
+  log.step(8, '创建收益分配');
   
   try {
     const rewardManagerContract = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.adminWallet);
@@ -578,7 +780,7 @@ async function createDistribution() {
 
 // 投资者领取收益
 async function investorClaimReward() {
-  log.step(8, '投资者领取收益');
+  log.step(9, '投资者领取收益');
   
   try {
     const rewardManagerContract = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.investorWallet);
@@ -599,47 +801,7 @@ async function investorClaimReward() {
   }
 }
 
-// 投资者出售房产代币
-async function investorSellPropertyToken() {
-  log.step(9, '投资者出售房产代币');
-  
-  try {
-    const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, state.investorWallet);
-    const propertyTokenContract = state.propertyToken;
-    const investorAddress = await state.investorWallet.getAddress();
-    
-    // 检查投资者代币余额
-    const tokenBalance = await propertyTokenContract.balanceOf(investorAddress);
-    log.balance(`投资者 ${state.tokenSymbol}`, ethers.formatUnits(tokenBalance, state.tokenDecimals));
-    
-    // 设置出售数量 - 100个代币
-    const sellAmount = ethers.parseUnits("100", state.tokenDecimals);
-    
-    log.info(`出售信息:`);
-    log.info(`- 房产ID: ${state.propertyId}`);
-    log.info(`- 代币: ${state.tokenSymbol}`);
-    log.info(`- 数量: ${ethers.formatUnits(sellAmount, state.tokenDecimals)}`);
-    
-    // 执行出售
-    const sellTx = await propertyManagerContract.sellPropertyToken(
-      state.propertyId,
-      sellAmount
-    );
-    
-    await sellTx.wait();
-    
-    // 检查投资者新的代币余额
-    const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
-    log.balance(`投资者新 ${state.tokenSymbol}`, ethers.formatUnits(newTokenBalance, state.tokenDecimals));
-    
-    return true;
-  } catch (error) {
-    log.error(`投资者出售房产代币失败: ${error.message}`);
-    return false;
-  }
-}
-
-// 测试流程
+// 修改测试流程
 async function testFlow() {
   try {
     // 初始化系统
@@ -662,9 +824,17 @@ async function testFlow() {
     await createSellOrder();
     log.success('卖单创建成功');
 
-    // 投资者购买房产代币
+    // 投资者创建买单
     await createBuyOrder();
-    log.success('投资者购买房产代币成功');
+    log.success('买单创建成功');
+
+    // 购买卖单
+    await buyOrder();
+    log.success('购买卖单成功');
+
+    // 出售给买单
+    await sellOrder();
+    log.success('出售给买单成功');
 
     // 创建收益分配
     await createDistribution();
@@ -673,10 +843,6 @@ async function testFlow() {
     // 投资者领取收益
     await investorClaimReward();
     log.success('收益领取成功');
-
-    // 投资者出售房产代币
-    await investorSellPropertyToken();
-    log.success('房产代币出售成功');
 
     return true;
   } catch (error) {

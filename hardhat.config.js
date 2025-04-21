@@ -40,7 +40,7 @@ const getNetworkConfig = (network) => {
   switch (network) {
     case 'hardhat':
       return {
-        chainId: parseInt(process.env.HARDHAT_CHAIN_ID || '31337'),
+        chainId: 31337,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
@@ -57,10 +57,18 @@ const getNetworkConfig = (network) => {
       return {
         ...baseConfig,
         url: process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545',
-        chainId: parseInt(process.env.LOCALHOST_CHAIN_ID || '31337'),
+        chainId: 31337,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
         loggingEnabled: false,
+        // 使用与 hardhat 相同的账户配置
+        accounts: {
+          mnemonic: "test test test test test test test test test test test junk",
+          path: "m/44'/60'/0'/0",
+          initialIndex: 0,
+          count: 20,
+          accountsBalance: "10000000000000000000000"
+        }
       };
     case 'testnet':
       // 当未定义testnet URL时，返回localhost配置以避免配置错误

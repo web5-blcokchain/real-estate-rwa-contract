@@ -81,6 +81,7 @@ contract TradingManager is
     mapping(address => uint256[]) private _userOrders;
     mapping(address => uint256[]) private _userTrades;
     mapping(address => uint256[]) private _tokenTrades;
+    mapping(address => uint256) private _lastTrade;  // 添加最后交易时间映射
     
     uint256 private _nextOrderId;
     uint256 private _nextTradeId;
@@ -266,7 +267,7 @@ contract TradingManager is
         // 设置交易参数
         minTradeAmount = 1;  // 设置最小交易金额为1个代币
         maxTradeAmount = 1000000;  // 设置最大交易金额
-        cooldownPeriod = 1 hours;  // 设置冷却期为1小时
+        cooldownPeriod = 10 seconds;  // 设置冷却期为10秒
         feeRate = 50;  // 设置费率为0.5%
     }
     
@@ -421,87 +422,6 @@ contract TradingManager is
      */
     function cancelOrder(uint256 orderId) external whenNotPaused nonReentrant {
         // ... existing implementation ...
-    }
-    
-    /**
-     * @dev 执行订单 - 需要OPERATOR权限
-     * @param orderId 订单ID
-     */
-    function executeOrder(uint256 orderId) external whenNotPaused nonReentrant {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
-        
-        Order storage order = _orders[orderId];
-        require(order.id != 0, "Order does not exist");
-        require(order.active == true, "Order is not active");
-        
-        // 检查交易限制
-        require(order.amount >= minTradeAmount, "Amount below minimum");
-        require(order.amount <= maxTradeAmount, "Amount above maximum");
-        
-        // 检查冷却期
-        require(
-            block.timestamp >= _tokenPrices[order.token] + cooldownPeriod,
-            "In cooldown period"
-        );
-        
-        // 检查黑名单
-        require(!blacklist[order.seller], "Seller is blacklisted");
-        
-        // 计算手续费
-        uint256 fee = (order.amount * feeRate) / 10000;
-        uint256 amountAfterFee = order.amount - fee;
-        
-        // 执行交易
-        IERC20Upgradeable token = IERC20Upgradeable(order.token);
-        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
-        
-        // 转移代币
-        require(token.transferFrom(order.seller, address(this), order.amount), "Token transfer failed");
-        
-        // 转移 USDT
-        uint256 usdtAmount = order.amount * order.price;
-        require(usdt.transfer(order.seller, usdtAmount), "USDT transfer failed");
-        
-        // 转移手续费
-        if (fee > 0) {
-            require(token.transfer(feeReceiver, fee), "Fee transfer failed");
-        }
-        
-        // 更新订单状态
-        order.active = false;
-        _tokenPrices[order.token] = block.timestamp;
-        
-        // 记录交易
-        uint256 tradeId = _nextTradeId++;
-        _trades[tradeId] = Trade({
-            id: tradeId,
-            orderId: orderId,
-            buyer: msg.sender,
-            seller: order.seller,
-            token: order.token,
-            propertyId: order.propertyId,
-            amount: order.amount,
-            price: order.price,
-            timestamp: block.timestamp,
-            isSellOrder: order.isSellOrder
-        });
-        
-        _userTrades[msg.sender].push(tradeId);
-        _userTrades[order.seller].push(tradeId);
-        _tokenTrades[order.token].push(tradeId);
-        
-        emit OrderExecuted(
-            orderId,
-            msg.sender,
-            order.seller,
-            order.token,
-            order.propertyId,
-            order.amount,
-            order.price,
-            tradeId,
-            order.isSellOrder,
-            uint40(block.timestamp)
-        );
     }
     
     /**
@@ -812,6 +732,168 @@ contract TradingManager is
      */
     function getCooldownPeriod() external view returns (uint256) {
         return cooldownPeriod;
+    }
+    
+    /**
+     * @dev 购买卖单
+     */
+    function buyOrder(uint256 sellOrderId) external whenNotPaused nonReentrant {
+        // 获取卖单信息
+        Order storage order = _orders[sellOrderId];
+        require(order.id != 0, "Order does not exist");
+        require(order.active == true, "Order is not active");
+        require(order.isSellOrder == true, "Not a sell order");
+        
+        // 检查交易限制
+        require(order.amount >= minTradeAmount, "Amount below minimum");
+        require(order.amount <= maxTradeAmount, "Amount above maximum");
+        
+        // 检查冷却期
+        require(block.timestamp >= _lastTrade[msg.sender] + cooldownPeriod, "In cooldown period");
+        
+        // 检查买家是否在黑名单中
+        require(!blacklist[msg.sender], "Buyer is blacklisted");
+        
+        // 计算需要的 USDT 数量（包含手续费）
+        uint256 usdtAmount = order.amount * order.price;
+        uint256 usdtFee = (usdtAmount * feeRate) / 10000;
+        uint256 totalUsdt = usdtAmount + usdtFee;
+        
+        // 检查并转移 USDT
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        require(usdt.allowance(msg.sender, address(this)) >= totalUsdt, "Insufficient USDT allowance");
+        require(usdt.transferFrom(msg.sender, address(this), totalUsdt), "USDT transfer failed");
+        
+        // 转移代币给买家
+        IERC20Upgradeable token = IERC20Upgradeable(order.token);
+        require(token.transfer(msg.sender, order.amount), "Token transfer failed");
+        
+        // 转移 USDT 给卖家（扣除手续费）
+        require(usdt.transfer(order.seller, usdtAmount), "USDT transfer failed");
+        
+        // 转移手续费
+        if (usdtFee > 0) {
+            require(usdt.transfer(feeReceiver, usdtFee), "Fee transfer failed");
+        }
+        
+        // 更新卖单状态
+        order.active = false;
+        
+        // 更新最后交易时间
+        _lastTrade[msg.sender] = block.timestamp;
+        
+        // 记录交易
+        uint256 tradeId = _nextTradeId++;
+        _trades[tradeId] = Trade({
+            id: tradeId,
+            orderId: sellOrderId,
+            buyer: msg.sender,
+            seller: order.seller,
+            token: order.token,
+            propertyId: order.propertyId,
+            amount: order.amount,
+            price: order.price,
+            timestamp: block.timestamp,
+            isSellOrder: true
+        });
+        
+        _userTrades[msg.sender].push(tradeId);
+        _userTrades[order.seller].push(tradeId);
+        _tokenTrades[order.token].push(tradeId);
+        
+        emit OrderExecuted(
+            sellOrderId,
+            msg.sender,
+            order.seller,
+            order.token,
+            order.propertyId,
+            order.amount,
+            order.price,
+            tradeId,
+            true,
+            uint40(block.timestamp)
+        );
+    }
+
+    /**
+     * @dev 出售给买单
+     */
+    function sellOrder(uint256 buyOrderId) external whenNotPaused nonReentrant {
+        // 获取买单信息
+        Order storage order = _orders[buyOrderId];
+        require(order.id != 0, "Order does not exist");
+        require(order.active == true, "Order is not active");
+        require(order.isSellOrder == false, "Not a buy order");
+        
+        // 检查交易限制
+        require(order.amount >= minTradeAmount, "Amount below minimum");
+        require(order.amount <= maxTradeAmount, "Amount above maximum");
+        
+        // 检查冷却期
+        require(block.timestamp >= _lastTrade[msg.sender] + cooldownPeriod, "In cooldown period");
+        
+        // 检查卖家是否在黑名单中
+        require(!blacklist[msg.sender], "Seller is blacklisted");
+        
+        // 检查并转移代币
+        IERC20Upgradeable token = IERC20Upgradeable(order.token);
+        require(token.allowance(msg.sender, address(this)) >= order.amount, "Insufficient token allowance");
+        require(token.transferFrom(msg.sender, address(this), order.amount), "Token transfer failed");
+        
+        // 计算 USDT 金额（包含手续费）
+        uint256 usdtAmount = order.amount * order.price;
+        uint256 usdtFee = (usdtAmount * feeRate) / 10000;
+        uint256 totalUsdt = usdtAmount + usdtFee;
+        
+        // 转移代币给买家
+        require(token.transfer(order.seller, order.amount), "Token transfer failed");
+        
+        // 转移 USDT 给卖家（扣除手续费）
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        require(usdt.transfer(msg.sender, usdtAmount), "USDT transfer failed");
+        
+        // 转移手续费
+        if (usdtFee > 0) {
+            require(usdt.transfer(feeReceiver, usdtFee), "Fee transfer failed");
+        }
+        
+        // 更新买单状态
+        order.active = false;
+        
+        // 更新最后交易时间
+        _lastTrade[msg.sender] = block.timestamp;
+        
+        // 记录交易
+        uint256 tradeId = _nextTradeId++;
+        _trades[tradeId] = Trade({
+            id: tradeId,
+            orderId: buyOrderId,
+            buyer: order.seller,
+            seller: msg.sender,
+            token: order.token,
+            propertyId: order.propertyId,
+            amount: order.amount,
+            price: order.price,
+            timestamp: block.timestamp,
+            isSellOrder: false
+        });
+        
+        _userTrades[order.seller].push(tradeId);
+        _userTrades[msg.sender].push(tradeId);
+        _tokenTrades[order.token].push(tradeId);
+        
+        emit OrderExecuted(
+            buyOrderId,
+            order.seller,
+            msg.sender,
+            order.token,
+            order.propertyId,
+            order.amount,
+            order.price,
+            tradeId,
+            false,
+            uint40(block.timestamp)
+        );
     }
     
     // 接收ETH
