@@ -22,7 +22,7 @@ const RPC_URL = process.env.TESTNET_RPC_URL || 'http://localhost:8545';
 
 // 私钥配置
 const ADMIN_PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY;
-const MANAGER_PRIVATE_KEY = process.env.MANAGER_PRIVATE_KEY;
+const MANAGER_PRIVATE_KEY = process.env.MANAGER_PRIVATE_KEY; 
 const OPERATOR_PRIVATE_KEY = process.env.OPERATOR_PRIVATE_KEY;
 const INVESTOR_PRIVATE_KEY = process.env.INVESTOR_PRIVATE_KEY; // 使用独立的投资者私钥
 
@@ -106,7 +106,7 @@ async function getContract(contractName, address, wallet) {
     try {
       await contract.getAddress();
       return contract;
-    } catch (error) {
+  } catch (error) {
       log.error(`合约 ${contractName} 地址无效: ${error.message}`);
       return null;
     }
@@ -251,7 +251,7 @@ async function updatePropertyStatus() {
     const facadeContract = await getContract('RealEstateFacade', REAL_ESTATE_FACADE_ADDRESS, state.adminWallet);
     
     // 更新房产状态为可交易
-    const updateStatusTx = await facadeContract.updatePropertyStatus(
+      const updateStatusTx = await facadeContract.updatePropertyStatus(
       state.propertyId,
       2 // 2 表示可交易状态
     );
@@ -259,10 +259,10 @@ async function updatePropertyStatus() {
     await updateStatusTx.wait();
     
     log.success('房产状态更新成功');
-    return true;
+      return true;
   } catch (error) {
     log.error(`更新房产状态失败: ${error.message}`);
-    return false;
+      return false;
   }
 }
 
@@ -306,8 +306,8 @@ async function initialInvestorBuy() {
     // 执行初始购买
     const initialBuyTx = await propertyManagerContract.initialBuyPropertyToken(
       state.propertyId,
-      purchaseAmount
-    );
+              purchaseAmount
+            );
     
     await initialBuyTx.wait();
     
@@ -327,21 +327,45 @@ async function createSellOrder() {
   log.step(5, '创建卖单');
   
   try {
-    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.operatorWallet);
+    
+    // 创建卖单参数 - 确保金额满足最小要求
+    const amount = ethers.parseUnits("10", 18); // 10个代币
+    const price = ethers.parseUnits("10", 18); // 10单位价格
+    
+    log.info("创建卖单参数:");
+    log.info(`- 代币地址: ${state.propertyTokenAddress}`);
+    log.info(`- 数量: ${ethers.formatUnits(amount, 18)} (原始值: ${amount})`);
+    log.info(`- 价格: ${ethers.formatUnits(price, 18)} (原始值: ${price})`);
     
     // 创建卖单
-    const sellOrderId = await tradingManagerContract.createSellOrder(
-      state.propertyTokenAddress,  // token 地址
-      10,  // amount
-      2  // price
+    log.info("\n发送交易...");
+    const tx = await tradingManagerContract.createSellOrder(
+      state.propertyTokenAddress,
+      amount,
+      price
     );
     
-    state.sellOrderId = sellOrderId;
-    log.info(`卖单创建成功，ID: ${sellOrderId}`);
+    log.info(`交易已发送，等待确认... 交易哈希: ${tx.hash}`);
+    const receipt = await tx.wait();
+    log.info(`交易已确认，区块号: ${receipt.blockNumber}`);
+    
+    // 输出成功信息
+    log.success("卖单创建成功!");
     
     return true;
   } catch (error) {
     log.error(`创建卖单失败: ${error.message}`);
+    // 输出更详细的错误信息
+    if (error.reason) {
+      log.error(`错误原因: ${error.reason}`);
+    }
+    if (error.data) {
+      log.error(`错误数据: ${error.data}`);
+    }
+    if (error.transaction) {
+      log.error(`交易内容:`, error.transaction);
+    }
     return false;
   }
 }
@@ -395,12 +419,12 @@ async function investorBuyPropertyToken() {
     const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.balance(`投资者新 ${state.tokenSymbol}`, ethers.formatUnits(newTokenBalance, state.tokenDecimals));
     
-    return true;
+      return true;
   } catch (error) {
     log.error(`投资者购买房产代币失败: ${error.message}`);
-    return false;
-  }
-}
+        return false;
+      }
+    }
 
 // 创建收益分配
 async function createDistribution() {
@@ -540,7 +564,7 @@ async function runTest() {
   try {
     await testFlow();
     log.success('测试流程完成');
-  } catch (error) {
+    } catch (error) {
     log.error(`运行测试流程失败: ${error.message}`);
   }
 }
