@@ -307,7 +307,6 @@ contract TradingManager is
         require(bytes(propertyId).length > 0, "Invalid property ID");
         require(amount > 0, "Invalid amount");
         require(price > 0, "Invalid price");
-        require(usdtAddress != address(0), "USDT address not set");
         
         // 检查交易限制
         require(amount >= minTradeAmount, "Amount below minimum");
@@ -315,19 +314,6 @@ contract TradingManager is
         
         // 检查黑名单
         require(!blacklist[msg.sender], "Seller is blacklisted");
-        
-        // 计算需要的 USDT 数量
-        uint256 requiredUsdt = amount * price;
-        
-        // 获取 USDT 合约实例
-        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
-        
-        // 检查用户是否已授权足够的 USDT
-        uint256 allowance = usdt.allowance(msg.sender, address(this));
-        require(allowance >= requiredUsdt, "Insufficient USDT allowance");
-        
-        // 转移 USDT
-        require(usdt.transferFrom(msg.sender, address(this), requiredUsdt), "USDT transfer failed");
         
         // 获取代币合约实例
         IERC20Upgradeable propertyToken = IERC20Upgradeable(token);
