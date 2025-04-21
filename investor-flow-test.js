@@ -473,7 +473,7 @@ async function createSellOrder() {
   }
 }
 
-// 投资者购买房产代币
+// 投资者购市场挂单的买房产代币
 async function investorBuyPropertyToken() {
   log.step(6, '投资者购买房产代币');
   

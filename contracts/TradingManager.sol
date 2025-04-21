@@ -105,6 +105,7 @@ contract TradingManager is
         uint256 indexed orderId,
         address indexed seller,
         address indexed token,
+        string propertyId,
         uint256 amount,
         uint256 price,
         bool isSellOrder,
@@ -120,6 +121,7 @@ contract TradingManager is
         address indexed buyer,
         address indexed seller,
         address token,
+        string propertyId,
         uint256 amount,
         uint256 price,
         uint256 tradeId,
@@ -179,6 +181,7 @@ contract TradingManager is
         uint256 id;
         address seller;
         address token;
+        string propertyId;
         uint256 amount;
         uint256 price;
         uint256 timestamp;
@@ -193,6 +196,7 @@ contract TradingManager is
         address buyer;
         address seller;
         address token;
+        string propertyId;
         uint256 amount;
         uint256 price;
         uint256 timestamp;
@@ -289,77 +293,18 @@ contract TradingManager is
         _;
     }
     
-    /**
-     * @dev 创建卖单 (内部细节函数)
-     */
-    function _createOrderInternal(
-        address token, 
-        uint256 amount, 
-        uint256 price, 
-        string memory propertyId,
-        bool skipTransfer
-    ) 
-        internal
-        returns (uint256) 
-    {
-        require(token != address(0), "Invalid token address");
-        require(amount > 0, "Amount must be greater than 0");
-        require(price > 0, "Price must be greater than 0");
-        
-        // 检查最小交易金额
-        if (minTradeAmount > 0) {
-            require(amount >= minTradeAmount, "Amount below minimum");
-        }
-        
-        // 检查最大交易金额
-        if (maxTradeAmount > 0) {
-            require(amount <= maxTradeAmount, "Amount above maximum");
-        }
-        
-        // 将代币转移到合约
-        if (!skipTransfer) {
-            IERC20Upgradeable(token).transferFrom(msg.sender, address(this), amount);
-        }
-        
-        // 创建订单
-        uint256 orderId = _nextOrderId++;
-        _orders[orderId] = Order({
-            id: orderId,
-            seller: msg.sender,
-            token: token,
-            amount: amount,
-            price: price,
-            timestamp: block.timestamp,
-            active: true,
-            isSellOrder: true
-        });
-        
-        // 更新用户订单列表
-        _userOrders[msg.sender].push(orderId);
-        
-        // 触发事件
-        emit OrderCreated(
-            orderId,
-            msg.sender,
-            token,
-            amount,
-            price,
-            true,
-            uint40(block.timestamp)
-        );
-        
-        return orderId;
-    }
     
     /**
      * @dev 创建卖单
      */
     function createSellOrder(
         address token,
+        string memory propertyId,
         uint256 amount,
         uint256 price
     ) external whenNotPaused nonReentrant returns (uint256) {
         require(token != address(0), "Invalid token address");
+        require(bytes(propertyId).length > 0, "Invalid property ID");
         require(amount > 0, "Invalid amount");
         require(price > 0, "Invalid price");
         require(usdtAddress != address(0), "USDT address not set");
@@ -400,6 +345,7 @@ contract TradingManager is
             id: orderId,
             seller: msg.sender,
             token: token,
+            propertyId: propertyId,
             amount: amount,
             price: price,
             timestamp: block.timestamp,
@@ -414,6 +360,7 @@ contract TradingManager is
             orderId,
             msg.sender,
             token,
+            propertyId,
             amount,
             price,
             true,
@@ -428,12 +375,12 @@ contract TradingManager is
      */
     function createBuyOrder(
         address token,
-        address buyer,
+        string memory propertyId,
         uint256 amount,
         uint256 price
     ) external whenNotPaused nonReentrant returns (uint256) {
         require(token != address(0), "Invalid token address");
-        require(buyer != address(0), "Invalid buyer address");
+        require(bytes(propertyId).length > 0, "Invalid property ID");
         require(amount > 0, "Invalid amount");
         require(price > 0, "Invalid price");
         
@@ -442,14 +389,23 @@ contract TradingManager is
         require(amount <= maxTradeAmount, "Amount above maximum");
         
         // 检查黑名单
-        require(!blacklist[buyer], "Buyer is blacklisted");
+        require(!blacklist[msg.sender], "Buyer is blacklisted");
+        
+        // 计算需要的 USDT 数量
+        uint256 requiredUsdt = amount * price;
+        
+        // 检查并转移 USDT
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        require(usdt.allowance(msg.sender, address(this)) >= requiredUsdt, "Insufficient USDT allowance");
+        require(usdt.transferFrom(msg.sender, address(this), requiredUsdt), "USDT transfer failed");
         
         // 创建订单
         uint256 orderId = _nextOrderId++;
         _orders[orderId] = Order({
             id: orderId,
-            seller: buyer,
+            seller: msg.sender,
             token: token,
+            propertyId: propertyId,
             amount: amount,
             price: price,
             timestamp: block.timestamp,
@@ -457,13 +413,14 @@ contract TradingManager is
             isSellOrder: false
         });
         
-        _userOrders[buyer].push(orderId);
+        _userOrders[msg.sender].push(orderId);
         _tokenTrades[token].push(orderId);
         
         emit OrderCreated(
             orderId,
-            buyer,
+            msg.sender,
             token,
+            propertyId,
             amount,
             price,
             false,
@@ -503,16 +460,25 @@ contract TradingManager is
         
         // 检查黑名单
         require(!blacklist[order.seller], "Seller is blacklisted");
-        require(!blacklist[order.seller], "Buyer is blacklisted");
         
         // 计算手续费
         uint256 fee = (order.amount * feeRate) / 10000;
         uint256 amountAfterFee = order.amount - fee;
         
         // 执行交易
-        IERC20Upgradeable(order.token).transferFrom(order.seller, order.seller, amountAfterFee);
+        IERC20Upgradeable token = IERC20Upgradeable(order.token);
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        
+        // 转移代币
+        require(token.transferFrom(order.seller, address(this), order.amount), "Token transfer failed");
+        
+        // 转移 USDT
+        uint256 usdtAmount = order.amount * order.price;
+        require(usdt.transfer(order.seller, usdtAmount), "USDT transfer failed");
+        
+        // 转移手续费
         if (fee > 0) {
-            IERC20Upgradeable(order.token).transferFrom(order.seller, feeReceiver, fee);
+            require(token.transfer(feeReceiver, fee), "Fee transfer failed");
         }
         
         // 更新订单状态
@@ -524,28 +490,30 @@ contract TradingManager is
         _trades[tradeId] = Trade({
             id: tradeId,
             orderId: orderId,
-            buyer: order.seller,
+            buyer: msg.sender,
             seller: order.seller,
             token: order.token,
+            propertyId: order.propertyId,
             amount: order.amount,
             price: order.price,
             timestamp: block.timestamp,
-            isSellOrder: true
+            isSellOrder: order.isSellOrder
         });
         
-        _userTrades[order.seller].push(tradeId);
+        _userTrades[msg.sender].push(tradeId);
         _userTrades[order.seller].push(tradeId);
         _tokenTrades[order.token].push(tradeId);
         
         emit OrderExecuted(
             orderId,
-            order.seller,
+            msg.sender,
             order.seller,
             order.token,
+            order.propertyId,
             order.amount,
             order.price,
             tradeId,
-            true,
+            order.isSellOrder,
             uint40(block.timestamp)
         );
     }
