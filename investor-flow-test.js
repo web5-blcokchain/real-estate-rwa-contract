@@ -420,6 +420,13 @@ async function createSellOrder() {
       log.info("代币授权额度充足，无需重新授权");
     }
     
+    // 创建卖单前检查余额
+    const beforeUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const beforeTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    log.info("\n创建卖单前余额:");
+    log.info(`- USDT 余额: ${ethers.formatUnits(beforeUsdtBalance, 18)} USDT`);
+    log.info(`- 代币余额: ${ethers.formatUnits(beforeTokenBalance, 18)} 个代币`);
+    
     // 创建卖单
     log.info("\n发送交易...");
     const tx = await tradingManagerContract.createSellOrder(
@@ -431,6 +438,20 @@ async function createSellOrder() {
     log.info(`交易已发送，等待确认... 交易哈希: ${tx.hash}`);
     const receipt = await tx.wait();
     log.info(`交易已确认，区块号: ${receipt.blockNumber}`);
+    
+    // 创建卖单后检查余额
+    const afterUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    const afterTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    log.info("\n创建卖单后余额:");
+    log.info(`- USDT 余额: ${ethers.formatUnits(afterUsdtBalance, 18)} USDT`);
+    log.info(`- 代币余额: ${ethers.formatUnits(afterTokenBalance, 18)} 个代币`);
+    
+    // 计算余额变化
+    const usdtChange = beforeUsdtBalance - afterUsdtBalance;
+    const tokenChange = beforeTokenBalance - afterTokenBalance;
+    log.info("\n余额变化:");
+    log.info(`- USDT 变化: ${ethers.formatUnits(usdtChange, 18)} USDT`);
+    log.info(`- 代币变化: ${ethers.formatUnits(tokenChange, 18)} 个代币`);
     
     // 输出成功信息
     log.success("卖单创建成功!");
