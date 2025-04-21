@@ -228,7 +228,7 @@ async function registerProperty() {
     log.info(`通过查询获取到代币地址: ${state.propertyTokenAddress}`);
     
     // 获取代币信息
-    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.adminWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
     state.propertyToken = propertyTokenContract;
     state.tokenSymbol = await propertyTokenContract.symbol();
     state.tokenName = await propertyTokenContract.name();
@@ -329,37 +329,103 @@ async function createSellOrder() {
   try {
     const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
     const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
-    const propertyTokenContract = state.propertyToken;
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
     
-    // 创建卖单参数 - 确保金额满足最小要求
-    const amount = ethers.parseUnits("2", 18); // 2个代币
-    const price = ethers.parseUnits("2", 18); // 2单位价格
-    const requiredUsdt = amount * price;
+    // 创建卖单参数
+    const tokenAmount = ethers.parseUnits("2", 18); // 2 个代币，需要18位精度
+    const tokenPrice = BigInt(3); // ethers.parseUnits("3", 18); // 3 USDT 每个代币，需要18位精度
+    const requiredUsdt = tokenAmount * tokenPrice / ethers.parseUnits("1", 18); // 计算需要的 USDT 数量
     
     log.info("创建卖单参数:");
     log.info(`- 代币地址: ${state.propertyTokenAddress}`);
-    log.info(`- 数量: ${ethers.formatUnits(amount, 18)} (原始值: ${amount})`);
-    log.info(`- 价格: ${ethers.formatUnits(price, 18)} (原始值: ${price})`);
-    log.info(`- 需要 USDT: ${ethers.formatUnits(requiredUsdt, 18)}`);
+    log.info(`- 数量: ${ethers.formatUnits(tokenAmount, 18)} 个代币`);
+    log.info(`- 价格: ${ethers.formatUnits(tokenPrice, 18)} USDT/代币`);
+    log.info(`- 需要 USDT: ${ethers.formatUnits(requiredUsdt, 18)} USDT`);
     
-    // 授权 USDT
-    log.info("\n授权 USDT...");
-    const usdtApproveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS,  ethers.parseUnits("1000", 18));//多授权下次都不用执行了
-    await usdtApproveTx.wait();
-    log.info("USDT 授权成功");
+    // 检查操作者 USDT 余额
+    const operatorUsdtBalance = await usdtContract.balanceOf(state.investorWallet.address);
+    log.info(`操作者 USDT 余额: ${ethers.formatUnits(operatorUsdtBalance, 18)} USDT`);
     
-    // 授权代币
-    log.info("\n授权代币...");
-    const tokenApproveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, ethers.parseUnits("1000", 18) );// 多授权下次都不用执行了
-    await tokenApproveTx.wait();
-    log.info("代币授权成功");
+    // 如果 USDT 余额不足，从管理员钱包转账
+    if (operatorUsdtBalance < requiredUsdt) {
+      log.info("USDT 余额不足，从管理员钱包转账...");
+      const adminUsdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.adminWallet);
+      const transferAmount = ethers.parseUnits("100", 18); // 转账 100 USDT
+      
+      const transferTx = await adminUsdtContract.transfer(
+        state.investorWallet.address,
+        transferAmount
+      );
+      await transferTx.wait();
+      
+      const newBalance = await usdtContract.balanceOf(state.investorWallet.address);
+      log.info(`转账完成，新 USDT 余额: ${ethers.formatUnits(newBalance, 18)} USDT`);
+    }
+    
+    // 检查操作者代币余额
+    const operatorTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    log.info(`操作者代币余额: ${ethers.formatUnits(operatorTokenBalance, 18)} 个代币`);
+    
+    // 检查当前 USDT 授权额度
+    const currentUsdtAllowance = await usdtContract.allowance(
+      state.investorWallet.address,
+      TRADING_MANAGER_ADDRESS
+    );
+    
+    log.info(`当前 USDT 授权额度: ${ethers.formatUnits(currentUsdtAllowance, 18)}`);
+    
+    // 如果 USDT 授权额度不足，进行授权
+    if (currentUsdtAllowance < requiredUsdt) {
+      log.info("授权 USDT...");
+      const approveTx = await usdtContract.approve(
+        TRADING_MANAGER_ADDRESS,
+        requiredUsdt
+      );
+      await approveTx.wait();
+      log.info("USDT 授权成功");
+    } else {
+      log.info("USDT 授权额度充足，无需重新授权");
+    }
+    
+    // 检查当前代币授权额度
+    const currentTokenAllowance = await propertyTokenContract.allowance(
+      state.investorWallet.address,
+      TRADING_MANAGER_ADDRESS
+    );
+    
+    log.info(`当前代币授权额度: ${ethers.formatUnits(currentTokenAllowance, 18)}`);
+    
+    // 如果代币授权额度不足，进行授权
+    if (currentTokenAllowance < tokenAmount) {
+      log.info(`授权代币... 授权数量: ${ethers.formatUnits(tokenAmount, 18)}`);
+      const tokenApproveTx = await propertyTokenContract.approve(
+        TRADING_MANAGER_ADDRESS,
+        // tokenAmount
+        ethers.parseUnits("200", 18)
+      );
+      const receipt = await tokenApproveTx.wait();
+      log.info(`代币授权交易已确认，区块号: ${receipt.blockNumber}`);
+      
+      // 再次检查授权额度
+      const newAllowance = await propertyTokenContract.allowance(
+        state.investorWallet.address,
+        TRADING_MANAGER_ADDRESS
+      );
+      log.info(`新的代币授权额度: ${ethers.formatUnits(newAllowance, 18)}`);
+      
+      if (newAllowance < tokenAmount) {
+        throw new Error(`代币授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, 18)} 小于需要的 ${ethers.formatUnits(tokenAmount, 18)}`);
+      }
+    } else {
+      log.info("代币授权额度充足，无需重新授权");
+    }
     
     // 创建卖单
     log.info("\n发送交易...");
     const tx = await tradingManagerContract.createSellOrder(
       state.propertyTokenAddress,
-      amount,
-      price
+      tokenAmount,
+      tokenPrice
     );
     
     log.info(`交易已发送，等待确认... 交易哈希: ${tx.hash}`);
@@ -391,7 +457,7 @@ async function investorBuyPropertyToken() {
   log.step(6, '投资者购买房产代币');
   
   try {
-    const propertyManagerContract = await getContract('PropertyManager', PROPERTY_MANAGER_ADDRESS, state.investorWallet);
+    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.investorWallet);
     const propertyTokenContract = state.propertyToken;
     const investorAddress = await state.investorWallet.getAddress();
     
@@ -424,8 +490,8 @@ async function investorBuyPropertyToken() {
     log.info(`- 数量: ${ethers.formatUnits(purchaseAmount, state.tokenDecimals)}`);
     
     // 执行购买
-    const buyTx = await propertyManagerContract.buyPropertyToken(
-      state.propertyId,
+    const buyTx = await tradingManagerContract.buyOrder(
+      state.propertyTokenAddress,
       purchaseAmount
     );
     
@@ -435,12 +501,12 @@ async function investorBuyPropertyToken() {
     const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.balance(`投资者新 ${state.tokenSymbol}`, ethers.formatUnits(newTokenBalance, state.tokenDecimals));
     
-      return true;
+    return true;
   } catch (error) {
     log.error(`投资者购买房产代币失败: ${error.message}`);
-        return false;
-      }
-    }
+    return false;
+  }
+}
 
 // 创建收益分配
 async function createDistribution() {
