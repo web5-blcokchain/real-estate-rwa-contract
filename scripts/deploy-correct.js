@@ -575,7 +575,7 @@ async function deploy() {
     await tx.wait();
     tx = await tradingManager.setMinTradeAmount(ethers.parseEther("0.01"));
     await tx.wait();
-    tx = await tradingManager.setCooldownPeriod(3600);
+    tx = await tradingManager.setCooldownPeriod(10);
     await tx.wait();
     tx = await tradingManager.setFeeRate(100); // 1%
     await tx.wait();
