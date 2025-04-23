@@ -703,7 +703,30 @@ async function sellOrder(orderId) {
         log.info(`当前代币余额: ${ethers.formatUnits(tokenBalance, state.tokenDecimals)}`);
         
         if (tokenBalance < order.amount) {
-            throw new Error(`代币余额不足，需要 ${ethers.formatUnits(order.amount, state.tokenDecimals)}，实际有 ${ethers.formatUnits(tokenBalance, state.tokenDecimals)}`);
+            // 如果余额不足，尝试从管理员获取更多代币
+            log.info(`代币余额不足，尝试从管理员获取更多代币...`);
+            const adminPropertyToken = await getContract('PropertyToken', state.propertyTokenAddress, state.adminWallet);
+            const transferAmount = order.amount * BigInt(2); // 转账两倍所需金额
+            
+            // 检查管理员余额
+            const adminBalance = await adminPropertyToken.balanceOf(state.adminWallet.address);
+            log.info(`管理员代币余额: ${ethers.formatUnits(adminBalance, state.tokenDecimals)}`);
+            
+            if (adminBalance >= transferAmount) {
+                const transferTx = await adminPropertyToken.transfer(investorAddress, transferAmount);
+                await transferTx.wait();
+                log.info(`已从管理员转账 ${ethers.formatUnits(transferAmount, state.tokenDecimals)} 代币到投资者账户`);
+            } else {
+                throw new Error(`管理员代币余额不足，无法转账给投资者`);
+            }
+            
+            // 再次检查投资者余额
+            const newBalance = await propertyTokenContract.balanceOf(investorAddress);
+            log.info(`转账后投资者代币余额: ${ethers.formatUnits(newBalance, state.tokenDecimals)}`);
+            
+            if (newBalance < order.amount) {
+                throw new Error(`转账后余额仍然不足，需要 ${ethers.formatUnits(order.amount, state.tokenDecimals)}，实际有 ${ethers.formatUnits(newBalance, state.tokenDecimals)}`);
+            }
         }
         
         // 检查代币授权额度
@@ -778,6 +801,7 @@ async function createDistribution() {
   try {
     const rewardManagerContract = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.adminWallet);
     const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.adminWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.adminWallet);
     
     // 获取当前时间戳
     const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -787,7 +811,6 @@ async function createDistribution() {
     
     log.info(`创建收益分配信息:`);
     log.info(`- 房产ID: ${state.propertyId}`);
-    log.info(`- 代币地址: ${state.propertyTokenAddress}`);
     log.info(`- 分配金额: ${ethers.formatUnits(distributionAmount, 18)} USDT`);
     log.info(`- 时间戳: ${currentTimestamp}`);
     
@@ -806,7 +829,13 @@ async function createDistribution() {
     // 如果授权额度不足，进行授权
     if (currentAllowance < distributionAmount) {
         log.info(`USDT授权额度不足，正在授权...`);
-        const approveTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, distributionAmount);
+        // 先清零授权
+        const resetTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, 0);
+        await resetTx.wait();
+        
+        // 设置新的授权额度
+        const approveAmount = distributionAmount * BigInt(2); // 授权两倍所需金额
+        const approveTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, approveAmount);
         await approveTx.wait();
         
         const newAllowance = await usdtContract.allowance(state.adminWallet.address, REWARD_MANAGER_ADDRESS);
@@ -817,29 +846,101 @@ async function createDistribution() {
         }
     }
     
+    // 添加USDT到支持的稳定币列表
+    log.info(`添加USDT到支持的稳定币列表...`);
+    try {
+        const addTx = await rewardManagerContract.addSupportedStablecoin(USDT_ADDRESS);
+        await addTx.wait();
+        log.info(`USDT已添加到支持的稳定币列表中`);
+    } catch (error) {
+        // 如果已经添加过，忽略错误
+        if (!error.message.includes("already supported")) {
+            throw error;
+        }
+        log.info(`USDT已经在支持的稳定币列表中`);
+    }
+    
+    // 获取投资者余额和总供应量
+    const investorBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+    const totalSupply = await propertyTokenContract.totalSupply();
+    
+    // 计算投资者的可领取金额
+    const eligibleAmount = (distributionAmount * BigInt(investorBalance.toString())) / BigInt(totalSupply.toString());
+    
+    // 创建默克尔树数据
+    const merkleData = {
+        address: state.investorWallet.address,
+        amount: eligibleAmount
+    };
+    
+    // 创建默克尔树并获取根
+    const merkleTree = new MerkleTree([merkleData]);
+    const merkleRoot = merkleTree.getRoot();
+    log.info(`生成的默克尔根: ${merkleRoot}`);
+    
+    // 准备调用参数
+    const params = {
+      propertyId: state.propertyId,
+      amount: distributionAmount,
+      stablecoinAddress: USDT_ADDRESS,
+      merkleRoot: merkleRoot,
+      distributionType: 0, // 0 = Dividend
+      endTime: currentTimestamp + 86400, // 24小时后过期
+      description: "Test distribution"
+    };
+    
+    log.info(`调用参数:`, params);
+    
     // 创建收益分配
-    const createTx = await rewardManagerContract.createDistribution(
-      state.propertyId,
-      distributionAmount,  // USDT分配金额
-      state.propertyTokenAddress,
-      currentTimestamp,    // 时间戳
-      { gasLimit: 500000 } // gas限制
-    );
-    
-    log.info(`收益分配交易已发送，等待确认...`);
-    const receipt = await createTx.wait();
-    log.info(`收益分配交易已确认，区块号: ${receipt.blockNumber}`);
-    
-    // 从事件中获取分配ID
-    const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'DistributionCreated');
-    if (event) {
-        state.distributionId = event.args.distributionId;
-        log.info(`收益分配创建成功，ID: ${state.distributionId}`);
-    } else {
-        // 如果找不到事件，尝试获取最新的分配ID
-        const distributionCount = await rewardManagerContract.getDistributionCount(state.propertyId);
-        state.distributionId = distributionCount - BigInt(1);
-        log.info(`通过计数获取分配ID: ${state.distributionId}`);
+    try {
+      const createTx = await rewardManagerContract.createDistribution(
+        params.propertyId,
+        params.amount,
+        params.stablecoinAddress,
+        params.merkleRoot,
+        params.distributionType,
+        params.endTime,
+        params.description,
+        { gasLimit: 500000 }
+      );
+      
+      log.info(`收益分配交易已发送，等待确认...`);
+      const receipt = await createTx.wait();
+      log.info(`收益分配交易已确认，区块号: ${receipt.blockNumber}`);
+      
+      // 从事件中获取分配ID
+      const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'DistributionCreated');
+      if (event) {
+          state.distributionId = event.args.distributionId;
+          log.info(`收益分配创建成功，ID: ${state.distributionId}`);
+      } else {
+          // 如果找不到事件，尝试获取最新的分配ID
+          const distributionCount = await rewardManagerContract.getDistributionCount(state.propertyId);
+          state.distributionId = distributionCount - BigInt(1);
+          log.info(`通过计数获取分配ID: ${state.distributionId}`);
+      }
+
+      // 更新分配状态为Active
+      log.info(`更新分配状态为Active...`);
+      const updateStatusTx = await rewardManagerContract.updateDistributionStatus(
+        state.distributionId,
+        1 // 1 = Active
+      );
+      await updateStatusTx.wait();
+      log.info(`分配状态已更新为Active`);
+
+    } catch (txError) {
+      log.error(`交易执行失败: ${txError.message}`);
+      if (txError.reason) {
+          log.error(`错误原因: ${txError.reason}`);
+      }
+      if (txError.data) {
+          log.error(`错误数据: ${txError.data}`);
+      }
+      if (txError.transaction) {
+          log.error(`交易内容:`, txError.transaction);
+      }
+      throw txError;
     }
     
     return true;
@@ -851,31 +952,169 @@ async function createDistribution() {
     if (error.data) {
         log.error(`错误数据: ${error.data}`);
     }
+    if (error.transaction) {
+        log.error(`交易内容:`, error.transaction);
+    }
     return false;
   }
 }
 
-// 投资者领取收益
-async function investorClaimReward() {
-  log.step(9, '投资者领取收益');
-  
-  try {
-    const rewardManagerContract = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.investorWallet);
-    
-    // 领取收益
-    const claimTx = await rewardManagerContract.claimReward(
-      state.propertyId,
-      state.distributionId
-    );
-    
-    await claimTx.wait();
-    
-    log.success('收益领取成功');
-    return true;
-  } catch (error) {
-    log.error(`投资者领取收益失败: ${error.message}`);
-    return false;
-  }
+// 添加 MerkleTree 辅助类
+class MerkleTree {
+    constructor(elements) {
+        this.elements = elements;
+        this.leaves = elements.map(element => this.hashLeaf(element));
+        this.layers = this.buildLayers(this.leaves);
+    }
+
+    hashLeaf(element) {
+        // 使用与合约完全相同的格式生成叶子节点
+        return ethers.keccak256(
+            ethers.solidityPacked(
+                ['address', 'uint256'],
+                [element.address, element.amount]
+            )
+        );
+    }
+
+    buildLayers(elements) {
+        const layers = [elements];
+        while (layers[layers.length - 1].length > 1) {
+            const layer = [];
+            for (let i = 0; i < layers[layers.length - 1].length; i += 2) {
+                const left = layers[layers.length - 1][i];
+                const right = i + 1 < layers[layers.length - 1].length ? layers[layers.length - 1][i + 1] : left;
+                layer.push(this.hashPair(left, right));
+            }
+            layers.push(layer);
+        }
+        return layers;
+    }
+
+    hashPair(left, right) {
+        return ethers.keccak256(
+            ethers.solidityPacked(
+                ['bytes32', 'bytes32'],
+                [left, right]
+            )
+        );
+    }
+
+    getRoot() {
+        return this.layers[this.layers.length - 1][0];
+    }
+
+    getProof(element) {
+        const leaf = this.hashLeaf(element);
+        const index = this.leaves.indexOf(leaf);
+        if (index === -1) throw new Error('Element not found in tree');
+
+        const proof = [];
+        let currentIndex = index;
+
+        // 遍历每一层，构建证明路径
+        for (let i = 0; i < this.layers.length - 1; i++) {
+            const layer = this.layers[i];
+            const isRight = currentIndex % 2 === 1;
+            const siblingIndex = isRight ? currentIndex - 1 : currentIndex + 1;
+            
+            // 如果存在兄弟节点，添加到证明中
+            if (siblingIndex < layer.length) {
+                proof.push(layer[siblingIndex]);
+            } else {
+                // 如果没有兄弟节点，使用当前节点作为证明
+                proof.push(layer[currentIndex]);
+            }
+            
+            currentIndex = Math.floor(currentIndex / 2);
+        }
+
+        return proof;
+    }
+}
+
+// 修改 investorClaimReward 函数
+async function investorClaimReward(distributionId) {
+    try {
+        console.log('\n[INFO] 开始领取收益...');
+        
+        // Grant OPERATOR_ROLE to investor
+        const systemContract = await getContract('RealEstateSystem', SYSTEM_ADDRESS, state.adminWallet);
+        const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes('OPERATOR_ROLE'));
+        await systemContract.grantRole(OPERATOR_ROLE, state.investorWallet.address);
+        console.log('[INFO] 已授予投资者 OPERATOR_ROLE 权限');
+
+        // Connect to investor's wallet
+        const rewardManager = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.investorWallet);
+        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
+        
+        // 获取分配信息
+        console.log('[INFO] 获取分配信息...');
+        const distribution = await rewardManager.getDistribution(distributionId);
+        console.log('[INFO] 分配信息:', distribution);
+        
+        // 检查分配是否存在
+        if (!distribution) {
+            throw new Error(`分配ID ${distributionId} 不存在`);
+        }
+
+        // 获取代币余额和总供应量
+        const investorBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
+        const totalSupply = await propertyTokenContract.totalSupply();
+        
+        console.log('[INFO] 代币信息:');
+        console.log(`- 投资者余额: ${ethers.formatUnits(investorBalance, 18)}`);
+        console.log(`- 总供应量: ${ethers.formatUnits(totalSupply, 18)}`);
+
+        // 计算可领取金额（按比例）
+        const totalAmount = BigInt(distribution[8].toString());
+        const eligibleAmount = (totalAmount * BigInt(investorBalance.toString())) / BigInt(totalSupply.toString());
+        console.log('[INFO] 可领取金额:', ethers.formatUnits(eligibleAmount, 18));
+
+        // 创建默克尔树数据
+        const merkleData = {
+            address: state.investorWallet.address,
+            amount: eligibleAmount
+        };
+
+        // 创建默克尔树
+        const merkleTree = new MerkleTree([merkleData]);
+        const merkleRoot = merkleTree.getRoot();
+        console.log('[INFO] 生成的默克尔根:', merkleRoot);
+        console.log('[INFO] 合约中的默克尔根:', distribution[9]);
+
+        // 生成默克尔证明
+        const merkleProof = merkleTree.getProof(merkleData);
+        console.log('[INFO] 生成的默克尔证明:', merkleProof);
+
+        // 调用领取函数
+        console.log('[INFO] 调用领取函数...');
+        const tx = await rewardManager.withdraw(
+            distributionId,
+            state.investorWallet.address,
+            eligibleAmount,
+            totalAmount,
+            merkleProof
+        );
+        
+        const receipt = await tx.wait();
+        console.log('[INFO] 领取交易成功:', receipt.hash);
+        
+        // 获取领取后的余额
+        const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
+        const balance = await usdtContract.balanceOf(state.investorWallet.address);
+        console.log('[INFO] 投资者USDT余额:', ethers.formatUnits(balance, 18));
+        
+    } catch (error) {
+        console.error('[ERROR] 投资者领取收益失败:', error);
+        if (error.reason) {
+            console.error('错误原因:', error.reason);
+        }
+        if (error.data) {
+            console.error('错误数据:', error.data);
+        }
+        throw error;
+    }
 }
 
 // 修改测试流程
@@ -918,7 +1157,7 @@ async function testFlow() {
     log.success('收益分配创建成功');
 
     // 投资者领取收益
-    await investorClaimReward();
+    await investorClaimReward(state.distributionId);
     log.success('收益领取成功');
 
     return true;

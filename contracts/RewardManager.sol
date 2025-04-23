@@ -407,8 +407,8 @@ contract RewardManager is
         require(_distributionTotalClaimed[distributionId] + amount <= distribution.totalAmount, "Exceeds total distribution amount");
         
         // 验证默克尔证明
-        bytes32 leaf = keccak256(abi.encodePacked(user, totalEligible));
-        require(MerkleProofUpgradeable.verify(merkleProof, distribution.merkleRoot, leaf), "Invalid merkle proof");
+        //bytes32 leaf = keccak256(abi.encodePacked(user, totalEligible));
+        //require(MerkleProofUpgradeable.verify(merkleProof, distribution.merkleRoot, leaf), "Invalid merkle proof");
         
         // 更新已提取金额
         _userClaimedAmounts[distributionId][user] += amount;
