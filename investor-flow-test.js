@@ -35,6 +35,9 @@ const REWARD_MANAGER_ADDRESS = process.env.CONTRACT_REWARDMANAGER_ADDRESS;
 const SYSTEM_ADDRESS = process.env.CONTRACT_REALESTATESYSTEM_ADDRESS;
 const PROPERTY_TOKEN_ADDRESS = process.env.CONTRACT_PROPERTYTOKEN_ADDRESS;
 
+// 添加 MerkleProofUpgradeable 合约地址
+const MERKLE_PROOF_ADDRESS = process.env.CONTRACT_MERKLEPROOF_ADDRESS;
+
 // 测试数据
 const TEST_PROPERTY_ID = `PROP-${Date.now()}`;
 const TEST_PROPERTY_NAME = "东京银座高级公寓";
@@ -870,7 +873,7 @@ async function createDistribution() {
     // 创建默克尔树数据
     const merkleData = {
         address: state.investorWallet.address,
-        amount: eligibleAmount
+        totalEligible: eligibleAmount
     };
     
     // 创建默克尔树并获取根
@@ -878,6 +881,10 @@ async function createDistribution() {
     const merkleRoot = merkleTree.getRoot();
     log.info(`生成的默克尔根: ${merkleRoot}`);
     
+    // 生成默克尔证明
+    const merkleProof = merkleTree.getProof(merkleData);
+    console.log('[INFO] 生成的默克尔证明:', merkleProof);
+
     // 准备调用参数
     const params = {
       propertyId: state.propertyId,
@@ -888,9 +895,9 @@ async function createDistribution() {
       endTime: currentTimestamp + 86400, // 24小时后过期
       description: "Test distribution"
     };
-    
+
     log.info(`调用参数:`, params);
-    
+
     // 创建收益分配
     try {
       const createTx = await rewardManagerContract.createDistribution(
@@ -903,11 +910,11 @@ async function createDistribution() {
         params.description,
         { gasLimit: 500000 }
       );
-      
+
       log.info(`收益分配交易已发送，等待确认...`);
       const receipt = await createTx.wait();
       log.info(`收益分配交易已确认，区块号: ${receipt.blockNumber}`);
-      
+
       // 从事件中获取分配ID
       const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'DistributionCreated');
       if (event) {
@@ -942,7 +949,7 @@ async function createDistribution() {
       }
       throw txError;
     }
-    
+
     return true;
   } catch (error) {
     log.error(`创建收益分配失败: ${error.message}`);
@@ -968,11 +975,11 @@ class MerkleTree {
     }
 
     hashLeaf(element) {
-        // 使用与合约完全相同的格式生成叶子节点
+        // Match the contract's leaf format exactly using solidityPacked
         return ethers.keccak256(
             ethers.solidityPacked(
                 ['address', 'uint256'],
-                [element.address, element.amount]
+                [element.address, element.totalEligible]
             )
         );
     }
@@ -992,10 +999,12 @@ class MerkleTree {
     }
 
     hashPair(left, right) {
+        // Sort the pair to ensure consistent ordering
+        const [first, second] = [left, right].sort();
         return ethers.keccak256(
-            ethers.solidityPacked(
+            ethers.AbiCoder.defaultAbiCoder().encode(
                 ['bytes32', 'bytes32'],
-                [left, right]
+                [first, second]
             )
         );
     }
@@ -1009,23 +1018,23 @@ class MerkleTree {
         const index = this.leaves.indexOf(leaf);
         if (index === -1) throw new Error('Element not found in tree');
 
+        // 如果只有一个叶子节点，返回空数组
+        if (this.leaves.length === 1) {
+            return [];
+        }
+
         const proof = [];
         let currentIndex = index;
 
-        // 遍历每一层，构建证明路径
         for (let i = 0; i < this.layers.length - 1; i++) {
             const layer = this.layers[i];
             const isRight = currentIndex % 2 === 1;
             const siblingIndex = isRight ? currentIndex - 1 : currentIndex + 1;
-            
-            // 如果存在兄弟节点，添加到证明中
+
             if (siblingIndex < layer.length) {
                 proof.push(layer[siblingIndex]);
-            } else {
-                // 如果没有兄弟节点，使用当前节点作为证明
-                proof.push(layer[currentIndex]);
             }
-            
+
             currentIndex = Math.floor(currentIndex / 2);
         }
 
@@ -1037,7 +1046,7 @@ class MerkleTree {
 async function investorClaimReward(distributionId) {
     try {
         console.log('\n[INFO] 开始领取收益...');
-        
+
         // Grant OPERATOR_ROLE to investor
         const systemContract = await getContract('RealEstateSystem', SYSTEM_ADDRESS, state.adminWallet);
         const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes('OPERATOR_ROLE'));
@@ -1047,12 +1056,13 @@ async function investorClaimReward(distributionId) {
         // Connect to investor's wallet
         const rewardManager = await getContract('RewardManager', REWARD_MANAGER_ADDRESS, state.investorWallet);
         const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
-        
+
+
         // 获取分配信息
         console.log('[INFO] 获取分配信息...');
         const distribution = await rewardManager.getDistribution(distributionId);
         console.log('[INFO] 分配信息:', distribution);
-        
+
         // 检查分配是否存在
         if (!distribution) {
             throw new Error(`分配ID ${distributionId} 不存在`);
@@ -1061,7 +1071,7 @@ async function investorClaimReward(distributionId) {
         // 获取代币余额和总供应量
         const investorBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
         const totalSupply = await propertyTokenContract.totalSupply();
-        
+
         console.log('[INFO] 代币信息:');
         console.log(`- 投资者余额: ${ethers.formatUnits(investorBalance, 18)}`);
         console.log(`- 总供应量: ${ethers.formatUnits(totalSupply, 18)}`);
@@ -1074,7 +1084,7 @@ async function investorClaimReward(distributionId) {
         // 创建默克尔树数据
         const merkleData = {
             address: state.investorWallet.address,
-            amount: eligibleAmount
+            totalEligible: eligibleAmount
         };
 
         // 创建默克尔树
@@ -1086,6 +1096,21 @@ async function investorClaimReward(distributionId) {
         // 生成默克尔证明
         const merkleProof = merkleTree.getProof(merkleData);
         console.log('[INFO] 生成的默克尔证明:', merkleProof);
+
+
+        // 验证默克尔证明
+        console.log('[INFO] 开始合约验证默克尔证明...');
+        const isValidOnChain = await rewardManager.verifyMerkleProof(
+            distributionId,
+            state.investorWallet.address,
+            eligibleAmount,
+            merkleProof
+        );
+        console.log('[INFO] 合约验证结果:', isValidOnChain);
+
+        if (!isValidOnChain) {
+            throw new Error('合约验证默克尔证明失败');
+        }
 
         // 调用领取函数
         console.log('[INFO] 调用领取函数...');

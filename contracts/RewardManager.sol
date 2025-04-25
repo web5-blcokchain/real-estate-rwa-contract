@@ -406,9 +406,19 @@ contract RewardManager is
         // 验证累计提取不超过总分配金额
         require(_distributionTotalClaimed[distributionId] + amount <= distribution.totalAmount, "Exceeds total distribution amount");
         
+        // 生成叶子节点
+        bytes32 leaf = keccak256(abi.encodePacked(user, amount));
+        
         // 验证默克尔证明
-        //bytes32 leaf = keccak256(abi.encodePacked(user, totalEligible));
-        //require(MerkleProofUpgradeable.verify(merkleProof, distribution.merkleRoot, leaf), "Invalid merkle proof");
+        bool isValid;
+        if (merkleProof.length == 0) {
+            // 如果证明数组为空，说明只有一个节点，直接比较叶子节点和根节点
+            isValid = (leaf == distribution.merkleRoot);
+        } else {
+            // 如果有多个节点，使用默克尔证明验证
+            isValid = MerkleProofUpgradeable.verify(merkleProof, distribution.merkleRoot, leaf);
+        }
+        require(isValid, "Invalid merkle proof");
         
         // 更新已提取金额
         _userClaimedAmounts[distributionId][user] += amount;
