@@ -873,6 +873,131 @@
         }
       }
     },
+    "/api/v1/real-estate/token-approve": {
+      "post": {
+        "summary": "授权代币",
+        "description": "授权代币给指定地址",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "propertyId",
+                  "spender",
+                  "amount"
+                ],
+                "properties": {
+                  "propertyId": {
+                    "type": "string",
+                    "description": "房产ID"
+                  },
+                  "spender": {
+                    "type": "string",
+                    "description": "被授权地址"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "授权金额"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "授权成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate/token-allowance/{propertyId}/{owner}/{spender}": {
+      "get": {
+        "summary": "查询代币授权额度",
+        "description": "查询指定地址对代币的授权额度",
+        "tags": [
+          "RealEstateFacade"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "propertyId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房产ID"
+          },
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "代币所有者地址"
+          },
+          {
+            "in": "path",
+            "name": "spender",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "被授权地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reward/distributions": {
       "get": {
         "summary": "获取所有分配ID",
@@ -968,6 +1093,9 @@
                   "propertyId",
                   "amount",
                   "stablecoinAddress",
+                  "merkleRoot",
+                  "distributionType",
+                  "endTime",
                   "description"
                 ],
                 "properties": {
@@ -982,6 +1110,10 @@
                   "stablecoinAddress": {
                     "type": "string",
                     "description": "稳定币合约地址"
+                  },
+                  "merkleRoot": {
+                    "type": "string",
+                    "description": "默克尔根（32字节十六进制字符串）"
                   },
                   "distributionType": {
                     "type": "number",
@@ -1334,6 +1466,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误或合约错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reward/distribution/{distributionId}/all-users": {
+      "get": {
+        "summary": "获取特定分配ID下的所有用户分配信息和默克尔证明",
+        "description": "获取特定分配ID下的所有用户分配信息，包括默克尔证明",
+        "tags": [
+          "RewardManager"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "distributionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "分配ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取所有用户分配信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "distributionId": {
+                          "type": "string"
+                        },
+                        "merkleRoot": {
+                          "type": "string"
+                        },
+                        "totalAmount": {
+                          "type": "string"
+                        },
+                        "userCount": {
+                          "type": "number"
+                        },
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "address": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "string"
+                              },
+                              "proof": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

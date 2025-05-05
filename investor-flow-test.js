@@ -819,8 +819,9 @@ async function createDistribution() {
     
     // 检查管理员USDT余额
     const adminUsdtBalance = await usdtContract.balanceOf(state.adminWallet.address);
-    log.info(`管理员USDT余额: ${ethers.formatUnits(adminUsdtBalance, 18)}`);
-    
+    log.info(`管理员地址: ${state.adminWallet.address}`);
+
+    log.info(`管理员USDT余额: ${adminUsdtBalance}`);
     if (adminUsdtBalance < distributionAmount) {
         throw new Error(`管理员USDT余额不足，需要 ${ethers.formatUnits(distributionAmount, 18)}，实际有 ${ethers.formatUnits(adminUsdtBalance, 18)}`);
     }
@@ -848,8 +849,8 @@ async function createDistribution() {
             throw new Error(`USDT授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, 18)} 小于需要的 ${ethers.formatUnits(distributionAmount, 18)}`);
         }
     }
-    
-    // 添加USDT到支持的稳定币列表
+
+        // 添加USDT到支持的稳定币列表
     log.info(`添加USDT到支持的稳定币列表...`);
     try {
         const addTx = await rewardManagerContract.addSupportedStablecoin(USDT_ADDRESS);
@@ -949,6 +950,7 @@ async function createDistribution() {
       }
       throw txError;
     }
+
 
     return true;
   } catch (error) {
@@ -1097,6 +1099,11 @@ async function investorClaimReward(distributionId) {
         const merkleProof = merkleTree.getProof(merkleData);
         console.log('[INFO] 生成的默克尔证明:', merkleProof);
 
+
+            // 领取前的余额
+            const usdtContract1 = await getContract('SimpleERC20', USDT_ADDRESS, state.investorWallet);
+            const balance1 = await usdtContract1.balanceOf(state.investorWallet.address);
+            console.log('[INFO] 投资者领取前USDT余额:', ethers.formatUnits(balance1, 18));
 
         // 验证默克尔证明
         console.log('[INFO] 开始合约验证默克尔证明...');

@@ -16,6 +16,9 @@ router.get('/distribution/:distributionId', RewardManagerController.getDistribut
 // 获取用户分配信息 - 公开API，无需验证
 router.get('/distribution/:id/user/:address', RewardManagerController.getUserDistribution.bind(RewardManagerController));
 
+// 获取所有用户分配信息 - 公开API，无需验证
+router.get('/distribution/:distributionId/all-users', RewardManagerController.getAllUserDistributions.bind(RewardManagerController));
+
 // 创建分配 - 需要manager角色
 router.post('/create-distribution', 
   roleMiddleware(['manager', 'admin']), 

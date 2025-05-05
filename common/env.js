@@ -32,11 +32,9 @@ const ENV_KEYS = {
   CONTRACT_REALESTATEFACADE_ADDRESS: 'CONTRACT_REALESTATEFACADE_ADDRESS',
   CONTRACT_PROPERTYMANAGER_ADDRESS: 'CONTRACT_PROPERTYMANAGER_ADDRESS',
   CONTRACT_PROPERTYTOKEN_ADDRESS: 'CONTRACT_PROPERTYTOKEN_ADDRESS',
-  CONTRACT_TRADING_ADDRESS: 'CONTRACT_TRADING_ADDRESS',
-  CONTRACT_REWARD_ADDRESS: 'CONTRACT_REWARD_ADDRESS',
-  CONTRACT_ROLE_ADDRESS: 'CONTRACT_ROLE_ADDRESS',
   CONTRACT_TRADINGMANAGER_ADDRESS: 'CONTRACT_TRADINGMANAGER_ADDRESS',
   CONTRACT_REWARDMANAGER_ADDRESS: 'CONTRACT_REWARDMANAGER_ADDRESS',
+  CONTRACT_TESTTOKEN_ADDRESS: 'CONTRACT_TESTTOKEN_ADDRESS',
   
   // 日志配置
   LOG_LEVEL: 'LOG_LEVEL',
@@ -256,25 +254,22 @@ class EnvUtils {
 
   /**
    * 获取合约地址
-   * @param {string} contractName - 合约名称，不含Controller后缀
+   * @param {string} contractName - 合约名称
    * @returns {string} 合约地址
    */
   static getContractAddress(contractName) {
-    if (!contractName) {
-      throw new Error('合约名称不能为空');
+    // 将合约名称转换为大写并添加前缀
+    const envKey = `CONTRACT_${contractName.toUpperCase()}_ADDRESS`;
+    
+    // 获取环境变量值
+    const address = this.getString(envKey);
+    
+    if (!address) {
+      Logger.warn(`未找到合约地址配置: ${envKey}`);
+      return '';
     }
     
-    // 转换为大写并移除非字母数字字符，用于构建环境变量键名
-    const normalizedName = contractName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const envKey = `CONTRACT_${normalizedName}_ADDRESS`;
-    
-    // 检查是否存在于ENV_KEYS中
-    const isDefinedKey = Object.values(ENV_KEYS).includes(envKey);
-    if (!isDefinedKey) {
-      Logger.warn(`合约地址环境变量 ${envKey} 未在ENV_KEYS中定义`);
-    }
-    
-    return this.getString(envKey, '');
+    return address;
   }
 
   /**

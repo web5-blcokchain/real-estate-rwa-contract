@@ -3,7 +3,8 @@
  * 专注于分配、分红和奖励相关的功能
  */
 const BaseController = require('./BaseController');
-const { Logger, ContractUtils } = require('../../common');
+const { Logger, ContractUtils, EnvUtils, ProviderManager } = require('../../common');
+const { ethers } = require('ethers');
 
 class RewardManagerController extends BaseController {
   /**
@@ -216,6 +217,9 @@ class RewardManagerController extends BaseController {
    *               - propertyId
    *               - amount
    *               - stablecoinAddress
+   *               - merkleRoot
+   *               - distributionType
+   *               - endTime
    *               - description
    *             properties:
    *               propertyId:
@@ -227,6 +231,9 @@ class RewardManagerController extends BaseController {
    *               stablecoinAddress:
    *                 type: string
    *                 description: 稳定币合约地址
+   *               merkleRoot:
+   *                 type: string
+   *                 description: 默克尔根（32字节十六进制字符串）
    *               distributionType:
    *                 type: number
    *                 enum: [0, 1, 2]
@@ -254,77 +261,166 @@ class RewardManagerController extends BaseController {
    *               $ref: '#/components/schemas/Error'
    */
   async createDistribution(req, res) {
-    const { propertyId, amount, stablecoinAddress, distributionType = 0, endTime = 0, description } = req.body;
-    
-    // 验证必要参数
-    if (!this.validateRequired(res, { propertyId, amount, stablecoinAddress, description })) {
-      return;
-    }
-    
-    await this.handleContractAction(
-      res,
-      async () => {
-        try {
-          // 使用ContractUtils获取合约实例（manager角色）
-          const contract = ContractUtils.getContractForController('RewardManager', 'manager');
-          
-          // 空的默克尔根（创建时默认为空，后续可以更新）
-          const emptyMerkleRoot = '0x0000000000000000000000000000000000000000000000000000000000000000';
-          
-          // 调用合约方法创建分配
-          const tx = await contract.createDistribution(
-            propertyId,
-            amount,
-            stablecoinAddress,
-            emptyMerkleRoot,
-            distributionType,
-            endTime,
-            description
-          );
-          
-          // 等待交易确认
-          const receipt = await ContractUtils.waitForTransaction(tx);
-          
-          // 解析事件获取分配ID
-          let distributionId = null;
-          for (const log of receipt.logs) {
-            try {
-              const parsedLog = contract.interface.parseLog(log);
-              if (parsedLog && parsedLog.name === 'DistributionCreated') {
-                distributionId = parsedLog.args.distributionId.toString();
-                break;
-              }
-            } catch (e) {
-              // 忽略无法解析的日志
-            }
-          }
-          
-          if (!distributionId) {
-            Logger.warn('无法从事件中解析分配ID');
-          }
-          
-          return {
-            transactionHash: receipt.hash,
-            distributionId: distributionId || '未能获取分配ID',
-            propertyId,
-            amount,
-            stablecoinAddress,
-            distributionType
-          };
-        } catch (error) {
-          Logger.error(`创建分配时出错: ${error.message}`, {
-            propertyId,
-            amount,
-            stablecoinAddress,
-            error: error.stack
+    try {
+      const { propertyId, amount, stablecoinAddress, merkleRoot, distributionType, endTime, description } = req.body;
+      
+      if (!propertyId || !amount || !stablecoinAddress || !merkleRoot || distributionType === undefined || !endTime) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要参数'
+        });
+      }
+
+      // 验证地址格式
+      if (!ethers.isAddress(stablecoinAddress)) {
+        return res.status(400).json({
+          success: false,
+          message: '无效的稳定币地址格式'
+        });
+      }
+
+      // 获取 RPC URL
+      const rpcUrl = process.env.TESTNET_RPC_URL || 'http://localhost:8545';
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+      // 获取管理员私钥
+      const adminPrivateKey = process.env.ADMIN_PRIVATE_KEY;
+      if (!adminPrivateKey) {
+        return res.status(500).json({
+          success: false,
+          message: '未配置管理员私钥'
+        });
+      }
+
+      // 创建管理员钱包
+      const adminWallet = new ethers.Wallet(adminPrivateKey, provider);
+      const adminAddress = await adminWallet.getAddress();
+
+      // 获取 RewardManager 合约地址
+      const rewardManagerAddress = process.env.CONTRACT_REWARDMANAGER_ADDRESS;
+      if (!rewardManagerAddress) {
+        return res.status(500).json({
+          success: false,
+          message: '未配置 RewardManager 合约地址'
+        });
+      }
+
+      // 获取 RewardManager ABI
+      const rewardManagerAbi = require('../../artifacts/contracts/RewardManager.sol/RewardManager.json').abi;
+      const rewardManagerContract = new ethers.Contract(rewardManagerAddress, rewardManagerAbi, adminWallet);
+
+      // 获取 USDT 合约实例
+      const usdtAbi = require('../../artifacts/contracts/SimpleERC20.sol/SimpleERC20.json').abi;
+      const usdtContract = new ethers.Contract(stablecoinAddress, usdtAbi, adminWallet);
+
+      // 检查 USDT 余额
+      const usdtBalance = await usdtContract.balanceOf(adminAddress);
+      const distributionAmount = BigInt(amount);
+      
+      if (usdtBalance < distributionAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `USDT余额不足，需要 ${ethers.formatUnits(distributionAmount, 18)}，实际有 ${ethers.formatUnits(usdtBalance, 18)}`
+        });
+      }
+      
+      // 检查 USDT 授权额度
+      const currentAllowance = await usdtContract.allowance(adminAddress, rewardManagerAddress);
+      
+      // 如果授权额度不足，进行授权
+      if (currentAllowance < distributionAmount) {
+        // 先清零授权
+        const resetTx = await usdtContract.approve(rewardManagerAddress, 0);
+        await resetTx.wait();
+        
+        // 设置新的授权额度
+        const approveAmount = distributionAmount * BigInt(2); // 授权两倍所需金额
+        const approveTx = await usdtContract.approve(rewardManagerAddress, approveAmount);
+        await approveTx.wait();
+        
+        const newAllowance = await usdtContract.allowance(adminAddress, rewardManagerAddress);
+        if (newAllowance < distributionAmount) {
+          return res.status(400).json({
+            success: false,
+            message: `USDT授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, 18)} 小于需要的 ${ethers.formatUnits(distributionAmount, 18)}`
           });
+        }
+      }
+
+      // 添加 USDT 到支持的稳定币列表
+      try {
+        const addTx = await rewardManagerContract.addSupportedStablecoin(stablecoinAddress);
+        await addTx.wait();
+      } catch (error) {
+        // 如果已经添加过，忽略错误
+        if (!error.message.includes("already supported")) {
           throw error;
         }
-      },
-      `创建分配成功: ${propertyId}，金额: ${amount}`,
-      { propertyId, amount, stablecoinAddress },
-      `创建分配失败: ${propertyId}`
-    );
+      }
+      
+      // 创建收益分配
+      const tx = await rewardManagerContract.createDistribution(
+        propertyId,
+        amount,
+        stablecoinAddress,
+        merkleRoot,
+        distributionType,
+        endTime,
+        description,
+        { gasLimit: 500000 }
+      );
+      
+      const receipt = await tx.wait();
+      
+      // 从事件中获取分配ID
+      const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'DistributionCreated');
+      let distributionId;
+      if (event) {
+        distributionId = event.args.distributionId;
+      } else {
+        // 如果找不到事件，尝试获取最新的分配ID
+        const distributionCount = await rewardManagerContract.getDistributionCount(propertyId);
+        distributionId = distributionCount - BigInt(1);
+      }
+
+      // 更新分配状态为Active
+      const updateStatusTx = await rewardManagerContract.updateDistributionStatus(
+        distributionId,
+        1 // 1 = Active
+      );
+      await updateStatusTx.wait();
+      
+      // 获取分配详情
+      const distribution = await rewardManagerContract.getDistribution(distributionId);
+      
+      return res.json({
+        success: true,
+        data: {
+          distributionId: distributionId.toString(),
+          transactionHash: tx.hash,
+          distributionDetails: {
+            propertyId: distribution[6],
+            tokenAddress: distribution[7],
+            totalAmount: distribution[8].toString(),
+            merkleRoot: distribution[9],
+            distributionType: Number(distribution[2]),
+            status: Number(distribution[1]),
+            createTime: Number(distribution[3]),
+            startTime: Number(distribution[4]),
+            endTime: Number(distribution[5]),
+            description: distribution[10]
+          },
+          message: "分配创建成功，请使用 updateMerkleRoot 接口更新收益人信息和默克尔证明"
+        }
+      });
+    } catch (error) {
+      Logger.error('创建分配失败', error);
+      return res.status(500).json({
+        success: false,
+        message: '创建分配失败',
+        error: error.message
+      });
+    }
   }
 
   /**
@@ -385,8 +481,11 @@ class RewardManagerController extends BaseController {
           throw new Error('默克尔根格式无效，必须是以0x开头的32字节十六进制字符串');
         }
         
+        // 确保只有一个 0x 前缀
+        const cleanMerkleRoot = merkleRoot.startsWith('0x0x') ? '0x' + merkleRoot.substring(4) : merkleRoot;
+        
         // 调用合约方法更新默克尔根
-        const tx = await contract.updateMerkleRoot(distributionId, merkleRoot);
+        const tx = await contract.updateMerkleRoot(distributionId, cleanMerkleRoot);
         
         // 等待交易确认
         const receipt = await ContractUtils.waitForTransaction(tx);
@@ -687,7 +786,9 @@ class RewardManagerController extends BaseController {
       res,
       async () => {
         // 使用ContractUtils获取合约实例
-        const contract = ContractUtils.getReadonlyContractWithProvider('RewardManager');
+        const contractAddress = EnvUtils.getContractAddress('RewardManager');
+        const provider = ProviderManager.getDefaultProvider();
+        const contract = ContractUtils.getReadonlyContractWithProvider('RewardManager', contractAddress, provider);
         
         // 获取分配信息
         const onChainDistribution = await contract.getDistribution(id);
@@ -702,7 +803,34 @@ class RewardManagerController extends BaseController {
         
         // 从本地获取用户分配详情
         const merkleDistributionUtils = require('../utils/merkleDistributionUtils');
-        const userDistribution = merkleDistributionUtils.getUserDistributionDetails(id, address);
+        
+        try {
+          // 尝试加载本地数据
+          var userDistribution = merkleDistributionUtils.getUserDistributionDetails(id, address);
+        } catch (error) {
+          // 如果本地数据不存在，生成新的分配数据
+          if (error.message.includes('Distribution data not found')) {
+            // 获取代币合约地址
+            const tokenAddress = onChainDistribution[7];
+            const totalAmount = onChainDistribution[8].toString();
+            
+            // 生成分配树
+            const treeData = await merkleDistributionUtils.generateDistributionTree(
+              onChainDistribution[6], // propertyId
+              tokenAddress,
+              totalAmount,
+              provider
+            );
+            
+            // 保存分配数据
+            merkleDistributionUtils.saveDistributionData(id, treeData);
+            
+            // 重新获取用户分配详情
+            userDistribution = merkleDistributionUtils.getUserDistributionDetails(id, address);
+          } else {
+            throw error;
+          }
+        }
         
         if (!userDistribution) {
           return {
@@ -805,6 +933,116 @@ class RewardManagerController extends BaseController {
       `回收未领取资金成功: 分配ID=${id}, 接收地址=${receiver}`,
       { id, receiver },
       `回收未领取资金失败: 分配ID=${id}`
+    );
+  }
+
+  /**
+   * @swagger
+   * /api/v1/reward/distribution/{distributionId}/all-users:
+   *   get:
+   *     summary: 获取特定分配ID下的所有用户分配信息和默克尔证明
+   *     description: 获取特定分配ID下的所有用户分配信息，包括默克尔证明
+   *     tags: [RewardManager]
+   *     parameters:
+   *       - in: path
+   *         name: distributionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: 分配ID
+   *     responses:
+   *       200:
+   *         description: 成功获取所有用户分配信息
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     distributionId:
+   *                       type: string
+   *                     merkleRoot:
+   *                       type: string
+   *                     totalAmount:
+   *                       type: string
+   *                     userCount:
+   *                       type: number
+   *                     users:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           address:
+   *                             type: string
+   *                           amount:
+   *                             type: string
+   *                           proof:
+   *                             type: array
+   *                             items:
+   *                               type: string
+   *       400:
+   *         description: 参数错误或合约错误
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  async getAllUserDistributions(req, res) {
+    const { distributionId } = req.params;
+    
+    if (!distributionId) {
+      return this.sendError(res, '缺少分配ID参数', 400);
+    }
+    
+    await this.handleContractAction(
+      res,
+      async () => {
+        // 使用ContractUtils获取合约实例
+        const contract = ContractUtils.getReadonlyContractWithProvider('RewardManager');
+        
+        // 获取分配信息
+        const distribution = await contract.getDistribution(distributionId);
+        
+        // 检查分配是否存在
+        if (!distribution || !distribution[0]) {
+          throw new Error('未找到分配信息');
+        }
+        
+        // 获取代币合约地址
+        const tokenAddress = distribution[7];
+        
+        // 获取代币持有者信息
+        const merkleDistributionUtils = require('../utils/merkleDistributionUtils');
+        const userBalances = await merkleDistributionUtils.getTokenHolders(tokenAddress);
+        
+        // 生成默克尔树
+        const treeData = merkleDistributionUtils.generateMerkleTree(
+          userBalances,
+          distribution[8].toString() // totalAmount
+        );
+        
+        // 格式化返回数据
+        const users = Object.entries(treeData.claims).map(([address, claim]) => ({
+          address,
+          amount: claim.amount,
+          proof: claim.proof
+        }));
+        
+        return {
+          distributionId,
+          merkleRoot: treeData.merkleRoot,
+          totalAmount: treeData.totalAmount,
+          userCount: treeData.userCount,
+          users
+        };
+      },
+      `获取所有用户分配信息成功: ID=${distributionId}`,
+      { distributionId },
+      `获取所有用户分配信息失败: ID=${distributionId}`
     );
   }
 }

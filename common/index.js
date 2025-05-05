@@ -22,6 +22,7 @@ module.exports = {
   AbiUtils: Blockchain.AbiUtils,
   ContractUtils: Blockchain.ContractUtils,
   BlockchainManager: Blockchain.BlockchainManager,
+  ProviderManager: Blockchain.ProviderManager,
   
   // 完整的区块链模块
   Blockchain,

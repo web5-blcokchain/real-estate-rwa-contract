@@ -3,10 +3,9 @@ const path = require('path');
 const { MerkleTree } = require('merkletreejs');
 const keccak256 = require('keccak256');
 const ethers = require('ethers');
-const { ContractUtils } = require('../../common/blockchain/contract');
-const Logger = require('../../common/logger');
+const { ContractUtils, Logger } = require('../../common');
 
-const logger = Logger.getInstance('MerkleDistributionUtils');
+const logger = Logger;
 const DATA_DIR = path.join(__dirname, '../../data/distributions');
 
 // 确保目录存在
@@ -66,7 +65,9 @@ class MerkleDistributionUtils {
     });
     
     const root = merkleTree.getHexRoot();
-    logger.info(`Generated Merkle tree with root: ${root}`);
+    // 确保只有一个 0x 前缀
+    const merkleRoot = root.startsWith('0x') ? root : '0x' + root;
+    logger.info(`Generated Merkle tree with root: ${merkleRoot}`);
     
     // 为每个用户添加证明
     addresses.forEach(address => {
@@ -75,7 +76,7 @@ class MerkleDistributionUtils {
     });
     
     return {
-      merkleRoot: root,
+      merkleRoot: merkleRoot,
       claims,
       totalAmount: totalAmount.toString(),
       totalSupply: totalSupply.toString(),
@@ -107,16 +108,18 @@ class MerkleDistributionUtils {
   /**
    * 获取代币持有者信息
    * @param {String} tokenAddress - 代币合约地址
+   * @param {Object} provider - 区块链提供者
    * @returns {Promise<Object>} - 用户余额映射 {address: balance}
    */
-  static async getTokenHolders(tokenAddress) {
+  static async getTokenHolders(tokenAddress, provider) {
     try {
       logger.info(`Fetching token holders for token: ${tokenAddress}`);
       
       // 获取ERC20合约
       const erc20Contract = await ContractUtils.getReadonlyContractWithProvider(
-        'ERC20',
-        tokenAddress
+        'SimpleERC20',
+        tokenAddress,
+        provider
       );
       
       // 获取转账事件以找到所有可能的持有者
@@ -160,14 +163,15 @@ class MerkleDistributionUtils {
    * @param {String} propertyId - 物业ID
    * @param {String} tokenAddress - 代币合约地址
    * @param {BigInt|String} totalAmount - 总分配金额
+   * @param {Object} provider - 区块链提供者
    * @returns {Promise<Object>} - 默克尔树数据
    */
-  static async generateDistributionTree(propertyId, tokenAddress, totalAmount) {
+  static async generateDistributionTree(propertyId, tokenAddress, totalAmount, provider) {
     try {
       logger.info(`Generating distribution tree for property ${propertyId}`);
       
       // 获取代币持有者信息
-      const userBalances = await this.getTokenHolders(tokenAddress);
+      const userBalances = await this.getTokenHolders(tokenAddress, provider);
       
       // 生成默克尔树
       const treeData = this.generateMerkleTree(userBalances, totalAmount);

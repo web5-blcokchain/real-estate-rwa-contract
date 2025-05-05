@@ -47,4 +47,10 @@ router.post('/create-buy-order',
 // 注释: 分红提取相关功能已移至reward路由模块
 // 请使用 /api/reward/distribution/:id/withdraw 端点
 
+// 代币授权
+router.post('/token-approve', authMiddleware, RealEstateFacadeController.approveToken.bind(RealEstateFacadeController));
+
+// 查询代币授权额度
+router.get('/token-allowance/:propertyId/:owner/:spender', RealEstateFacadeController.getTokenAllowance.bind(RealEstateFacadeController));
+
 module.exports = router; 

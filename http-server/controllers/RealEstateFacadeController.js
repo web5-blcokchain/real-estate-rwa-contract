@@ -871,6 +871,173 @@ class RealEstateFacadeController extends BaseController {
     );
   }
 
+  /**
+   * @swagger
+   * /api/v1/real-estate/token-approve:
+   *   post:
+   *     summary: 授权代币
+   *     description: 授权代币给指定地址
+   *     tags: [RealEstateFacade]
+   *     security:
+   *       - ApiKeyAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - propertyId
+   *               - spender
+   *               - amount
+   *             properties:
+   *               propertyId:
+   *                 type: string
+   *                 description: 房产ID
+   *               spender:
+   *                 type: string
+   *                 description: 被授权地址
+   *               amount:
+   *                 type: string
+   *                 description: 授权金额
+   *     responses:
+   *       200:
+   *         description: 授权成功
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: 参数错误或合约错误
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  async approveToken(req, res) {
+    const { propertyId, spender, amount } = req.body;
+    
+    // 验证必要参数
+    if (!this.validateRequired(res, { propertyId, spender, amount })) {
+      return;
+    }
+    
+    await this.handleContractAction(
+      res,
+      async () => {
+        // 使用ContractUtils获取合约实例
+        const contract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
+        
+        // 获取代币地址
+        const tokenAddress = await contract.getPropertyTokenAddress(propertyId);
+        
+        if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+          throw new Error(`房产ID ${propertyId} 没有关联的代币`);
+        }
+        
+        // 获取ERC20代币合约实例
+        const tokenContract = await ContractUtils.getContract('SimpleERC20', tokenAddress, contract.runner);
+        
+        // 执行授权
+        const tx = await tokenContract.approve(spender, amount);
+        const receipt = await ContractUtils.waitForTransaction(tx);
+        
+        return {
+          transactionHash: receipt.hash,
+          propertyId,
+          tokenAddress,
+          spender,
+          amount
+        };
+      },
+      `代币授权成功: 房产=${propertyId}, 授权地址=${spender}`,
+      { propertyId, spender, amount },
+      `代币授权失败: 房产=${propertyId}, 授权地址=${spender}`
+    );
+  }
+
+  /**
+   * @swagger
+   * /api/v1/real-estate/token-allowance/{propertyId}/{owner}/{spender}:
+   *   get:
+   *     summary: 查询代币授权额度
+   *     description: 查询指定地址对代币的授权额度
+   *     tags: [RealEstateFacade]
+   *     parameters:
+   *       - in: path
+   *         name: propertyId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: 房产ID
+   *       - in: path
+   *         name: owner
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: 代币所有者地址
+   *       - in: path
+   *         name: spender
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: 被授权地址
+   *     responses:
+   *       200:
+   *         description: 查询成功
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: 参数错误或合约错误
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  async getTokenAllowance(req, res) {
+    try {
+      const { propertyId, owner, spender } = req.params;
+      
+      if (!propertyId || !owner || !spender) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要参数'
+        });
+      }
+
+      // 获取 RealEstateFacade 合约实例
+      const contract = await ContractUtils.getContractForController('RealEstateFacade', 'admin');
+      
+      // 获取代币地址
+      const tokenAddress = await contract.getPropertyTokenAddress(propertyId);
+      
+      // 获取 ERC20 合约实例
+      const tokenContract = await ContractUtils.getReadonlyContractWithProvider('SimpleERC20', tokenAddress, contract.runner.provider);
+      
+      // 查询授权额度
+      const allowance = await tokenContract.allowance(owner, spender);
+      
+      return res.json({
+        success: true,
+        data: {
+          tokenAddress,
+          owner,
+          spender,
+          allowance: allowance.toString()
+        }
+      });
+    } catch (error) {
+      Logger.error('获取代币授权额度失败', error);
+      return res.status(500).json({
+        success: false,
+        message: '获取代币授权额度失败',
+        error: error.message
+      });
+    }
+  }
+
   /** 
    * 注意：所有分红相关功能已移至RewardManagerController
    * 已移除的方法包括：
