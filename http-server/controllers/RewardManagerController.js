@@ -271,6 +271,9 @@ class RewardManagerController extends BaseController {
         });
       }
 
+      // 确保 propertyId 是字符串类型
+      const propertyIdStr = String(propertyId);
+
       // 验证地址格式
       if (!ethers.isAddress(stablecoinAddress)) {
         return res.status(400).json({
@@ -360,7 +363,7 @@ class RewardManagerController extends BaseController {
       
       // 创建收益分配
       const tx = await rewardManagerContract.createDistribution(
-        propertyId,
+        propertyIdStr,
         amount,
         stablecoinAddress,
         merkleRoot,
@@ -379,7 +382,7 @@ class RewardManagerController extends BaseController {
         distributionId = event.args.distributionId;
       } else {
         // 如果找不到事件，尝试获取最新的分配ID
-        const distributionCount = await rewardManagerContract.getDistributionCount(propertyId);
+        const distributionCount = await rewardManagerContract.getDistributionCount(propertyIdStr);
         distributionId = distributionCount - BigInt(1);
       }
 
