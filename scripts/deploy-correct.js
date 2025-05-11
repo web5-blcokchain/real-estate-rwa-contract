@@ -29,6 +29,7 @@ function generateDeploymentReport(contracts) {
 ## 基本信息
 - 部署时间: ${timestamp}
 - 网络: ${network}
+- RPC URL: ${hre.network.config.url}
 - 部署账户: ${contracts.deployerAddress}
 
 ## 角色账户信息
@@ -571,7 +572,7 @@ async function deploy() {
     
     // 6. 设置交易管理器参数
     logger.info("步骤6: 配置交易参数...");
-    tx = await tradingManager.setMaxTradeAmount(1000);
+    tx = await tradingManager.setMaxTradeAmount(100000000);
     await tx.wait();
     tx = await tradingManager.setMinTradeAmount(1);
     await tx.wait();
