@@ -43,9 +43,11 @@ class MerkleDistributionUtils {
       const userAmount = (userBalance * BigInt(totalAmount)) / totalSupply;
       
       // 创建叶子节点: keccak256(address + amount)
-      const leaf = ethers.solidityPackedKeccak256(
-        ['address', 'uint256'],
-        [address, userAmount.toString()]
+      const leaf = ethers.keccak256(
+        ethers.concat([
+          ethers.zeroPadValue(address, 32),
+          ethers.zeroPadValue(ethers.toBeHex(userAmount), 32)
+        ])
       );
       
       leafNodes.push(leaf);
@@ -95,9 +97,11 @@ class MerkleDistributionUtils {
    */
   static verifyProof(userAddress, amount, proof, merkleRoot) {
     // 创建叶子节点: keccak256(address + amount)
-    const leaf = ethers.solidityPackedKeccak256(
-      ['address', 'uint256'],
-      [userAddress, amount]
+    const leaf = ethers.keccak256(
+      ethers.concat([
+        ethers.zeroPadValue(userAddress, 32),
+        ethers.zeroPadValue(ethers.toBeHex(amount), 32)
+      ])
     );
     
     // 验证证明

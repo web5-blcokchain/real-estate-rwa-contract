@@ -643,10 +643,10 @@ class RewardManagerController extends BaseController {
    */
   async withdrawMerkleDistribution(req, res) {
     const { id } = req.params;
-    const { userAddress, amount } = req.body;
+    const { userAddress, amount, merkleProof } = req.body;
     
     // 验证必要参数
-    if (!this.validateRequired(res, { id, userAddress, amount })) {
+    if (!this.validateRequired(res, { id, userAddress, amount, merkleProof })) {
       return;
     }
     
@@ -654,8 +654,14 @@ class RewardManagerController extends BaseController {
       res,
       async () => {
         try {
+          // 获取合约地址
+          const contractAddress = EnvUtils.getContractAddress('RewardManager');
+          if (!contractAddress) {
+            throw new Error('RewardManager合约地址未配置');
+          }
+
           // 验证分配是否存在
-          const rewardManagerContract = ContractUtils.getReadonlyContractWithProvider('RewardManager');
+          const rewardManagerContract = ContractUtils.getReadonlyContractWithProvider('RewardManager', contractAddress, ProviderManager.getDefaultProvider());
           const distribution = await rewardManagerContract.getDistribution(id);
           
           if (!distribution || !distribution[0]) {
@@ -667,21 +673,9 @@ class RewardManagerController extends BaseController {
             throw new Error(`分配ID ${id} 不处于激活状态，当前状态: ${distribution[1]}`);
           }
           
-          // 从本地获取用户分配详情
-          const merkleDistributionUtils = require('../utils/merkleDistributionUtils');
-          const userDistribution = merkleDistributionUtils.getUserDistributionDetails(id, userAddress);
-          
-          if (!userDistribution) {
-            throw new Error(`用户 ${userAddress} 在分配 ${id} 中没有分配`);
-          }
-          
           // 验证金额
           if (BigInt(amount) <= 0) {
             throw new Error('提取金额必须大于0');
-          }
-          
-          if (BigInt(amount) > BigInt(userDistribution.amount)) {
-            throw new Error(`请求金额超过分配金额，最大可用: ${userDistribution.amount}`);
           }
           
           // 使用ContractUtils获取合约实例（operator角色）
@@ -691,21 +685,42 @@ class RewardManagerController extends BaseController {
           const claimedAmount = await contract.getUserClaimedAmount(id, userAddress);
           Logger.info(`用户 ${userAddress} 已领取金额: ${claimedAmount.toString()}, 请求领取: ${amount}`);
           
-          // 检查是否超过可提取金额
-          if (BigInt(claimedAmount) + BigInt(amount) > BigInt(userDistribution.amount)) {
-            throw new Error(`金额超过剩余可分配金额，已领取: ${claimedAmount.toString()}, 剩余可领: ${BigInt(userDistribution.amount) - BigInt(claimedAmount)}`);
-          }
-          
-          // 验证用户证明
-          const isProofValid = merkleDistributionUtils.verifyProof(
-            userAddress, 
-            userDistribution.amount, 
-            userDistribution.proof, 
-            userDistribution.merkleRoot
-          );
-          
-          if (!isProofValid) {
-            throw new Error('用户提供的Merkle证明无效');
+          // 验证默克尔证明
+          try {
+            Logger.info('开始验证默克尔证明', {
+              distributionId: id,
+              userAddress,
+              amount,
+              merkleProof
+            });
+
+            const isValid = await contract.verifyMerkleProof(
+              id,
+              userAddress,
+              amount,
+              merkleProof
+            );
+            
+            Logger.info('默克尔证明验证结果', {
+              distributionId: id,
+              userAddress,
+              amount,
+              isValid
+            });
+            
+            if (!isValid) {
+              throw new Error('合约验证Merkle证明失败');
+            }
+          } catch (error) {
+            Logger.error('验证默克尔证明时出错', {
+              error: error.message,
+              distributionId: id,
+              userAddress,
+              amount,
+              merkleProof,
+              stack: error.stack
+            });
+            throw new Error(`验证默克尔证明失败: ${error.message}`);
           }
           
           Logger.info(`用户证明验证通过，准备提取分配，用户: ${userAddress}, 金额: ${amount}, 分配ID: ${id}`);
@@ -715,8 +730,8 @@ class RewardManagerController extends BaseController {
             id,
             userAddress,
             amount,
-            userDistribution.amount,
-            userDistribution.proof
+            amount, // 使用相同的金额作为totalEligible
+            merkleProof
           );
           
           // 等待交易确认
@@ -1004,8 +1019,18 @@ class RewardManagerController extends BaseController {
     await this.handleContractAction(
       res,
       async () => {
+        // 获取合约地址
+        const contractAddress = EnvUtils.getContractAddress('RewardManager');
+        if (!contractAddress) {
+          throw new Error('RewardManager合约地址未配置');
+        }
+
         // 使用ContractUtils获取合约实例
-        const contract = ContractUtils.getReadonlyContractWithProvider('RewardManager');
+        const contract = ContractUtils.getReadonlyContractWithProvider(
+          'RewardManager',
+          contractAddress,
+          ProviderManager.getDefaultProvider()
+        );
         
         // 获取分配信息
         const distribution = await contract.getDistribution(distributionId);
@@ -1020,7 +1045,7 @@ class RewardManagerController extends BaseController {
         
         // 获取代币持有者信息
         const merkleDistributionUtils = require('../utils/merkleDistributionUtils');
-        const userBalances = await merkleDistributionUtils.getTokenHolders(tokenAddress);
+        const userBalances = await merkleDistributionUtils.getTokenHolders(tokenAddress, ProviderManager.getDefaultProvider());
         
         // 生成默克尔树
         const treeData = merkleDistributionUtils.generateMerkleTree(

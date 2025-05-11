@@ -466,16 +466,16 @@ async function  createBuyOrder() {
     }
     
     // 设置购买参数
-    const purchaseAmount = ethers.parseUnits("1", 18); // 购买1个代币
+    const purchaseAmount = BigInt(1); // 直接使用整数1，不带小数
     const tokenPrice = BigInt(3); // 3 USDT 每个代币
     const requiredUsdt = purchaseAmount * tokenPrice;
     
     log.info(`购买信息:`);
     log.info(`- 房产ID: ${state.propertyId}`);
     log.info(`- 代币: ${state.tokenSymbol}`);
-    log.info(`- 数量: ${ethers.formatUnits(purchaseAmount, 18)}`);
+    log.info(`- 数量: ${purchaseAmount}`);
     log.info(`- 价格: ${tokenPrice} USDT/代币`);
-    log.info(`- 需要 USDT: ${ethers.formatUnits(requiredUsdt, 18)} USDT`);
+    log.info(`- 需要 USDT: ${requiredUsdt} USDT`);
     
     // 检查 USDT 余额
     const usdtBalance = await usdtContract.balanceOf(investorAddress);
