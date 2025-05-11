@@ -25,13 +25,13 @@ async function main() {
     const propertyTokenAddress = "0x2fdd5298ebcf286431b05fcd4ba925317fff3d74"; // 从错误信息中获取
     
     // 创建卖单参数 - 确保金额满足最小要求
-    const amount = ethers.parseUnits("10", 18); // 10个代币
-    const price = ethers.parseUnits("100", 18); // 100单位价格
+    const amount = 10; // 10个代币，直接用整数
+    const price = 100; // 100单位价格，直接用整数
     
     console.log("创建卖单参数:");
     console.log(`- 代币地址: ${propertyTokenAddress}`);
-    console.log(`- 数量: ${ethers.formatUnits(amount, 18)} (原始值: ${amount})`);
-    console.log(`- 价格: ${ethers.formatUnits(price, 18)} (原始值: ${price})`);
+    console.log(`- 数量: ${amount} 份`);
+    console.log(`- 价格: ${price} 单位`);
     
     // 创建卖单
     console.log("\n发送交易...");

@@ -45,8 +45,8 @@ const TEST_PROPERTY_SYMBOL = "TKO";
 const TEST_PROPERTY_COUNTRY = "Japan";
 const TEST_PROPERTY_METADATA_URI = "ipfs://QmTestPropertyMetadata";
 const TEST_PROPERTY_INITIAL_VALUATION = ethers.parseUnits("1000000", 18); // 100万 USDT
-const TEST_PROPERTY_TOKEN_PRICE = ethers.parseUnits("1", 18); // 每个代币 1 USDT
-const TEST_PROPERTY_INITIAL_SUPPLY = ethers.parseUnits("1000000", 18); // 100万 个代币
+const TEST_PROPERTY_TOKEN_PRICE = 1; // 每个代币 1 USDT（整数）
+const TEST_PROPERTY_INITIAL_SUPPLY = 1000000; // 100万 个代币（整数）
 
 // 日志工具
 const log = {
@@ -69,7 +69,7 @@ const state = {
   propertyToken: null,
   tokenSymbol: null,
   tokenName: null,
-  tokenDecimals: 18,
+  tokenDecimals: 0, // PropertyToken 份额为整数
   sellOrderId: null,
   buyOrderId: null,
   distributionId: null
@@ -220,9 +220,9 @@ async function registerProperty() {
     log.info(`- 名称: ${TEST_PROPERTY_NAME}`);
     log.info(`- 符号: ${TEST_PROPERTY_SYMBOL}`);
     log.info(`- 国家: ${TEST_PROPERTY_COUNTRY}`);
-    log.info(`- 初始供应量: ${ethers.formatUnits(TEST_PROPERTY_INITIAL_SUPPLY)}`);
+    log.info(`- 初始供应量: ${TEST_PROPERTY_INITIAL_SUPPLY}`);
     log.info(`- 初始估值: ${ethers.formatUnits(TEST_PROPERTY_INITIAL_VALUATION)} USDT`);
-    log.info(`- 代币单价: ${ethers.formatUnits(TEST_PROPERTY_TOKEN_PRICE)} USDT`);
+    log.info(`- 代币单价: ${TEST_PROPERTY_TOKEN_PRICE} USDT`);
     
     const registerTx = await facadeContract.registerPropertyAndCreateToken(
       state.propertyId,
@@ -342,18 +342,18 @@ async function createSellOrder() {
     const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
     
     // 创建卖单参数
-    const tokenAmount = ethers.parseUnits("2", 18); // 2 个代币，需要18位精度
-    const tokenPrice = BigInt(3); // 3 USDT 每个代币
+    const tokenAmount = 2; // 2 个代币，整数
+    const tokenPrice = 3; // 3 USDT 每个代币，整数
     
     log.info("创建卖单参数:");
     log.info(`- 代币地址: ${state.propertyTokenAddress}`);
     log.info(`- 房产ID: ${state.propertyId}`);
-    log.info(`- 数量: ${ethers.formatUnits(tokenAmount, 18)} 个代币`);
-    log.info(`- 价格: ${tokenPrice} USDT/代币`);
+    log.info(`- 数量: ${tokenAmount} 份`);
+    log.info(`- 价格: ${tokenPrice} USDT/份`);
     
     // 检查操作者代币余额
     const operatorTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
-    log.info(`操作者代币余额: ${ethers.formatUnits(operatorTokenBalance, 18)} 个代币`);
+    log.info(`操作者代币余额: ${operatorTokenBalance} 份`);
     
     // 检查当前代币授权额度
     const currentTokenAllowance = await propertyTokenContract.allowance(
@@ -361,11 +361,11 @@ async function createSellOrder() {
       TRADING_MANAGER_ADDRESS
     );
     
-    log.info(`当前代币授权额度: ${ethers.formatUnits(currentTokenAllowance, 18)}`);
+    log.info(`当前代币授权额度: ${currentTokenAllowance} 份`);
     
     // 如果代币授权额度不足，进行授权
     if (currentTokenAllowance < tokenAmount) {
-      log.info(`授权代币... 授权数量: ${ethers.formatUnits(tokenAmount, 18)}`);
+      log.info(`授权代币... 授权数量: ${tokenAmount} 份`);
       const tokenApproveTx = await propertyTokenContract.approve(
         TRADING_MANAGER_ADDRESS,
         tokenAmount
@@ -378,10 +378,10 @@ async function createSellOrder() {
         state.investorWallet.address,
         TRADING_MANAGER_ADDRESS
       );
-      log.info(`新的代币授权额度: ${ethers.formatUnits(newAllowance, 18)}`);
+      log.info(`新的代币授权额度: ${newAllowance} 份`);
       
       if (newAllowance < tokenAmount) {
-        throw new Error(`代币授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, 18)} 小于需要的 ${ethers.formatUnits(tokenAmount, 18)}`);
+        throw new Error(`代币授权失败，当前授权额度 ${newAllowance} 小于需要的 ${tokenAmount}`);
       }
     } else {
       log.info("代币授权额度充足，无需重新授权");
@@ -390,7 +390,7 @@ async function createSellOrder() {
     // 创建卖单前检查余额
     const beforeTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
     log.info("\n创建卖单前余额:");
-    log.info(`- 代币余额: ${ethers.formatUnits(beforeTokenBalance, 18)} 个代币`);
+    log.info(`- 代币余额: ${beforeTokenBalance} 份`);
     
     // 创建卖单
     log.info("\n发送交易...");
@@ -413,12 +413,12 @@ async function createSellOrder() {
     // 创建卖单后检查余额
     const afterTokenBalance = await propertyTokenContract.balanceOf(state.investorWallet.address);
     log.info("\n创建卖单后余额:");
-    log.info(`- 代币余额: ${ethers.formatUnits(afterTokenBalance, 18)} 个代币`);
+    log.info(`- 代币余额: ${afterTokenBalance} 份`);
     
     // 计算余额变化
     const tokenChange = beforeTokenBalance - afterTokenBalance;
     log.info("\n余额变化:");
-    log.info(`- 代币变化: ${ethers.formatUnits(tokenChange, 18)} 个代币`);
+    log.info(`- 代币变化: ${tokenChange} 份`);
     
     // 输出成功信息
     log.success("卖单创建成功!");
@@ -534,7 +534,7 @@ async function  createBuyOrder() {
     const beforeTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.info("\n创建买单前余额:");
     log.info(`- USDT 余额: ${ethers.formatUnits(beforeUsdtBalance, 18)} USDT`);
-    log.info(`- 代币余额: ${ethers.formatUnits(beforeTokenBalance, 18)} 个代币`);
+    log.info(`- 代币余额: ${ethers.formatUnits(beforeTokenBalance, 18)} 份`);
     
     // 创建买单
     log.info("\n发送交易...");
@@ -557,14 +557,14 @@ async function  createBuyOrder() {
     const afterTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.info("\n创建买单后余额:");
     log.info(`- USDT 余额: ${ethers.formatUnits(afterUsdtBalance, 18)} USDT`);
-    log.info(`- 代币余额: ${ethers.formatUnits(afterTokenBalance, 18)} 个代币`);
+    log.info(`- 代币余额: ${ethers.formatUnits(afterTokenBalance, 18)} 份`);
     
     // 计算余额变化
     const usdtChange = beforeUsdtBalance - afterUsdtBalance;
     const tokenChange = afterTokenBalance - beforeTokenBalance;
     log.info("\n余额变化:");
     log.info(`- USDT 变化: ${ethers.formatUnits(usdtChange, 18)} USDT`);
-    log.info(`- 代币变化: ${ethers.formatUnits(tokenChange, 18)} 个代币`);
+    log.info(`- 代币变化: ${ethers.formatUnits(tokenChange, 18)} 份`);
     
     return true;
   } catch (error) {

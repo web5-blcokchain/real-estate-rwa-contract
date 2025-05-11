@@ -267,10 +267,10 @@ async function verifyDeployment(contracts) {
     // 验证交易参数
     logger.info("交易参数:");
     const maxTradeAmount = await contracts.tradingManager.maxTradeAmount();
-    logger.info(`- 最大交易金额: ${ethers.formatEther(maxTradeAmount)} ETH`);
+    logger.info(`- 最大交易金额: ${maxTradeAmount} 份`);
     
     const minTradeAmount = await contracts.tradingManager.minTradeAmount();
-    logger.info(`- 最小交易金额: ${ethers.formatEther(minTradeAmount)} ETH`);
+    logger.info(`- 最小交易金额: ${minTradeAmount} 份`);
     
     const cooldownPeriod = await contracts.tradingManager.cooldownPeriod();
     logger.info(`- 冷却期: ${cooldownPeriod} 秒`);
@@ -571,9 +571,9 @@ async function deploy() {
     
     // 6. 设置交易管理器参数
     logger.info("步骤6: 配置交易参数...");
-    tx = await tradingManager.setMaxTradeAmount(ethers.parseEther("1000"));
+    tx = await tradingManager.setMaxTradeAmount(1000);
     await tx.wait();
-    tx = await tradingManager.setMinTradeAmount(ethers.parseEther("0.01"));
+    tx = await tradingManager.setMinTradeAmount(1);
     await tx.wait();
     tx = await tradingManager.setCooldownPeriod(10);
     await tx.wait();

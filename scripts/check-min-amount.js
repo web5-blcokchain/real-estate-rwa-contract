@@ -16,11 +16,11 @@ async function main() {
     
     // 检查最小交易金额
     const minTradeAmount = await tradingManager.getMinTradeAmount();
-    console.log(`合约设置的最小交易金额: ${ethers.formatUnits(minTradeAmount, 18)} (原始值: ${minTradeAmount})`);
+    console.log(`合约设置的最小交易金额: ${minTradeAmount} 份`);
     
     // 我们在脚本中传入的值
-    const ourAmount = ethers.parseUnits("10", 18);
-    console.log(`我们传入的交易金额: ${ethers.formatUnits(ourAmount, 18)} (原始值: ${ourAmount})`);
+    const ourAmount = 10;
+    console.log(`我们传入的交易金额: ${ourAmount} 份`);
     
     // 检查是否满足最小交易要求
     if (ourAmount >= minTradeAmount) {
@@ -30,13 +30,13 @@ async function main() {
       
       // 计算推荐金额
       const recommendedAmount = minTradeAmount;
-      console.log(`建议使用的最小金额: ${ethers.formatUnits(recommendedAmount, 18)} (原始值: ${recommendedAmount})`);
+      console.log(`建议使用的最小金额: ${recommendedAmount} 份`);
     }
     
     // 检查其他可能的限制
     // 获取合约的最大交易限额
     const maxTradeAmount = await tradingManager.getMaxTradeAmount();
-    console.log(`最大交易金额: ${ethers.formatUnits(maxTradeAmount, 18)} (原始值: ${maxTradeAmount})`);
+    console.log(`最大交易金额: ${maxTradeAmount} 份`);
     
     // 检查冷却期
     const cooldownPeriod = await tradingManager.getCooldownPeriod();
@@ -48,8 +48,8 @@ async function main() {
     
     // 检查价格设置
     console.log("\n检查价格参数:");
-    const ourPrice = ethers.parseUnits("100", 18);
-    console.log(`我们设置的价格: ${ethers.formatUnits(ourPrice, 18)} (原始值: ${ourPrice})`);
+    const ourPrice = 100;
+    console.log(`我们设置的价格: ${ourPrice} 份`);
     
   } catch (error) {
     console.error("检查过程中出错:", error);

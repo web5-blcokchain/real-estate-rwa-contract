@@ -183,8 +183,8 @@ contract TradingManager is
         address seller;
         address token;
         string propertyId;
-        uint256 amount;
-        uint256 price;
+        uint256 amount;  // 直接使用整数，表示房产份额数量
+        uint256 price;   // 价格保持精度
         uint256 timestamp;
         bool active;
         bool isSellOrder;
@@ -198,8 +198,8 @@ contract TradingManager is
         address seller;
         address token;
         string propertyId;
-        uint256 amount;
-        uint256 price;
+        uint256 amount;  // 直接使用整数，表示房产份额数量
+        uint256 price;   // 价格保持精度
         uint256 timestamp;
         bool isSellOrder;
     }

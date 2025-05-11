@@ -236,6 +236,14 @@ contract PropertyToken is
     }
 
     /**
+     * @dev Returns the number of decimals used to get its user representation.
+     * Override the default value of 18 to use 0 decimals (integer only)
+     */
+    function decimals() public pure override returns (uint8) {
+        return 0;
+    }
+
+    /**
      * @dev Updates the system contract reference - 需要ADMIN权限
      */
     function setSystem(address _systemAddress) external {
