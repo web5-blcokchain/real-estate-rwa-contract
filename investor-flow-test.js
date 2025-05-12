@@ -696,7 +696,7 @@ async function sellOrder(orderId) {
         log.info(`买单信息:
             - 买家: ${order.buyer}
             - 代币: ${order.token}
-            - 数量: ${ethers.formatUnits(order.amount, state.tokenDecimals)}
+            - 数量: ${ethers.formatUnits(order.amount, state.tokenDecimals)}   
             - 价格: ${ethers.formatUnits(order.price, 18)} USDT
             - 是否活跃: ${order.active}
         `);
@@ -876,7 +876,7 @@ async function createDistribution() {
         address: state.investorWallet.address,
         totalEligible: eligibleAmount
     };
-    
+    log.info(`创建默克尔树数据: ${eligibleAmount}`);
     // 创建默克尔树并获取根
     const merkleTree = new MerkleTree([merkleData]);
     const merkleRoot = merkleTree.getRoot();
@@ -1080,6 +1080,7 @@ async function investorClaimReward(distributionId) {
 
         // 计算可领取金额（按比例）
         const totalAmount = BigInt(distribution[8].toString());
+      console.log('[INFO] 当前分配总额:', ethers.formatUnits(totalAmount, 18));
         const eligibleAmount = (totalAmount * BigInt(investorBalance.toString())) / BigInt(totalSupply.toString());
         console.log('[INFO] 可领取金额:', ethers.formatUnits(eligibleAmount, 18));
 

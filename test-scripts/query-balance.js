@@ -6,7 +6,7 @@ require('dotenv').config();
 // 配置参数
 const WALLET_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const PROPERTY_TOKEN_ADDRESS = "0xAbB608121Fd652F112827724B28a61e09f2dcDf4";
-const PROPERTY_ID = 6; // 资产ID，当前未用到，仅做标记
+const PROPERTY_ID = 8; // 资产ID，当前未用到，仅做标记
 
 // 加载 PropertyToken ABI
 function loadAbiFromArtifacts(contractName) {

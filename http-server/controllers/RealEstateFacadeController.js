@@ -249,7 +249,7 @@ class RealEstateFacadeController extends BaseController {
       return await this.handleContractAction(
         res,
         async () => {
-          const contract = ContractUtils.getReadonlyContractWithProvider('PropertyManager');
+          const contract = ContractUtils.getContractForController('PropertyManager', 'admin');
           const exists = await contract.propertyExists(propertyId);
           
           if (!exists) {
@@ -268,20 +268,20 @@ class RealEstateFacadeController extends BaseController {
           }
           
           const property = await contract.getProperty(propertyId);
-          const facadeContract = ContractUtils.getReadonlyContractWithProvider('RealEstateFacade');
+          const facadeContract = ContractUtils.getContractForController('RealEstateFacade', 'admin');
           const tokenAddress = await facadeContract.getPropertyTokenAddress(propertyId);
           
-          // 格式化返回数据
+          // 格式化返回数据，添加空值检查
           const formattedProperty = {
             propertyId: propertyId,
-            status: Number(property.status),
-            country: property.country,
-            metadataURI: property.metadataURI,
-            initialSupply: property.initialSupply.toString(),
-            valuation: property.valuation.toString(),
-            tokenAddress: tokenAddress,
-            statusDescription: this.getStatusDescription(Number(property.status)),
-            createdAt: Number(property.creationTime) * 1000, // 转换为毫秒
+            status: property?.status ? Number(property.status) : 0,
+            country: property?.country || '',
+            metadataURI: property?.metadataURI || '',
+            initialSupply: property?.initialSupply ? property.initialSupply.toString() : '0',
+            valuation: property?.valuation ? property.valuation.toString() : '0',
+            tokenAddress: tokenAddress || '0x0000000000000000000000000000000000000000',
+            statusDescription: this.getStatusDescription(Number(property?.status || 0)),
+            createdAt: property?.creationTime ? Number(property.creationTime) * 1000 : Date.now(), // 转换为毫秒
             fromChain: true,
             updatedAt: new Date().toISOString()
           };
