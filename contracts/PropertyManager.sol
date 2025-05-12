@@ -457,7 +457,7 @@ contract PropertyManager is
     }
     
     /**
-     * @dev 初始购买房产代币 - 简化版本，不需要支付代币地址
+     * @dev 初始购买房产代币 - 需要支付USDT
      * @param propertyId 房产ID
      * @param amount 购买数量
      * @return success 是否购买成功
@@ -480,6 +480,19 @@ contract PropertyManager is
         // 检查购买数量是否合理
         uint256 initialSupply = token.maxSupply();
         require(amount <= initialSupply, "Purchase amount exceeds available supply");
+        
+        // 获取USDT合约实例
+        IERC20Upgradeable usdt = IERC20Upgradeable(system.getUsdtAddress());
+        
+        // 计算需要的USDT数量（每个代币1 USDT）
+        uint256 requiredUsdt = amount;
+        
+        // 检查USDT余额和授权
+        require(usdt.balanceOf(msg.sender) >= requiredUsdt, "Insufficient USDT balance");
+        require(usdt.allowance(msg.sender, address(this)) >= requiredUsdt, "Insufficient USDT allowance");
+        
+        // 转移USDT到合约
+        require(usdt.transferFrom(msg.sender, address(this), requiredUsdt), "USDT transfer failed");
         
         // 转移代币给购买者
         bool success = token.transfer(msg.sender, amount);
