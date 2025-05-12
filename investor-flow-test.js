@@ -150,7 +150,10 @@ async function ensureEthBalance(fromWallet, toAddress, minBalance = ethers.parse
       to: toAddress,
       value: formattedMinBalance
     });
-    await tx.wait();
+    await waitForTransaction(tx, 'ETH转账');
+    
+    // 等待交易完全确认
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     const newBalance = await state.provider.getBalance(toAddress);
     log.balance('ETH', ethers.formatEther(newBalance));
@@ -171,7 +174,10 @@ async function ensureTokenBalance(tokenContract, fromWallet, toAddress, minBalan
     log.info(`转账 ${ethers.formatUnits(neededAmount, decimals)} ${tokenSymbol} 到 ${toAddress}`);
     
     const tx = await tokenContract.connect(fromWallet).transfer(toAddress, neededAmount);
-    await tx.wait();
+    await waitForTransaction(tx, `${tokenSymbol}转账`);
+    
+    // 等待交易完全确认
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     const newBalance = await tokenContract.balanceOf(toAddress);
     log.balance(tokenSymbol, ethers.formatUnits(newBalance, decimals));
@@ -234,7 +240,11 @@ async function initializeSystem() {
     if (sellerUsdtBalance < sellerUsdtAmount) {
         log.info(`给卖家转账 ${ethers.formatUnits(sellerUsdtAmount, state.usdtDecimals)} USDT...`);
         const transferTx = await usdtContract.transfer(sellerAddress, sellerUsdtAmount);
-        await transferTx.wait();
+        await waitForTransaction(transferTx, '给卖家转账USDT');
+        
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         const newBalance = await usdtContract.balanceOf(sellerAddress);
         log.info(`卖家新USDT余额: ${ethers.formatUnits(newBalance, state.usdtDecimals)} USDT`);
     } else {
@@ -247,7 +257,11 @@ async function initializeSystem() {
     if (buyerUsdtBalance < buyerUsdtAmount) {
         log.info(`给买家转账 ${ethers.formatUnits(buyerUsdtAmount, state.usdtDecimals)} USDT...`);
         const transferTx = await usdtContract.transfer(buyerAddress, buyerUsdtAmount);
-        await transferTx.wait();
+        await waitForTransaction(transferTx, '给买家转账USDT');
+        
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         const newBalance = await usdtContract.balanceOf(buyerAddress);
         log.info(`买家新USDT余额: ${ethers.formatUnits(newBalance, state.usdtDecimals)} USDT`);
     } else {
@@ -258,7 +272,11 @@ async function initializeSystem() {
     const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.adminWallet);
     log.info('设置交易冷却期为1秒...');
     const setCooldownTx = await tradingManagerContract.setCooldownPeriod(1);
-    await setCooldownTx.wait();
+    await waitForTransaction(setCooldownTx, '设置冷却期');
+    
+    // 等待交易完全确认
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     const cooldownPeriod = await tradingManagerContract.cooldownPeriod();
     log.info(`当前冷却期: ${cooldownPeriod.toString()} 秒`);
     
@@ -460,10 +478,13 @@ async function initialInvestorBuy() {
     // 执行初始购买
     const initialBuyTx = await propertyManagerContract.initialBuyPropertyToken(
       state.propertyId,
-              purchaseAmount
-            );
+      purchaseAmount
+    );
     
-    await initialBuyTx.wait();
+    await waitForTransaction(initialBuyTx, '初始购买房产代币');
+    
+    // 等待交易完全确认
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // 检查投资者新的代币余额
     const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
@@ -641,7 +662,10 @@ async function createBuyOrder() {
                 buyerAddress,
                 transferAmount
             );
-            await transferTx.wait();
+            await waitForTransaction(transferTx, 'USDT转账');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             const newBalance = await usdtContract.balanceOf(buyerAddress);
             log.info(`转账完成，新 USDT 余额: ${ethers.formatUnits(newBalance, 18)} USDT`);
@@ -663,6 +687,9 @@ async function createBuyOrder() {
                 totalAmount
             );
             await waitForTransaction(usdtApproveTx, 'USDT授权');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // 再次检查授权额度
             const newAllowance = await usdtContract.allowance(
@@ -777,7 +804,10 @@ async function buyOrder(orderId) {
             const transferAmount = requiredUsdt * BigInt(2); // 转账两倍所需金额
             
             const transferTx = await adminUsdtContract.transfer(buyerAddress, transferAmount);
-            await transferTx.wait();
+            await waitForTransaction(transferTx, '管理员转账更多USDT');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             const newBalance = await usdtContract.balanceOf(buyerAddress);
             log.info(`转账完成，新USDT余额: ${ethers.formatUnits(newBalance, 18)}`);
@@ -796,12 +826,15 @@ async function buyOrder(orderId) {
             // 先清零授权
             log.info(`清零当前授权...`);
             const resetTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, 0);
-            await resetTx.wait();
+            await waitForTransaction(resetTx, '清零授权');
             
             // 设置新的授权额度
             log.info(`设置新的授权额度: ${ethers.formatUnits(approveAmount, 18)} USDT`);
             const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, approveAmount);
-            await approveTx.wait();
+            await waitForTransaction(approveTx, '设置新授权');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // 再次检查授权额度
             const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
@@ -899,7 +932,11 @@ async function sellOrder(orderId) {
             
             if (adminBalance >= transferAmount) {
                 const transferTx = await adminPropertyToken.transfer(sellerAddress, transferAmount);
-                await transferTx.wait();
+                await waitForTransaction(transferTx, '管理员转账代币');
+                
+                // 等待交易完全确认
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
                 log.info(`已从管理员转账 ${ethers.formatUnits(transferAmount, state.tokenDecimals)} 代币到卖家账户`);
             } else {
                 throw new Error(`管理员代币余额不足，无法转账给卖家`);
@@ -927,12 +964,18 @@ async function sellOrder(orderId) {
             // 先清零授权
             log.info(`清零当前授权...`);
             const resetTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, 0);
-            await resetTx.wait();
+            await waitForTransaction(resetTx, '清零授权');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // 设置新的授权额度
             log.info(`设置新的授权额度: ${ethers.formatUnits(approveAmount, state.tokenDecimals)} 代币`);
             const approveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, approveAmount);
-            await approveTx.wait();
+            await waitForTransaction(approveTx, '设置新授权');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // 再次检查授权额度
             const newAllowance = await propertyTokenContract.allowance(sellerAddress, TRADING_MANAGER_ADDRESS);
@@ -1017,12 +1060,17 @@ async function createDistribution() {
         log.info(`USDT授权额度不足，正在授权...`);
         // 先清零授权
         const resetTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, 0);
-        await resetTx.wait();
+        await waitForTransaction(resetTx, '清零USDT授权');
         
-        // 设置新的授权额度
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         const approveAmount = distributionAmount * BigInt(2); // 授权两倍所需金额
         const approveTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, approveAmount);
-        await approveTx.wait();
+        await waitForTransaction(approveTx, '设置新USDT授权');
+        
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         const newAllowance = await usdtContract.allowance(state.adminWallet.address, REWARD_MANAGER_ADDRESS);
         log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, 18)}`);
@@ -1032,11 +1080,15 @@ async function createDistribution() {
         }
     }
 
-        // 添加USDT到支持的稳定币列表
+    // 添加USDT到支持的稳定币列表
     log.info(`添加USDT到支持的稳定币列表...`);
     try {
         const addTx = await rewardManagerContract.addSupportedStablecoin(USDT_ADDRESS);
-        await addTx.wait();
+        await waitForTransaction(addTx, '添加USDT到稳定币列表');
+        
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         log.info(`USDT已添加到支持的稳定币列表中`);
     } catch (error) {
         // 如果已经添加过，忽略错误
@@ -1116,7 +1168,7 @@ async function createDistribution() {
         state.distributionId,
         1 // 1 = Active
       );
-      await updateStatusTx.wait();
+      await waitForTransaction(updateStatusTx, '更新分配状态');
       log.info(`分配状态已更新为Active`);
 
     } catch (txError) {
@@ -1356,7 +1408,11 @@ async function testFlow() {
         const transferAmount = ethers.parseUnits("10", state.tokenDecimals); // 转账10个代币给卖家
         
         const transferTx = await propertyTokenContract.transfer(sellerAddress, transferAmount);
-        await transferTx.wait();
+        await waitForTransaction(transferTx, '转账代币给卖家');
+        
+        // 等待交易完全确认
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         log.success('代币转账成功');
 
         // 创建卖单
