@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
 import "./PropertyToken.sol";
@@ -520,8 +521,13 @@ contract PropertyManager is
      * @dev 设置USDT合约地址
      */
     function setUsdtAddress(address _usdtAddress) external {
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
         require(_usdtAddress != address(0), "USDT address cannot be zero");
         usdtAddress = _usdtAddress;
+        
+        // 从USDT合约获取精度
+        IERC20MetadataUpgradeable usdt = IERC20MetadataUpgradeable(_usdtAddress);
+        usdtDecimals = uint8(usdt.decimals());
     }
 
     function getUsdtAddress() external view returns (address) {
