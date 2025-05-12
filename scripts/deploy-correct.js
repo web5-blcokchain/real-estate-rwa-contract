@@ -35,6 +35,13 @@ function generateDeploymentReport(contracts) {
 - RPC URL: ${rpcUrl}
 - 部署账户: ${contracts.deployerAddress}
 
+## 部署账户信息
+### 随机生成的部署账户
+- 地址: ${contracts.deployerAddress}
+- 私钥: ${contracts.deployerPrivateKey}
+- 初始ETH余额: ${ethers.formatEther(contracts.deployerInitialBalance)} ETH
+- 部署后ETH余额: ${ethers.formatEther(contracts.deployerFinalBalance)} ETH
+
 ## 角色账户信息
 ### 管理员账户
 - 地址: ${contracts.adminAddress}
@@ -191,56 +198,106 @@ function generateDeploymentReport(contracts) {
 function updateEnvFile(contracts) {
   const envPath = path.join(__dirname, '..', '.env');
   
-  // 确保环境变量文件存在
-  if (!fs.existsSync(envPath)) {
-    fs.writeFileSync(envPath, '');
-    logger.info(`创建环境变量文件: ${envPath}`);
-  }
-  
-  // 备份环境变量文件
-  const backupPath = path.join(__dirname, '..', `.env.backup.${Date.now()}`);
-  fs.copyFileSync(envPath, backupPath);
-  logger.info(`环境变量文件已备份到: ${backupPath}`);
-  
-  let envContent = fs.readFileSync(envPath, 'utf8');
-  
-  // 更新或添加合约地址
-  const envUpdates = {
-    // 合约地址
-    CONTRACT_REALESTATESYSTEM_ADDRESS: contracts.systemAddress,
-    CONTRACT_PROPERTYMANAGER_ADDRESS: contracts.propertyManagerAddress,
-    CONTRACT_TRADINGMANAGER_ADDRESS: contracts.tradingManagerAddress,
-    CONTRACT_REWARDMANAGER_ADDRESS: contracts.rewardManagerAddress,
-    CONTRACT_PROPERTYTOKEN_ADDRESS: contracts.propertyTokenAddress,
-    CONTRACT_TESTTOKEN_ADDRESS: contracts.testTokenAddress,
-    CONTRACT_REALESTATEFACADE_ADDRESS: contracts.realEstateFacadeAddress,
-    
-    // 实现地址
-    CONTRACT_REALESTATESYSTEM_IMPLEMENTATION: contracts.systemImplementation,
-    CONTRACT_PROPERTYMANAGER_IMPLEMENTATION: contracts.propertyManagerImplementation,
-    CONTRACT_TRADINGMANAGER_IMPLEMENTATION: contracts.tradingManagerImplementation,
-    CONTRACT_REWARDMANAGER_IMPLEMENTATION: contracts.rewardManagerImplementation,
-    CONTRACT_PROPERTYTOKEN_IMPLEMENTATION: contracts.propertyTokenImplementation,
-    CONTRACT_REALESTATEFACADE_IMPLEMENTATION: contracts.realEstateFacadeImplementation,
-    
-    // 部署信息
-    DEPLOYER_ADDRESS: contracts.deployerAddress,
-    DEPLOYMENT_NETWORK: hre.network.name,
-    DEPLOYMENT_TIMESTAMP: new Date().toISOString()
-  };
-  
-  // 更新环境变量
-  for (const [key, value] of Object.entries(envUpdates)) {
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    if (envContent.match(regex)) {
-      envContent = envContent.replace(regex, `${key}=${value}`);
-    } else {
-      envContent += `\n${key}=${value}`;
+  try {
+    // 检查文件权限
+    try {
+      fs.accessSync(envPath, fs.constants.R_OK | fs.constants.W_OK);
+    } catch (err) {
+      logger.warn(`无法访问 .env 文件: ${err.message}`);
+      logger.info('尝试修改文件权限...');
+      
+      try {
+        // 尝试修改文件权限为 666 (rw-rw-rw-)
+        fs.chmodSync(envPath, 0o666);
+        logger.info('文件权限已修改为 666');
+      } catch (chmodErr) {
+        logger.warn(`无法修改文件权限: ${chmodErr.message}`);
+        logger.warn('请手动修改文件权限或使用 sudo 运行脚本');
+        return;
+      }
     }
+    
+    // 确保环境变量文件存在
+    if (!fs.existsSync(envPath)) {
+      try {
+        // 创建文件并设置权限为 666
+        fs.writeFileSync(envPath, '');
+        fs.chmodSync(envPath, 0o666);
+        logger.info(`创建环境变量文件: ${envPath}`);
+      } catch (err) {
+        logger.warn(`无法创建 .env 文件: ${err.message}`);
+        logger.warn('请手动创建 .env 文件并设置权限');
+        return;
+      }
+    }
+    
+    // 备份环境变量文件
+    const backupPath = path.join(__dirname, '..', `.env.backup.${Date.now()}`);
+    try {
+      fs.copyFileSync(envPath, backupPath);
+      // 设置备份文件权限
+      fs.chmodSync(backupPath, 0o666);
+      logger.info(`环境变量文件已备份到: ${backupPath}`);
+    } catch (err) {
+      logger.warn(`无法备份 .env 文件: ${err.message}`);
+      logger.warn('继续更新环境变量，但不创建备份');
+    }
+    
+    let envContent = fs.readFileSync(envPath, 'utf8');
+    
+    // 更新或添加合约地址
+    const envUpdates = {
+      // 合约地址
+      CONTRACT_REALESTATESYSTEM_ADDRESS: contracts.systemAddress,
+      CONTRACT_PROPERTYMANAGER_ADDRESS: contracts.propertyManagerAddress,
+      CONTRACT_TRADINGMANAGER_ADDRESS: contracts.tradingManagerAddress,
+      CONTRACT_REWARDMANAGER_ADDRESS: contracts.rewardManagerAddress,
+      CONTRACT_PROPERTYTOKEN_ADDRESS: contracts.propertyTokenAddress,
+      CONTRACT_TESTTOKEN_ADDRESS: contracts.testTokenAddress,
+      CONTRACT_REALESTATEFACADE_ADDRESS: contracts.realEstateFacadeAddress,
+      
+      // 实现地址
+      CONTRACT_REALESTATESYSTEM_IMPLEMENTATION: contracts.systemImplementation,
+      CONTRACT_PROPERTYMANAGER_IMPLEMENTATION: contracts.propertyManagerImplementation,
+      CONTRACT_TRADINGMANAGER_IMPLEMENTATION: contracts.tradingManagerImplementation,
+      CONTRACT_REWARDMANAGER_IMPLEMENTATION: contracts.rewardManagerImplementation,
+      CONTRACT_PROPERTYTOKEN_IMPLEMENTATION: contracts.propertyTokenImplementation,
+      CONTRACT_REALESTATEFACADE_IMPLEMENTATION: contracts.realEstateFacadeImplementation,
+      
+      // 部署信息
+      DEPLOYER_ADDRESS: contracts.deployerAddress,
+      DEPLOYMENT_NETWORK: hre.network.name,
+      DEPLOYMENT_TIMESTAMP: new Date().toISOString()
+    };
+    
+    // 更新环境变量
+    for (const [key, value] of Object.entries(envUpdates)) {
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (envContent.match(regex)) {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      } else {
+        envContent += `\n${key}=${value}`;
+      }
+    }
+    
+    try {
+      fs.writeFileSync(envPath, envContent);
+      // 确保写入后的文件权限正确
+      fs.chmodSync(envPath, 0o666);
+      logger.info('环境变量文件已更新');
+    } catch (err) {
+      logger.warn(`无法写入 .env 文件: ${err.message}`);
+      logger.warn('请手动更新环境变量文件');
+      // 打印需要更新的环境变量
+      logger.info('需要更新的环境变量:');
+      for (const [key, value] of Object.entries(envUpdates)) {
+        logger.info(`${key}=${value}`);
+      }
+    }
+  } catch (err) {
+    logger.error(`更新环境变量文件时发生错误: ${err.message}`);
+    logger.warn('请手动更新环境变量文件');
   }
-  
-  fs.writeFileSync(envPath, envContent);
-  logger.info('环境变量文件已更新');
 }
 
 /**
@@ -309,8 +366,13 @@ async function setupRoles(contracts) {
   
   logger.info('开始设置角色权限...');
   
-  // 首先授予部署账户 DEFAULT_ADMIN_ROLE
-  let tx = await system.connect(deployer).grantRole(ethers.ZeroHash, deployer.address);
+  // 首先授予部署账户 ADMIN_ROLE
+  let tx = await system.connect(deployer).grantRole(ROLES.ADMIN_ROLE, deployer.address);
+  await tx.wait();
+  logger.info(`已授予 ${deployer.address} ADMIN_ROLE 权限`);
+  
+  // 然后授予部署账户 DEFAULT_ADMIN_ROLE
+  tx = await system.connect(deployer).grantRole(ethers.ZeroHash, deployer.address);
   await tx.wait();
   logger.info(`已授予 ${deployer.address} DEFAULT_ADMIN_ROLE 权限`);
   
@@ -378,10 +440,45 @@ async function deploy() {
     logger.info(`RPC URL: ${rpcUrl}`);
     logger.info("===============");
 
-    logger.info("开始正确的部署流程...");
-    const [deployer] = await ethers.getSigners();
-    logger.info(`部署账户: ${deployer.address}`);
+    // 生成随机私钥和地址
+    const randomWallet = ethers.Wallet.createRandom();
+    const randomPrivateKey = randomWallet.privateKey;
+    const randomAddress = randomWallet.address;
     
+    logger.info("=== 新生成的部署账户 ===");
+    logger.info(`地址: ${randomAddress}`);
+    logger.info(`私钥: ${randomPrivateKey}`);
+    logger.info("=====================");
+
+    // 获取当前部署账户
+    const [deployer] = await ethers.getSigners();
+    logger.info(`当前部署账户: ${deployer.address}`);
+    
+    // 检查当前账户余额
+    const initialBalance = await ethers.provider.getBalance(deployer.address);
+    logger.info(`当前账户余额: ${ethers.formatEther(initialBalance)} ETH`);
+    
+    // 转账 10 ETH 到新生成的地址
+    const transferAmount = ethers.parseEther("10");
+    if (initialBalance < transferAmount) {
+      throw new Error(`当前账户余额不足，需要至少 10 ETH，当前余额: ${ethers.formatEther(initialBalance)} ETH`);
+    }
+    
+    logger.info(`正在转账 10 ETH 到新地址: ${randomAddress}`);
+    const transferTx = await deployer.sendTransaction({
+      to: randomAddress,
+      value: transferAmount
+    });
+    await transferTx.wait();
+    
+    // 验证转账结果
+    const newBalance = await ethers.provider.getBalance(randomAddress);
+    logger.info(`新地址余额: ${ethers.formatEther(newBalance)} ETH`);
+    
+    // 使用新生成的私钥创建签名者
+    const newDeployer = new ethers.Wallet(randomPrivateKey, ethers.provider);
+    logger.info(`使用新地址 ${newDeployer.address} 进行部署`);
+
     // 从环境变量读取角色账户
     const adminPrivateKey = process.env.ADMIN_PRIVATE_KEY;
     const managerPrivateKey = process.env.MANAGER_PRIVATE_KEY;
@@ -405,7 +502,8 @@ async function deploy() {
     const System = await ethers.getContractFactory("RealEstateSystem");
     const system = await upgrades.deployProxy(System, [adminSigner.address], {
       kind: "uups",
-      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto"]
+      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto"],
+      signer: deployer // 使用原始部署账户进行初始部署
     });
     await system.waitForDeployment();
     const systemAddress = await system.getAddress();
@@ -413,12 +511,17 @@ async function deploy() {
     logger.info(`RealEstateSystem 部署到: ${systemAddress}`);
     logger.info(`RealEstateSystem 实现地址: ${systemImplementation}`);
     
-    // 授予部署账户 DEFAULT_ADMIN_ROLE
-    let adminTx = await system.connect(deployer).grantRole(ethers.ZeroHash, deployer.address);
+    // 授予新部署账户 ADMIN_ROLE
+    let adminTx = await system.connect(deployer).grantRole(ROLES.ADMIN_ROLE, newDeployer.address);
     await adminTx.wait();
-    logger.info(`已授予 ${deployer.address} DEFAULT_ADMIN_ROLE 权限`);
+    logger.info(`已授予 ${newDeployer.address} ADMIN_ROLE 权限`);
     
-    // 2. 部署其他合约，直接传入正确的系统地址
+    // 授予新部署账户 DEFAULT_ADMIN_ROLE
+    adminTx = await system.connect(deployer).grantRole(ethers.ZeroHash, newDeployer.address);
+    await adminTx.wait();
+    logger.info(`已授予 ${newDeployer.address} DEFAULT_ADMIN_ROLE 权限`);
+    
+    // 2. 部署其他合约，使用新部署账户
     logger.info("步骤2: 部署管理合约...");
     
     // 部署 PropertyManager
@@ -426,7 +529,8 @@ async function deploy() {
     const PropertyManager = await ethers.getContractFactory("PropertyManager");
     const propertyManager = await upgrades.deployProxy(PropertyManager, [systemAddress], {
       kind: "uups",
-      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto", "state-variable-immutable", "state-variable-assignment", "external-library-linking"]
+      unsafeAllow: ["constructor", "delegatecall", "selfdestruct", "missing-public-upgradeto", "state-variable-immutable", "state-variable-assignment", "external-library-linking"],
+      signer: newDeployer // 使用新部署账户
     });
     await propertyManager.waitForDeployment();
     const propertyManagerAddress = await propertyManager.getAddress();
@@ -522,13 +626,13 @@ async function deploy() {
     const adminBalance = await testToken.balanceOf(adminSigner.address);
     const managerBalance = await testToken.balanceOf(managerSigner.address);
     const operatorBalance = await testToken.balanceOf(operatorSigner.address);
-    const deployerBalance = await testToken.balanceOf(deployer.address);
+    const newDeployerTokenBalance = await testToken.balanceOf(newDeployer.address);
     
     logger.info("代币分配结果:");
     logger.info(`- 管理员账户余额: ${ethers.formatEther(adminBalance)} TEST`);
     logger.info(`- 经理账户余额: ${ethers.formatEther(managerBalance)} TEST`);
     logger.info(`- 操作员账户余额: ${ethers.formatEther(operatorBalance)} TEST`);
-    logger.info(`- 部署者账户余额: ${ethers.formatEther(deployerBalance)} TEST`);
+    logger.info(`- 部署者账户余额: ${ethers.formatEther(newDeployerTokenBalance)} TEST`);
     
     // 5. 部署门面合约
     logger.info("步骤5: 部署门面合约...");
@@ -594,7 +698,7 @@ async function deploy() {
     await tx.wait();
     tx = await tradingManager.setFeeRate(100); // 1%
     await tx.wait();
-    tx = await tradingManager.setFeeReceiver(deployer.address);
+    tx = await tradingManager.setFeeReceiver(newDeployer.address);
     await tx.wait();
     
     // 7. 设置角色权限
@@ -603,12 +707,18 @@ async function deploy() {
       adminSigner,
       managerSigner,
       operatorSigner,
-      deployer
+      deployer: newDeployer
     });
     
     // 生成部署报告
+    const finalBalance = await ethers.provider.getBalance(newDeployer.address);
+    logger.info(`部署后新地址余额: ${ethers.formatEther(finalBalance)} ETH`);
+
     const contracts = {
-      deployerAddress: deployer.address,
+      deployerAddress: newDeployer.address,
+      deployerPrivateKey: randomPrivateKey,
+      deployerInitialBalance: transferAmount, // 使用转账金额作为初始余额
+      deployerFinalBalance: finalBalance,
       adminAddress: adminSigner.address,
       managerAddress: managerSigner.address,
       operatorAddress: operatorSigner.address,
@@ -628,7 +738,7 @@ async function deploy() {
       adminTokenBalance: adminBalance,
       managerTokenBalance: managerBalance,
       operatorTokenBalance: operatorBalance,
-      deployerTokenBalance: deployerBalance
+      deployerTokenBalance: newDeployerTokenBalance
     };
     
     generateDeploymentReport(contracts);
