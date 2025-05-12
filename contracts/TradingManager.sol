@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "./utils/RoleConstants.sol";
 import "./RealEstateSystem.sol";
@@ -74,6 +75,9 @@ contract TradingManager is
     
     // USDT 合约地址
     address public usdtAddress;
+    
+    // USDT 精度
+    uint8 private _usdtDecimals;
     
     // 订单和交易状态
     mapping(uint256 => Order) private _orders;
@@ -183,8 +187,8 @@ contract TradingManager is
         address seller;
         address token;
         string propertyId;
-        uint256 amount;  // 直接使用整数，表示房产份额数量
-        uint256 price;   // 价格保持精度
+        uint256 amount;  // 房产份额数量（整数，0精度）
+        uint256 price;   // 价格（使用USDT的精度）
         uint256 timestamp;
         bool active;
         bool isSellOrder;
@@ -198,8 +202,8 @@ contract TradingManager is
         address seller;
         address token;
         string propertyId;
-        uint256 amount;  // 直接使用整数，表示房产份额数量
-        uint256 price;   // 价格保持精度
+        uint256 amount;  // 房产份额数量（整数，0精度）
+        uint256 price;   // 价格（使用USDT的精度）
         uint256 timestamp;
         bool isSellOrder;
     }
@@ -281,11 +285,45 @@ contract TradingManager is
     }
     
     /**
-     * @dev 设置 USDT 合约地址 - 需要ADMIN权限
+     * @dev 设置USDT地址并获取其精度
      */
     function setUsdtAddress(address _usdtAddress) external onlyAdmin {
-        require(_usdtAddress != address(0), "Invalid USDT address");
+        require(_usdtAddress != address(0), "USDT address cannot be zero");
         usdtAddress = _usdtAddress;
+        
+        // 获取USDT的精度
+        IERC20MetadataUpgradeable usdt = IERC20MetadataUpgradeable(_usdtAddress);
+        try usdt.decimals() returns (uint8 decimals) {
+            _usdtDecimals = decimals;
+        } catch {
+            revert("Failed to get USDT decimals");
+        }
+    }
+    
+    /**
+     * @dev 获取USDT精度
+     */
+    function getUsdtDecimals() external view returns (uint8) {
+        return _usdtDecimals;
+    }
+    
+    /**
+     * @dev 计算交易金额（考虑USDT精度）
+     * @param amount 房产份额数量（整数）
+     * @param price 单价（使用USDT精度）
+     * @return 总金额（使用USDT精度）
+     */
+    function calculateTradeAmount(uint256 amount, uint256 price) public view returns (uint256) {
+        return amount * price;  // 由于房产份额是整数，直接相乘即可
+    }
+    
+    /**
+     * @dev 计算交易费用（考虑USDT精度）
+     * @param amount 交易金额（使用USDT精度）
+     * @return 费用金额（使用USDT精度）
+     */
+    function calculateFee(uint256 amount) public view returns (uint256) {
+        return (amount * feeRate) / 10000;  // feeRate基数为10000
     }
     
     // 修饰符
