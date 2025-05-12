@@ -23,13 +23,16 @@ const logger = {
 function generateDeploymentReport(contracts) {
   const timestamp = new Date().toISOString();
   const network = hre.network.name;
+  const chainId = hre.network.config.chainId;
+  const rpcUrl = hre.network.config.url;
   
   const report = `# 房地产代币化系统部署报告
 
 ## 基本信息
 - 部署时间: ${timestamp}
 - 网络: ${network}
-- RPC URL: ${hre.network.config.url}
+- Chain ID: ${chainId}
+- RPC URL: ${rpcUrl}
 - 部署账户: ${contracts.deployerAddress}
 
 ## 角色账户信息
@@ -364,6 +367,17 @@ async function setupRoles(contracts) {
 
 async function deploy() {
   try {
+    // 打印网络信息
+    const network = hre.network.name;
+    const chainId = hre.network.config.chainId;
+    const rpcUrl = hre.network.config.url;
+    
+    logger.info("=== 部署信息 ===");
+    logger.info(`网络: ${network}`);
+    logger.info(`Chain ID: ${chainId}`);
+    logger.info(`RPC URL: ${rpcUrl}`);
+    logger.info("===============");
+
     logger.info("开始正确的部署流程...");
     const [deployer] = await ethers.getSigners();
     logger.info(`部署账户: ${deployer.address}`);
