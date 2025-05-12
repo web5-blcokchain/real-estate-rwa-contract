@@ -186,6 +186,45 @@ async function ensureTokenBalance(tokenContract, fromWallet, toAddress, minBalan
   return false;
 }
 
+// 添加余额检查函数
+async function checkBalances(description) {
+    console.log(`\n=== ${description} ===`);
+    
+    // 检查 ETH 余额
+    const adminEthBalance = ethers.formatEther(await state.adminWallet.provider.getBalance(state.adminWallet.address));
+    const sellerEthBalance = ethers.formatEther(await state.sellerWallet.provider.getBalance(state.sellerWallet.address));
+    const buyerEthBalance = ethers.formatEther(await state.buyerWallet.provider.getBalance(state.buyerWallet.address));
+    
+    console.log('ETH Balances:');
+    console.log(`Admin: ${adminEthBalance} ETH`);
+    console.log(`Seller: ${sellerEthBalance} ETH`);
+    console.log(`Buyer: ${buyerEthBalance} ETH`);
+    
+    // 检查 USDT 余额
+    const adminUsdtBalance = ethers.formatUnits(await getContract('SimpleERC20', USDT_ADDRESS, state.adminWallet).balanceOf(state.adminWallet.address), 6);
+    const sellerUsdtBalance = ethers.formatUnits(await getContract('SimpleERC20', USDT_ADDRESS, state.sellerWallet).balanceOf(state.sellerWallet.address), 6);
+    const buyerUsdtBalance = ethers.formatUnits(await getContract('SimpleERC20', USDT_ADDRESS, state.buyerWallet).balanceOf(state.buyerWallet.address), 6);
+    
+    console.log('\nUSDT Balances:');
+    console.log(`Admin: ${adminUsdtBalance} USDT`);
+    console.log(`Seller: ${sellerUsdtBalance} USDT`);
+    console.log(`Buyer: ${buyerUsdtBalance} USDT`);
+    
+    // 检查房产代币余额
+    if (state.propertyTokenAddress) {
+        const propertyToken = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
+        const adminTokenBalance = ethers.formatEther(await propertyToken.balanceOf(state.adminWallet.address));
+        const sellerTokenBalance = ethers.formatEther(await propertyToken.balanceOf(state.sellerWallet.address));
+        const buyerTokenBalance = ethers.formatEther(await propertyToken.balanceOf(state.buyerWallet.address));
+        
+        console.log('\nProperty Token Balances:');
+        console.log(`Admin: ${adminTokenBalance} tokens`);
+        console.log(`Seller: ${sellerTokenBalance} tokens`);
+        console.log(`Buyer: ${buyerTokenBalance} tokens`);
+    }
+    console.log('===================\n');
+}
+
 // 系统初始化
 async function initializeSystem() {
   log.step(1, '系统初始化');
@@ -284,6 +323,8 @@ async function initializeSystem() {
     state.usdtDecimals = await usdtContract.decimals();
     log.info(`USDT 精度: ${state.usdtDecimals}`);
     
+    await checkBalances("After System Initialization");
+    
     return true;
   } catch (error) {
     log.error(`系统初始化失败: ${error.message}`);
@@ -367,6 +408,7 @@ async function registerProperty() {
         throw new Error(`代币总供应量不匹配，期望 ${TEST_PROPERTY_INITIAL_SUPPLY}，实际 ${totalSupply}`);
     }
     
+    await checkBalances("After Property Registration");
     return true;
   } catch (error) {
     log.error(`房产注册失败: ${error.message}`);
@@ -425,6 +467,7 @@ async function updatePropertyStatus() {
     }
     
     log.success('房产状态更新成功');
+    await checkBalances("After Status Update");
     return true;
   } catch (error) {
     log.error(`更新房产状态失败: ${error.message}`);
@@ -490,19 +533,12 @@ async function initialInvestorBuy() {
     const newTokenBalance = await propertyTokenContract.balanceOf(investorAddress);
     log.balance(`投资者新 ${state.tokenSymbol}`, ethers.formatUnits(newTokenBalance, state.tokenDecimals));
     
+    await checkBalances("After Initial Buy");
     return true;
   } catch (error) {
     log.error(`投资者初始购买失败: ${error.message}`);
     return false;
   }
-}
-
-// 添加交易等待函数
-async function waitForTransaction(tx, description) {
-    log.info(`${description}交易已发送，等待确认... 交易哈希: ${tx.hash}`);
-    const receipt = await tx.wait();
-    log.info(`${description}交易已确认，区块号: ${receipt.blockNumber}`);
-    return receipt;
 }
 
 // 修改创建卖单函数
@@ -594,6 +630,7 @@ async function createSellOrder() {
         log.info('等待交易完全确认...');
         await new Promise(resolve => setTimeout(resolve, 2000));
         
+        await checkBalances("After Sell Order Creation");
         return true;
     } catch (error) {
         log.error(`创建卖单失败: ${error.message}`);
@@ -747,6 +784,7 @@ async function createBuyOrder() {
         log.info('等待交易完全确认...');
         await new Promise(resolve => setTimeout(resolve, 2000));
         
+        await checkBalances("After Buy Order Creation");
         return true;
     } catch (error) {
         log.error(`创建买单失败: ${error.message}`);
@@ -1385,64 +1423,40 @@ async function investorClaimReward(distributionId) {
 // 修改测试流程
 async function testFlow() {
     try {
-        // 初始化系统
         await initializeSystem();
-        log.success('系统初始化成功');
-
-        // 注册房产
+        await checkBalances("After System Initialization");
+        
         await registerProperty();
-        log.success('房产注册成功');
-
-        // 更新房产状态
+        await checkBalances("After Property Registration");
+        
         await updatePropertyStatus();
-        log.success('房产状态更新成功');
-
-        // 投资者初始购买房产代币
+        await checkBalances("After Status Update");
+        
         await initialInvestorBuy();
-        log.success('投资者初始购买房产代币成功');
-
-        // 从投资者转账代币给卖家
-        log.info('从投资者转账代币给卖家...');
-        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.investorWallet);
-        const sellerAddress = await state.sellerWallet.getAddress();
-        const transferAmount = ethers.parseUnits("10", state.tokenDecimals); // 转账10个代币给卖家
+        await checkBalances("After Initial Buy");
         
-        const transferTx = await propertyTokenContract.transfer(sellerAddress, transferAmount);
-        await waitForTransaction(transferTx, '转账代币给卖家');
-        
-        // 等待交易完全确认
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        log.success('代币转账成功');
-
-        // 创建卖单
         await createSellOrder();
-        log.success('卖单创建成功');
-
-        // 投资者创建买单
+        await checkBalances("After Sell Order Creation");
+        
         await createBuyOrder();
-        log.success('买单创建成功');
-
-        // 购买卖单
-        await buyOrder(state.sellOrderId);  // 使用卖单ID来购买
-        log.success('购买卖单成功');
-
-        // 出售给买单
-        await sellOrder(state.buyOrderId);  // 使用买单ID来出售
-        log.success('出售给买单成功');
-
-        // 创建收益分配
+        await checkBalances("After Buy Order Creation");
+        
+        await buyOrder(state.sellOrderId);
+        await checkBalances("After Buy Execution");
+        
+        await sellOrder(state.buyOrderId);
+        await checkBalances("After Sell Execution");
+        
         await createDistribution();
-        log.success('收益分配创建成功');
-
-        // 投资者领取收益
+        await checkBalances("After Distribution Creation");
+        
         await investorClaimReward(state.distributionId);
-        log.success('收益领取成功');
-
-        return true;
+        await checkBalances("After Reward Claim");
+        
+        console.log("测试流程完成");
     } catch (error) {
-        log.error(`测试流程失败: ${error.message}`);
-        return false;
+        console.error("测试流程失败:", error);
+        throw error;
     }
 }
 

@@ -76,9 +76,6 @@ contract TradingManager is
     // USDT 合约地址
     address public usdtAddress;
     
-    // USDT 精度
-    uint8 private _usdtDecimals;
-    
     // 订单和交易状态
     mapping(uint256 => Order) private _orders;
     mapping(uint256 => Trade) private _trades;
@@ -285,36 +282,21 @@ contract TradingManager is
     }
     
     /**
-     * @dev 设置USDT地址并获取其精度
+     * @dev 设置USDT地址
      */
     function setUsdtAddress(address _usdtAddress) external onlyAdmin {
         require(_usdtAddress != address(0), "USDT address cannot be zero");
         usdtAddress = _usdtAddress;
-        
-        // 获取USDT的精度
-        IERC20MetadataUpgradeable usdt = IERC20MetadataUpgradeable(_usdtAddress);
-        try usdt.decimals() returns (uint8 decimals) {
-            _usdtDecimals = decimals;
-        } catch {
-            revert("Failed to get USDT decimals");
-        }
     }
     
     /**
-     * @dev 获取USDT精度
-     */
-    function getUsdtDecimals() external view returns (uint8) {
-        return _usdtDecimals;
-    }
-    
-    /**
-     * @dev 计算交易金额（考虑USDT精度）
+     * @dev 计算交易金额
      * @param amount 房产份额数量（整数）
-     * @param price 单价（使用USDT精度）
-     * @return 总金额（使用USDT精度）
+     * @param price 单价
+     * @return 总金额
      */
     function calculateTradeAmount(uint256 amount, uint256 price) public view returns (uint256) {
-        return amount * price;  // 由于房产份额是整数，直接相乘即可
+        return amount * price;
     }
     
     /**

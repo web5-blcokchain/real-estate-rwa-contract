@@ -56,6 +56,12 @@ contract PropertyManager is
     // 版本控制 - 使用uint8节省gas
     uint8 public version;
     
+
+    // USDT 合约地址
+    address public usdtAddress;
+    // USDT 精度
+    uint8 public usdtDecimals;
+
     // 系统合约引用
     RealEstateSystem public system;
     
@@ -482,10 +488,11 @@ contract PropertyManager is
         require(amount <= initialSupply, "Purchase amount exceeds available supply");
         
         // 获取USDT合约实例
-        IERC20Upgradeable usdt = IERC20Upgradeable(system.getUsdtAddress());
+        require(usdtAddress != address(0), "USDT contract not set");
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
         
-        // 计算需要的USDT数量（每个代币1 USDT）
-        uint256 requiredUsdt = amount;
+        // 计算需要的USDT数量（每个代币1 USDT，考虑精度）
+        uint256 requiredUsdt = amount * (10 ** usdtDecimals);
         
         // 检查USDT余额和授权
         require(usdt.balanceOf(msg.sender) >= requiredUsdt, "Insufficient USDT balance");
@@ -507,6 +514,22 @@ contract PropertyManager is
         );
         
         return true;
+    }
+    
+    /**
+     * @dev 设置USDT合约地址
+     */
+    function setUsdtAddress(address _usdtAddress) external {
+        require(_usdtAddress != address(0), "USDT address cannot be zero");
+        usdtAddress = _usdtAddress;
+    }
+
+    function getUsdtAddress() external view returns (address) {
+        return usdtAddress;
+    }
+
+    function getUsdtDecimals() external view returns (uint8) {
+        return usdtDecimals;
     }
 
     /**

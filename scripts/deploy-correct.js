@@ -622,6 +622,12 @@ async function deploy() {
     await tx.wait();
     logger.info(`TradingManager USDT 地址已设置为: ${testTokenAddress}`);
     
+    // 设置 PropertyManager 的 USDT 地址
+    logger.info("设置 PropertyManager 的 USDT 地址...");
+    tx = await propertyManager.setUsdtAddress(testTokenAddress);
+    await tx.wait();
+    logger.info(`PropertyManager USDT 地址已设置为: ${testTokenAddress}`);
+    
     // 验证代币分配结果
     const adminBalance = await testToken.balanceOf(adminSigner.address);
     const managerBalance = await testToken.balanceOf(managerSigner.address);
