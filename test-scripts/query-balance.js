@@ -11,7 +11,7 @@ const PROPERTY_ID = 8; // 资产ID，当前未用到，仅做标记
 // 加载 PropertyToken ABI
 function loadAbiFromArtifacts(contractName) {
   try {
-    const artifactPath = path.join(__dirname, 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
+    const artifactPath = path.join(__dirname, '..', 'artifacts', 'contracts', `${contractName}.sol`, `${contractName}.json`);
     const artifactContent = fs.readFileSync(artifactPath, 'utf8');
     const artifact = JSON.parse(artifactContent);
     return artifact.abi;
