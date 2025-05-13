@@ -1036,7 +1036,7 @@ async function sellOrder() {
         log.info(`卖单交易已发送，等待确认...`);
         const receipt = await tx.wait();
         log.info(`卖单执行成功，交易哈希: ${receipt.hash}`);
-        
+
         return true;
     } catch (error) {
         log.error(`执行卖单失败: ${error.message}`);

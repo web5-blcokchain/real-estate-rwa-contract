@@ -181,7 +181,7 @@ contract TradingManager is
     // 订单结构体
     struct Order {
         uint256 id;
-        address seller;
+        address creator;  // 订单创建者
         address token;
         string propertyId;
         uint256 amount;  // 房产份额数量（整数，0精度）
@@ -350,7 +350,7 @@ contract TradingManager is
         uint256 orderId = _nextOrderId++;
         _orders[orderId] = Order({
             id: orderId,
-            seller: msg.sender,
+            creator: msg.sender,
             token: token,
             propertyId: propertyId,
             amount: amount,
@@ -410,7 +410,7 @@ contract TradingManager is
         uint256 orderId = _nextOrderId++;
         _orders[orderId] = Order({
             id: orderId,
-            seller: msg.sender,
+            creator: msg.sender,
             token: token,
             propertyId: propertyId,
             amount: amount,
@@ -562,7 +562,7 @@ contract TradingManager is
         
         return (
             order.id,
-            order.seller,
+            order.creator,
             order.token,
             order.propertyId,
             order.amount,
@@ -790,8 +790,8 @@ contract TradingManager is
         IERC20Upgradeable token = IERC20Upgradeable(order.token);
         require(token.transfer(msg.sender, order.amount), "Token transfer failed");
         
-        // 转移 USDT 给卖家（扣除手续费）
-        require(usdt.transfer(order.seller, usdtAmount), "USDT transfer failed");
+        // 转移 USDT 给卖单创建者（扣除手续费）
+        require(usdt.transfer(order.creator, usdtAmount), "USDT transfer failed");
         
         // 转移手续费
         if (usdtFee > 0) {
@@ -810,7 +810,7 @@ contract TradingManager is
             id: tradeId,
             orderId: sellOrderId,
             buyer: msg.sender,
-            seller: order.seller,
+            seller: order.creator,
             token: order.token,
             propertyId: order.propertyId,
             amount: order.amount,
@@ -820,13 +820,13 @@ contract TradingManager is
         });
         
         _userTrades[msg.sender].push(tradeId);
-        _userTrades[order.seller].push(tradeId);
+        _userTrades[order.creator].push(tradeId);
         _tokenTrades[order.token].push(tradeId);
         
         emit OrderExecuted(
             sellOrderId,
             msg.sender,
-            order.seller,
+            order.creator,
             order.token,
             order.propertyId,
             order.amount,
@@ -861,17 +861,18 @@ contract TradingManager is
         IERC20Upgradeable token = IERC20Upgradeable(order.token);
         require(token.allowance(msg.sender, address(this)) >= order.amount, "Insufficient token allowance");
         require(token.transferFrom(msg.sender, address(this), order.amount), "Token transfer failed");
+        require(token.transfer(order.creator, order.amount), "Token transfer failed");
         
         // 计算 USDT 金额（包含手续费）
         uint256 usdtAmount = order.amount * order.price;
         uint256 usdtFee = (usdtAmount * feeRate) / 10000;
         uint256 totalUsdt = usdtAmount + usdtFee;
         
-        // 转移代币给买家
-        require(token.transfer(order.seller, order.amount), "Token transfer failed");
+        // 检查合约中的 USDT 余额
+        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
+        require(usdt.balanceOf(address(this)) >= totalUsdt, "Insufficient USDT balance in contract");
         
         // 转移 USDT 给卖家（扣除手续费）
-        IERC20Upgradeable usdt = IERC20Upgradeable(usdtAddress);
         require(usdt.transfer(msg.sender, usdtAmount), "USDT transfer failed");
         
         // 转移手续费
@@ -890,7 +891,7 @@ contract TradingManager is
         _trades[tradeId] = Trade({
             id: tradeId,
             orderId: buyOrderId,
-            buyer: order.seller,
+            buyer: order.creator,
             seller: msg.sender,
             token: order.token,
             propertyId: order.propertyId,
@@ -900,13 +901,13 @@ contract TradingManager is
             isSellOrder: false
         });
         
-        _userTrades[order.seller].push(tradeId);
+        _userTrades[order.creator].push(tradeId);
         _userTrades[msg.sender].push(tradeId);
         _tokenTrades[order.token].push(tradeId);
         
         emit OrderExecuted(
             buyOrderId,
-            order.seller,
+            order.creator,
             msg.sender,
             order.token,
             order.propertyId,
