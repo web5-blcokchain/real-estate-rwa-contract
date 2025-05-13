@@ -637,7 +637,7 @@ async function initialInvestorBuy() {
 // 创建买单
 async function createBuyOrder() {
     log.step(2, '创建买单');
-  try {
+    try {
         const buyerAddress = await state.buyerWallet.getAddress();
         const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
         if (!propertyTokenContract) {
@@ -647,10 +647,22 @@ async function createBuyOrder() {
         const tokenDecimals = await propertyTokenContract.decimals();
         const amount = ethers.parseUnits("1", tokenDecimals); // 1个代币
         const price = ethers.parseUnits("10", state.usdtDecimals); // 10 USDT
-        const totalAmount = amount * price / ethers.parseUnits("1", tokenDecimals);
+        
+        // 计算基础金额
+        const baseAmount = amount * price / ethers.parseUnits("1", tokenDecimals);
+        
+        // 计算手续费 (0.5%)
+        const feeRate = 50; // 0.5%
+        const feeAmount = (baseAmount * BigInt(feeRate)) / BigInt(10000);
+        
+        // 计算总金额（包含手续费）
+        const totalAmount = baseAmount + feeAmount;
         
         log.info(`创建买单: ${ethers.formatUnits(amount, tokenDecimals)} 个代币, 单价 ${ethers.formatUnits(price, state.usdtDecimals)} USDT`);
-        log.info(`总金额: ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT`);
+        log.info(`基础金额: ${ethers.formatUnits(baseAmount, state.usdtDecimals)} USDT`);
+        log.info(`手续费率: ${feeRate/100}%`);
+        log.info(`手续费: ${ethers.formatUnits(feeAmount, state.usdtDecimals)} USDT`);
+        log.info(`总金额(含手续费): ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT`);
         log.info(`房产ID: ${state.propertyId}`);
     
         // 检查USDT余额
@@ -668,30 +680,44 @@ async function createBuyOrder() {
         
         // 检查USDT授权
         const usdtAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
-        log.info(`USDT授权额度: ${ethers.formatUnits(usdtAllowance, state.usdtDecimals)} USDT`);
+        log.info(`当前USDT授权额度: ${ethers.formatUnits(usdtAllowance, state.usdtDecimals)} USDT`);
     
         if (usdtAllowance < totalAmount) {
             log.info(`授权USDT给交易管理器...`);
-            const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalAmount);
-            await waitForTransaction(approveTx);
+            // 先清零授权
+            const zeroApproveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, 0);
+            await waitForTransaction(zeroApproveTx);
             
             // 等待交易完全确认
             await new Promise(resolve => setTimeout(resolve, 2000));
             
+            // 设置新的授权额度（增加授权金额）
+            const approveAmount = totalAmount * BigInt(20); // 授权20倍金额
+            const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, approveAmount);
+            await waitForTransaction(approveTx);
+            
+            // 再次检查授权
             const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
             log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, state.usdtDecimals)} USDT`);
+            
+            if (newAllowance < totalAmount) {
+                throw new Error(`USDT授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, state.usdtDecimals)} 小于需要的 ${ethers.formatUnits(totalAmount, state.usdtDecimals)}`);
+            }
         }
         
         const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.buyerWallet);
         if (!tradingManagerContract) {
             throw new Error('Failed to get TradingManager contract');
-      }
+        }
         
         log.info(`准备创建买单:
             - 代币地址: ${state.propertyTokenAddress}
             - 房产ID: ${state.propertyId}
             - 数量: ${ethers.formatUnits(amount, tokenDecimals)} 个代币
             - 单价: ${ethers.formatUnits(price, state.usdtDecimals)} USDT
+            - 基础金额: ${ethers.formatUnits(baseAmount, state.usdtDecimals)} USDT
+            - 手续费: ${ethers.formatUnits(feeAmount, state.usdtDecimals)} USDT
+            - 总金额: ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT
         `);
     
         // 确保 propertyId 存在
@@ -700,12 +726,12 @@ async function createBuyOrder() {
         }
         
         const createOrderTx = await tradingManagerContract.createBuyOrder(
-        state.propertyTokenAddress,
+            state.propertyTokenAddress,
             state.propertyId,  // 确保传递 propertyId
             amount,
             price,
             { gasLimit: 500000 }
-    );
+        );
     
         log.info('等待买单创建交易确认...');
         const receipt = await waitForTransaction(createOrderTx);
@@ -742,17 +768,17 @@ async function createBuyOrder() {
             - 订单类型: ${order.isSellOrder ? '卖单' : '买单'}
         `);
     
-    return true;
-  } catch (error) {
+        return true;
+    } catch (error) {
         log.error(`创建买单失败: ${error.message}`);
-    if (error.reason) {
-      log.error(`错误原因: ${error.reason}`);
+        if (error.reason) {
+            log.error(`错误原因: ${error.reason}`);
+        }
+        if (error.data) {
+            log.error(`错误数据: ${error.data}`);
+        }
+        return false;
     }
-    if (error.data) {
-      log.error(`错误数据: ${error.data}`);
-    }
-    return false;
-  }
 }
 
 // 创建卖单
