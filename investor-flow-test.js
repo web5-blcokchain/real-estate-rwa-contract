@@ -746,7 +746,14 @@ async function createSellOrder() {
         throw new Error('Failed to get TradingManager contract');
     }
     
-    const createOrderTx = await tradingManagerContract.createSellOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
+    // 确保 amount 和 price 是 BigNumber 格式
+    const createOrderTx = await tradingManagerContract.createSellOrder(
+        state.propertyTokenAddress,
+        state.propertyId,  // propertyId 参数
+        amount,
+        price,
+        { gasLimit: 500000 }
+    );
     await waitForTransaction(createOrderTx, '创建卖单');
     
     // 等待交易完全确认
