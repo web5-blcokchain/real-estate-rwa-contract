@@ -670,7 +670,7 @@ async function createBuyOrder() {
   log.step(2, '创建买单');
   try {
     const buyerAddress = await state.buyerWallet.getAddress();
-    const propertyTokenContract = await getContract('PropertyToken', PROPERTY_TOKEN_ADDRESS, state.buyerWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
     if (!propertyTokenContract) {
         throw new Error('Failed to get PropertyToken contract');
     }
@@ -717,7 +717,7 @@ async function createBuyOrder() {
         throw new Error('Failed to get TradingManager contract');
     }
     
-    const createOrderTx = await tradingManagerContract.createBuyOrder(PROPERTY_TOKEN_ADDRESS, amount, price, { gasLimit: 500000 });
+    const createOrderTx = await tradingManagerContract.createBuyOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
     await waitForTransaction(createOrderTx, '创建买单');
     
     // 等待交易完全确认
@@ -736,7 +736,7 @@ async function createSellOrder() {
   log.step(3, '创建卖单');
   try {
     const sellerAddress = await state.sellerWallet.getAddress();
-    const propertyTokenContract = await getContract('PropertyToken', PROPERTY_TOKEN_ADDRESS, state.sellerWallet);
+    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.sellerWallet);
     if (!propertyTokenContract) {
         throw new Error('Failed to get PropertyToken contract');
     }
@@ -776,7 +776,7 @@ async function createSellOrder() {
         throw new Error('Failed to get TradingManager contract');
     }
     
-    const createOrderTx = await tradingManagerContract.createSellOrder(PROPERTY_TOKEN_ADDRESS, amount, price, { gasLimit: 500000 });
+    const createOrderTx = await tradingManagerContract.createSellOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
     await waitForTransaction(createOrderTx, '创建卖单');
     
     // 等待交易完全确认
@@ -797,7 +797,7 @@ async function buyOrder() {
     log.step(4, '执行买单');
     try {
         const buyerAddress = await state.buyerWallet.getAddress();
-        const propertyTokenContract = await getContract('PropertyToken', PROPERTY_TOKEN_ADDRESS, state.buyerWallet);
+        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
         if (!propertyTokenContract) {
             throw new Error('Failed to get PropertyToken contract');
         }
@@ -844,7 +844,7 @@ async function buyOrder() {
             throw new Error('Failed to get TradingManager contract');
         }
         
-        const buyTx = await tradingManagerContract.buyOrder(PROPERTY_TOKEN_ADDRESS, amount, price, { gasLimit: 500000 });
+        const buyTx = await tradingManagerContract.buyOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
         await waitForTransaction(buyTx, '执行买单');
         
         // 等待交易完全确认
@@ -865,7 +865,7 @@ async function sellOrder() {
     log.step(5, '执行卖单');
     try {
         const sellerAddress = await state.sellerWallet.getAddress();
-        const propertyTokenContract = await getContract('PropertyToken', PROPERTY_TOKEN_ADDRESS, state.sellerWallet);
+        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.sellerWallet);
         if (!propertyTokenContract) {
             throw new Error('Failed to get PropertyToken contract');
         }
@@ -905,7 +905,7 @@ async function sellOrder() {
             throw new Error('Failed to get TradingManager contract');
         }
         
-        const sellTx = await tradingManagerContract.sellOrder(PROPERTY_TOKEN_ADDRESS, amount, price, { gasLimit: 500000 });
+        const sellTx = await tradingManagerContract.sellOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
         await waitForTransaction(sellTx, '执行卖单');
         
         // 等待交易完全确认
