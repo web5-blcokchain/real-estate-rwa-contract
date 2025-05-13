@@ -43,7 +43,8 @@ const getNetworkConfig = (network) => {
         chainId: 31337,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
-        loggingEnabled: false,
+        loggingEnabled: true,
+        verbose: true,
         // 为 hardhat 网络使用默认账户
         accounts: {
           mnemonic: "test test test test test test test test test test test junk",
@@ -60,7 +61,8 @@ const getNetworkConfig = (network) => {
         chainId: 31337,
         blockGasLimit: 30000000,
         allowUnlimitedContractSize: true,
-        loggingEnabled: false,
+        loggingEnabled: true,
+        verbose: true,
         // 使用与 hardhat 相同的账户配置
         accounts: {
           mnemonic: "test test test test test test test test test test test junk",
@@ -79,7 +81,9 @@ const getNetworkConfig = (network) => {
       return {
         ...baseConfig,
         url: process.env.TESTNET_RPC_URL,
-        chainId: parseInt(process.env.TESTNET_CHAIN_ID || '11155111')
+        chainId: parseInt(process.env.TESTNET_CHAIN_ID || '11155111'),
+        loggingEnabled: true,
+        verbose: true
       };
     case 'mainnet':
       // 当未定义mainnet URL时，返回localhost配置以避免配置错误
@@ -90,7 +94,9 @@ const getNetworkConfig = (network) => {
       return {
         ...baseConfig,
         url: process.env.MAINNET_RPC_URL,
-        chainId: parseInt(process.env.MAINNET_CHAIN_ID || '1')
+        chainId: parseInt(process.env.MAINNET_CHAIN_ID || '1'),
+        loggingEnabled: true,
+        verbose: true
       };
     default:
       throw new Error(`Unsupported network: ${network}`);
@@ -134,6 +140,9 @@ module.exports = {
           metadata: {
             bytecodeHash: "none"
           },
+          debug: {
+            revertStrings: "debug"
+          }
         },
       },
       {
@@ -147,6 +156,9 @@ module.exports = {
           metadata: {
             bytecodeHash: "none"
           },
+          debug: {
+            revertStrings: "debug"
+          }
         },
       }
     ],
@@ -172,5 +184,16 @@ module.exports = {
   // Mocha 测试配置
   mocha: {
     timeout: 40000,
+  },
+
+  // 添加详细的错误报告配置
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+  },
+
+  // 添加详细的错误报告配置
+  tenderly: {
+    project: process.env.TENDERLY_PROJECT,
+    username: process.env.TENDERLY_USERNAME,
   },
 };

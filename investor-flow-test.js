@@ -86,7 +86,7 @@ const state = {
   tokenName: null,
   tokenDecimals: 0, // PropertyToken 份额为整数
   usdtDecimals: 18, // USDT 精度，将从合约中获取
-  sellOrderId: null,
+  sellOrderId: null,  // 添加卖单ID
   buyOrderId: null,
   distributionId: null
 };
@@ -637,74 +637,117 @@ async function initialInvestorBuy() {
 
 // 创建买单
 async function createBuyOrder() {
-  log.step(2, '创建买单');
-  try {
-    const buyerAddress = await state.buyerWallet.getAddress();
-    const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
-    if (!propertyTokenContract) {
-        throw new Error('Failed to get PropertyToken contract');
-    }
-    
-    const tokenDecimals = await propertyTokenContract.decimals();
-    const amount = ethers.parseUnits("1", tokenDecimals); // 1个代币
-    const price = ethers.parseUnits("10", state.usdtDecimals); // 10 USDT
-    const totalAmount = amount * price / ethers.parseUnits("1", tokenDecimals);
-    
-    log.info(`创建买单: ${ethers.formatUnits(amount, tokenDecimals)} 个代币, 单价 ${ethers.formatUnits(price, state.usdtDecimals)} USDT`);
-    log.info(`总金额: ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT`);
-    
-    // 检查USDT余额
-    const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.buyerWallet);
-    if (!usdtContract) {
-        throw new Error('Failed to get USDT contract');
-    }
-    
-    const usdtBalance = await usdtContract.balanceOf(buyerAddress);
-    log.info(`买家USDT余额: ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
-    
-    if (usdtBalance < totalAmount) {
-        throw new Error(`USDT余额不足: 需要 ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT, 当前余额 ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
-    }
-    
-    // 检查USDT授权
-    const usdtAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
-    log.info(`USDT授权额度: ${ethers.formatUnits(usdtAllowance, state.usdtDecimals)} USDT`);
-    
-    if (usdtAllowance < totalAmount) {
-        log.info(`授权USDT给交易管理器...`);
-        const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalAmount);
-        await waitForTransaction(approveTx, '授权USDT');
+    log.step(2, '创建买单');
+    try {
+        const buyerAddress = await state.buyerWallet.getAddress();
+        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
+        if (!propertyTokenContract) {
+            throw new Error('Failed to get PropertyToken contract');
+        }
+        
+        const tokenDecimals = await propertyTokenContract.decimals();
+        const amount = ethers.parseUnits("1", tokenDecimals); // 1个代币
+        const price = ethers.parseUnits("10", state.usdtDecimals); // 10 USDT
+        const totalAmount = amount * price / ethers.parseUnits("1", tokenDecimals);
+        
+        log.info(`创建买单: ${ethers.formatUnits(amount, tokenDecimals)} 个代币, 单价 ${ethers.formatUnits(price, state.usdtDecimals)} USDT`);
+        log.info(`总金额: ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT`);
+        
+        // 检查USDT余额
+        const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.buyerWallet);
+        if (!usdtContract) {
+            throw new Error('Failed to get USDT contract');
+        }
+        
+        const usdtBalance = await usdtContract.balanceOf(buyerAddress);
+        log.info(`买家USDT余额: ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
+        
+        if (usdtBalance < totalAmount) {
+            throw new Error(`USDT余额不足: 需要 ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT, 当前余额 ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
+        }
+        
+        // 检查USDT授权
+        const usdtAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
+        log.info(`USDT授权额度: ${ethers.formatUnits(usdtAllowance, state.usdtDecimals)} USDT`);
+        
+        if (usdtAllowance < totalAmount) {
+            log.info(`授权USDT给交易管理器...`);
+            const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalAmount);
+            await waitForTransaction(approveTx, '授权USDT');
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
+            log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, state.usdtDecimals)} USDT`);
+        }
+        
+        const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.buyerWallet);
+        if (!tradingManagerContract) {
+            throw new Error('Failed to get TradingManager contract');
+        }
+        
+        log.info(`准备创建买单:
+            - 代币地址: ${state.propertyTokenAddress}
+            - 房产ID: ${state.propertyId}
+            - 数量: ${ethers.formatUnits(amount, tokenDecimals)} 个代币
+            - 单价: ${ethers.formatUnits(price, state.usdtDecimals)} USDT
+        `);
+        
+        const createOrderTx = await tradingManagerContract.createBuyOrder(
+            state.propertyTokenAddress,
+            state.propertyId,
+            amount,
+            price,
+            { gasLimit: 500000 }
+        );
+        
+        log.info('等待买单创建交易确认...');
+        const receipt = await waitForTransaction(createOrderTx, '创建买单');
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
-        log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, state.usdtDecimals)} USDT`);
+        // 获取并保存买单ID
+        log.info('获取用户订单列表...');
+        const orderIds = await tradingManagerContract.getUserOrders(buyerAddress);
+        log.info(`用户订单列表: ${orderIds}`);
+        
+        if (orderIds.length === 0) {
+            throw new Error('No orders found for user');
+        }
+        
+        state.buyOrderId = orderIds[orderIds.length - 1];
+        log.info(`买单创建成功，订单ID: ${state.buyOrderId}`);
+        
+        // 验证订单是否存在
+        const order = await tradingManagerContract.getOrder(state.buyOrderId);
+        if (!order) {
+            throw new Error(`Created order ${state.buyOrderId} not found`);
+        }
+        
+        log.info(`订单验证成功:
+            - 订单ID: ${order.id}
+            - 买家地址: ${order.seller}
+            - 代币地址: ${order.token}
+            - 房产ID: ${order.propertyId}
+            - 代币数量: ${ethers.formatUnits(order.amount, tokenDecimals)} 个代币
+            - 单价: ${ethers.formatUnits(order.price, state.usdtDecimals)} USDT
+            - 是否活跃: ${order.active ? '是' : '否'}
+            - 订单类型: ${order.isSellOrder ? '卖单' : '买单'}
+        `);
+        
+        return true;
+    } catch (error) {
+        log.error(`创建买单失败: ${error.message}`);
+        if (error.reason) {
+            log.error(`错误原因: ${error.reason}`);
+        }
+        if (error.data) {
+            log.error(`错误数据: ${error.data}`);
+        }
+        return false;
     }
-    
-    const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.buyerWallet);
-    if (!tradingManagerContract) {
-        throw new Error('Failed to get TradingManager contract');
-    }
-    
-    const createOrderTx = await tradingManagerContract.createBuyOrder(
-        state.propertyTokenAddress,
-        state.propertyId,  // 添加 propertyId 参数
-        amount,
-        price,
-        { gasLimit: 500000 }
-    );
-    await waitForTransaction(createOrderTx, '创建买单');
-    
-    // 等待交易完全确认
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    log.info('买单创建成功');
-    return true;
-  } catch (error) {
-    log.error(`创建买单失败: ${error.message}`);
-    return false;
-  }
 }
 
 // 创建卖单
@@ -752,20 +795,23 @@ async function createSellOrder() {
         throw new Error('Failed to get TradingManager contract');
     }
     
-    // 确保 amount 和 price 是 BigNumber 格式
     const createOrderTx = await tradingManagerContract.createSellOrder(
         state.propertyTokenAddress,
-        state.propertyId,  // propertyId 参数
+        state.propertyId,
         amount,
         price,
         { gasLimit: 500000 }
     );
     await waitForTransaction(createOrderTx, '创建卖单');
     
+    // 获取并保存卖单ID
+    const orderIds = await tradingManagerContract.getUserOrders(sellerAddress);
+    state.sellOrderId = orderIds[orderIds.length - 1];
+    log.info(`卖单创建成功，订单ID: ${state.sellOrderId}`);
+    
     // 等待交易完全确认
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    log.info('卖单创建成功');
     return true;
   } catch (error) {
     log.error(`创建卖单失败: ${error.message}`);
@@ -776,67 +822,150 @@ async function createSellOrder() {
 /**
  * @dev 购买卖单
  */
-async function buyOrder() {
-    log.step(4, '执行买单');
+async function buyOrder(orderId) {
     try {
-        const buyerAddress = await state.buyerWallet.getAddress();
-        const propertyTokenContract = await getContract('PropertyToken', state.propertyTokenAddress, state.buyerWallet);
-        if (!propertyTokenContract) {
-            throw new Error('Failed to get PropertyToken contract');
+        log.step(4, '执行买单,orderId:' + orderId);
+        
+        // 检查 orderId
+        if (!orderId) {
+            throw new Error('Order ID is required');
         }
+        log.info(`开始执行买单，订单ID: ${orderId}`);
         
-        const tokenDecimals = await propertyTokenContract.decimals();
-        const amount = ethers.parseUnits("1", tokenDecimals); // 1个代币
-        const price = ethers.parseUnits("10", state.usdtDecimals); // 10 USDT
-        const totalAmount = amount * price / ethers.parseUnits("1", tokenDecimals);
-        
-        log.info(`执行买单: ${ethers.formatUnits(amount, tokenDecimals)} 个代币, 单价 ${ethers.formatUnits(price, state.usdtDecimals)} USDT`);
-        log.info(`总金额: ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT`);
-        
-        // 检查USDT余额
-        const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.buyerWallet);
-        if (!usdtContract) {
-            throw new Error('Failed to get USDT contract');
-        }
-        
-        const usdtBalance = await usdtContract.balanceOf(buyerAddress);
-        log.info(`买家USDT余额: ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
-        
-        if (usdtBalance < totalAmount) {
-            throw new Error(`USDT余额不足: 需要 ${ethers.formatUnits(totalAmount, state.usdtDecimals)} USDT, 当前余额 ${ethers.formatUnits(usdtBalance, state.usdtDecimals)} USDT`);
-        }
-        
-        // 检查USDT授权
-        const usdtAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
-        log.info(`USDT授权额度: ${ethers.formatUnits(usdtAllowance, state.usdtDecimals)} USDT`);
-        
-        if (usdtAllowance < totalAmount) {
-            log.info(`授权USDT给交易管理器...`);
-            const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalAmount);
-            await waitForTransaction(approveTx, '授权USDT');
-            
-            // 等待交易完全确认
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
-            log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, state.usdtDecimals)} USDT`);
-        }
-        
+        // 获取合约实例
         const tradingManagerContract = await getContract('TradingManager', TRADING_MANAGER_ADDRESS, state.buyerWallet);
         if (!tradingManagerContract) {
             throw new Error('Failed to get TradingManager contract');
         }
+        log.info(`成功获取 TradingManager 合约实例`);
         
-        const buyTx = await tradingManagerContract.buyOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
-        await waitForTransaction(buyTx, '执行买单');
+        // 验证合约方法是否存在
+        if (typeof tradingManagerContract.buyOrder !== 'function') {
+            throw new Error('buyOrder method not found in contract');
+        }
+        log.info(`验证 buyOrder 方法存在`);
         
-        // 等待交易完全确认
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.buyerWallet);
+        if (!usdtContract) {
+            throw new Error('Failed to get USDT contract');
+        }
+        log.info(`成功获取 USDT 合约实例`);
         
-        log.info('买单执行成功');
+        const buyerAddress = await state.buyerWallet.getAddress();
+        log.info(`买家地址: ${buyerAddress}`);
+        
+        // 获取卖单信息
+        log.info(`获取订单信息...`);
+        const order = await tradingManagerContract.getOrder(orderId);
+        if (!order) {
+            throw new Error(`Order ${orderId} not found`);
+        }
+        log.info(`成功获取订单信息`);
+        
+        log.info(`卖单信息:
+            - 订单ID: ${order.id}
+            - 卖家地址: ${order.seller}
+            - 代币地址: ${order.token}
+            - 房产ID: ${order.propertyId}
+            - 代币数量: ${ethers.formatUnits(order.amount, state.tokenDecimals)} ${state.tokenSymbol}
+            - 单价: ${ethers.formatUnits(order.price, 18)} USDT
+            - 创建时间: ${new Date(Number(order.timestamp) * 1000).toLocaleString()}
+            - 是否活跃: ${order.active ? '是' : '否'}
+            - 订单类型: ${order.isSellOrder ? '卖单' : '买单'}
+        `);
+
+        // 计算需要的USDT数量（包含手续费）
+        const usdtAmount = order.amount * order.price;
+        const feeRate = await tradingManagerContract.feeRate();
+        const usdtFee = (usdtAmount * feeRate) / BigInt(10000);
+        const totalUsdt = usdtAmount + usdtFee;
+        
+        log.info(`交易详情:
+            - 购买数量: ${ethers.formatUnits(order.amount, state.tokenDecimals)} ${state.tokenSymbol}
+            - 单价: ${ethers.formatUnits(order.price, 18)} USDT
+            - 基础金额: ${ethers.formatUnits(usdtAmount, 18)} USDT
+            - 手续费率: ${Number(feeRate) / 100}%
+            - 手续费: ${ethers.formatUnits(usdtFee, 18)} USDT
+            - 总金额: ${ethers.formatUnits(totalUsdt, 18)} USDT
+        `);
+        
+        // 检查USDT余额
+        const usdtBalance = await usdtContract.balanceOf(buyerAddress);
+        log.info(`买家USDT余额: ${ethers.formatUnits(usdtBalance, 18)} USDT`);
+        
+        if (usdtBalance < totalUsdt) {
+            // 如果余额不足，从管理员转账更多的USDT
+            log.info(`USDT余额不足，从管理员转账更多USDT...`);
+            const adminUsdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.adminWallet);
+            const transferAmount = totalUsdt * BigInt(2); // 转账两倍所需金额
+            
+            const transferTx = await adminUsdtContract.transfer(buyerAddress, transferAmount);
+            await transferTx.wait();
+            
+            const newBalance = await usdtContract.balanceOf(buyerAddress);
+            log.info(`转账完成，新USDT余额: ${ethers.formatUnits(newBalance, 18)} USDT`);
+        }
+        
+        // 检查USDT授权额度
+        const currentAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
+        log.info(`当前USDT授权额度: ${ethers.formatUnits(currentAllowance, 18)} USDT`);
+        
+        // 如果授权额度不足，进行授权
+        if (currentAllowance < totalUsdt) {
+            log.info(`USDT授权额度不足，正在授权...`);
+            // 先清零授权
+            log.info(`清零当前授权...`);
+            const resetTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, 0);
+            await resetTx.wait();
+            
+            // 设置新的授权额度（授权10倍所需金额）
+            const approveAmount = totalUsdt * BigInt(10);
+            log.info(`设置新的授权额度: ${ethers.formatUnits(approveAmount, 18)} USDT`);
+            const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, approveAmount);
+            await approveTx.wait();
+            
+            // 再次检查授权额度
+            const newAllowance = await usdtContract.allowance(buyerAddress, TRADING_MANAGER_ADDRESS);
+            log.info(`新的USDT授权额度: ${ethers.formatUnits(newAllowance, 18)} USDT`);
+            
+            if (newAllowance < totalUsdt) {
+                throw new Error(`USDT授权失败，当前授权额度 ${ethers.formatUnits(newAllowance, 18)} 小于需要的 ${ethers.formatUnits(totalUsdt, 18)}`);
+            }
+        }
+
+        // 执行买单
+        log.info(`准备执行买单:
+            - 卖单ID: ${orderId}
+            - 买家地址: ${buyerAddress}
+            - 交易管理器地址: ${TRADING_MANAGER_ADDRESS}
+        `);
+        
+        try {
+            log.info(`调用 buyOrder 方法...`);
+            const tx = await tradingManagerContract.buyOrder(orderId);
+            log.info(`买单交易已发送，等待确认...`);
+            const receipt = await tx.wait();
+            log.info(`买单执行成功，交易哈希: ${receipt.hash}`);
+        } catch (txError) {
+            log.error(`交易执行失败: ${txError.message}`);
+            if (txError.reason) {
+                log.error(`错误原因: ${txError.reason}`);
+            }
+            if (txError.data) {
+                log.error(`错误数据: ${txError.data}`);
+            }
+            throw txError;
+        }
+
         return true;
     } catch (error) {
         log.error(`执行买单失败: ${error.message}`);
+        if (error.reason) {
+            log.error(`错误原因: ${error.reason}`);
+        }
+        if (error.data) {
+            log.error(`错误数据: ${error.data}`);
+        }
         return false;
     }
 }
@@ -1185,49 +1314,67 @@ async function claimReward(distributionId) {
 
 // 修改测试流程
 async function testFlow() {
-  try {
-    await initializeSystem();
-    await checkBalances("After System Initialization");
+    try {
+        await initializeSystem();
+        await checkBalances("After System Initialization");
 
-    await registerProperty();
-    await checkBalances("After Property Registration");
+        await registerProperty();
+        await checkBalances("After Property Registration");
 
-    await updatePropertyStatus();
-    await checkBalances("After Status Update");
+        await updatePropertyStatus();
+        await checkBalances("After Status Update");
 
-    // seller 初始购买房产代币
-    await initialInvestorBuy();
-    await checkBalances("After Initial Buy");
+        // seller 初始购买房产代币
+        await initialInvestorBuy();
+        await checkBalances("After Initial Buy");
 
-    // seller 创建卖单
-    await createSellOrder();
-    await checkBalances("After Sell Order Creation");
+        // seller 创建卖单
+        await createSellOrder();
+        await checkBalances("After Sell Order Creation");
 
-    // buyer 创建买单
-    await createBuyOrder();
-    await checkBalances("After Buy Order Creation");
+        // buyer 创建买单
+        log.info('开始创建买单流程...');
+        const buyOrderCreated = await createBuyOrder();
+        if (!buyOrderCreated) {
+            throw new Error('创建买单失败');
+        }
+        await checkBalances("After Buy Order Creation");
 
-    // buyer 执行买单
-    await buyOrder();
-    await checkBalances("After Buy Execution");
+        // buyer 执行卖单（使用卖单ID）
+        log.info(`准备执行卖单，使用订单ID: ${state.sellOrderId}`);
+        if (!state.sellOrderId) {
+            throw new Error('卖单ID未设置');
+        }
+        const buyOrderExecuted = await buyOrder(state.sellOrderId);
+        if (!buyOrderExecuted) {
+            throw new Error('执行卖单失败');
+        }
+        await checkBalances("After Buy Execution");
 
-    // seller 执行卖单
-    await sellOrder();
-    await checkBalances("After Sell Execution");
+        // seller 执行买单（使用买单ID）
+        log.info(`准备执行买单，使用订单ID: ${state.buyOrderId}`);
+        if (!state.buyOrderId) {
+            throw new Error('买单ID未设置');
+        }
+        const sellOrderExecuted = await sellOrder();
+        if (!sellOrderExecuted) {
+            throw new Error('执行买单失败');
+        }
+        await checkBalances("After Sell Execution");
 
-    // 创建收益分配
-    await createDistribution();
-    await checkBalances("After Distribution Creation");
+        // 创建收益分配
+        await createDistribution();
+        await checkBalances("After Distribution Creation");
 
-    // 领取收益
-    await claimReward(state.distributionId);
-    await checkBalances("After Reward Claim");
+        // 领取收益
+        await claimReward(state.distributionId);
+        await checkBalances("After Reward Claim");
 
-    console.log("测试流程完成");
-  } catch (error) {
-    console.error("测试流程失败:", error);
-    throw error;
-  }
+        console.log("测试流程完成");
+    } catch (error) {
+        console.error("测试流程失败:", error);
+        throw error;
+    }
 }
 
 // 运行测试流程
