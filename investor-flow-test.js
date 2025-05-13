@@ -687,7 +687,13 @@ async function createBuyOrder() {
         throw new Error('Failed to get TradingManager contract');
     }
     
-    const createOrderTx = await tradingManagerContract.createBuyOrder(state.propertyTokenAddress, amount, price, { gasLimit: 500000 });
+    const createOrderTx = await tradingManagerContract.createBuyOrder(
+        state.propertyTokenAddress,
+        state.propertyId,  // 添加 propertyId 参数
+        amount,
+        price,
+        { gasLimit: 500000 }
+    );
     await waitForTransaction(createOrderTx, '创建买单');
     
     // 等待交易完全确认
