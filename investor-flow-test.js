@@ -150,16 +150,15 @@ async function getContract(contractName, address, wallet) {
 }
 
 // 等待交易确认
-async function waitForTransaction(tx, description) {
-  try {
-    log.info(`等待${description}交易确认...`);
-    const receipt = await tx.wait();
-    log.success(`${description}交易已确认，区块号: ${receipt.blockNumber}`);
-    return receipt;
-  } catch (error) {
-    log.error(`${description}交易失败: ${error.message}`);
-    throw error;
-  }
+async function waitForTransaction(tx) {
+    try {
+        const receipt = await tx.wait();
+        console.log(`[INFO] 交易已确认，区块号: ${receipt.blockNumber}`);
+        return receipt;
+    } catch (error) {
+        console.error(`[ERROR] 交易确认失败: ${error.message}`);
+        throw error;
+    }
 }
 
 // 确保账户有足够的ETH
@@ -175,7 +174,7 @@ async function ensureEthBalance(fromWallet, toAddress, minBalance = ethers.parse
       to: toAddress,
       value: formattedMinBalance
     });
-    await waitForTransaction(tx, 'ETH转账');
+    await waitForTransaction(tx);
     
     // 等待交易完全确认
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -199,7 +198,7 @@ async function ensureTokenBalance(tokenContract, fromWallet, toAddress, minBalan
     log.info(`转账 ${ethers.formatUnits(neededAmount, decimals)} ${tokenSymbol} 到 ${toAddress}`);
     
     const tx = await tokenContract.connect(fromWallet).transfer(toAddress, neededAmount);
-    await waitForTransaction(tx, `${tokenSymbol}转账`);
+    await waitForTransaction(tx);
     
     // 等待交易完全确认
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -332,7 +331,7 @@ async function initializeSystem() {
     if (sellerUsdtBalance < sellerUsdtAmount) {
         log.info(`给卖家转账 ${ethers.formatUnits(sellerUsdtAmount, state.usdtDecimals)} USDT...`);
         const transferTx = await usdtContract.transfer(sellerAddress, sellerUsdtAmount);
-        await waitForTransaction(transferTx, '给卖家转账USDT');
+        await waitForTransaction(transferTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -349,7 +348,7 @@ async function initializeSystem() {
     if (buyerUsdtBalance < buyerUsdtAmount) {
         log.info(`给买家转账 ${ethers.formatUnits(buyerUsdtAmount, state.usdtDecimals)} USDT...`);
         const transferTx = await usdtContract.transfer(buyerAddress, buyerUsdtAmount);
-        await waitForTransaction(transferTx, '给买家转账USDT');
+        await waitForTransaction(transferTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -368,7 +367,7 @@ async function initializeSystem() {
     
     log.info('设置交易冷却期为1秒...');
     const setCooldownTx = await tradingManagerContract.setCooldownPeriod(1);
-    await waitForTransaction(setCooldownTx, '设置冷却期');
+    await waitForTransaction(setCooldownTx);
     
     // 等待交易完全确认
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -425,7 +424,7 @@ async function registerProperty() {
     );
     
     log.info('等待交易确认...');
-    const receipt = await waitForTransaction(registerTx, '注册房产');
+    const receipt = await waitForTransaction(registerTx);
     
     // 验证交易是否成功
     if (receipt.status !== 1) {
@@ -506,7 +505,7 @@ async function updatePropertyStatus() {
     );
     
     log.info('等待交易确认...');
-    const receipt = await waitForTransaction(updateStatusTx, '更新房产状态');
+    const receipt = await waitForTransaction(updateStatusTx);
     
     // 验证交易是否成功
     if (receipt.status !== 1) {
@@ -591,11 +590,11 @@ async function initialInvestorBuy() {
         log.info(`授权USDT给PropertyManager...`);
         // 先清零授权
         const resetTx = await usdtContract.approve(PROPERTY_MANAGER_ADDRESS, 0);
-        await waitForTransaction(resetTx, '清零USDT授权');
+        await waitForTransaction(resetTx);
         
         // 设置新的授权额度
         const approveTx = await usdtContract.approve(PROPERTY_MANAGER_ADDRESS, requiredUsdtAmount);
-        await waitForTransaction(approveTx, '授权USDT');
+        await waitForTransaction(approveTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -611,7 +610,7 @@ async function initialInvestorBuy() {
       { gasLimit: 500000 }
             );
     
-    await waitForTransaction(initialBuyTx, '初始购买房产代币');
+    await waitForTransaction(initialBuyTx);
     
     // 等待交易完全确认
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -674,7 +673,7 @@ async function createBuyOrder() {
         if (usdtAllowance < totalAmount) {
             log.info(`授权USDT给交易管理器...`);
             const approveTx = await usdtContract.approve(TRADING_MANAGER_ADDRESS, totalAmount);
-            await waitForTransaction(approveTx, '授权USDT');
+            await waitForTransaction(approveTx);
             
             // 等待交易完全确认
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -709,7 +708,7 @@ async function createBuyOrder() {
     );
     
         log.info('等待买单创建交易确认...');
-        const receipt = await waitForTransaction(createOrderTx, '创建买单');
+        const receipt = await waitForTransaction(createOrderTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -787,7 +786,7 @@ async function createSellOrder() {
     if (tokenAllowance < amount) {
         log.info(`授权代币给交易管理器...`);
         const approveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, amount);
-        await waitForTransaction(approveTx, '授权代币');
+        await waitForTransaction(approveTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -808,7 +807,7 @@ async function createSellOrder() {
         price,
         { gasLimit: 500000 }
     );
-    await waitForTransaction(createOrderTx, '创建卖单');
+    await waitForTransaction(createOrderTx);
     
     // 获取并保存卖单ID
     const orderIds = await tradingManagerContract.getUserOrders(sellerAddress);
@@ -950,7 +949,7 @@ async function buyOrder(orderId) {
             log.info(`调用 buyOrder 方法...`);
         const tx = await tradingManagerContract.buyOrder(orderId);
         log.info(`买单交易已发送，等待确认...`);
-        const receipt = await tx.wait();
+        const receipt = await waitForTransaction(tx);
         log.info(`买单执行成功，交易哈希: ${receipt.hash}`);
         } catch (txError) {
             log.error(`交易执行失败: ${txError.message}`);
@@ -1025,8 +1024,11 @@ async function sellOrder() {
         if (allowance < order.amount) {
             log.info('授权代币给交易管理器...');
             const approveTx = await propertyTokenContract.approve(TRADING_MANAGER_ADDRESS, order.amount);
-            log.info('等待授权代币交易确认...');
-            const approveReceipt = await waitForTransaction(approveTx, '授权代币');
+            await waitForTransaction(approveTx);
+            
+            // 等待交易完全确认
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             const newAllowance = await propertyTokenContract.allowance(await state.sellerWallet.getAddress(), TRADING_MANAGER_ADDRESS);
             log.info(`新的代币授权额度: ${ethers.formatUnits(newAllowance, tokenDecimals)} 个代币`);
         }
@@ -1034,7 +1036,7 @@ async function sellOrder() {
         // 执行卖单 - 只传入买单ID
         const tx = await tradingManagerContract.sellOrder(state.buyOrderId, { gasLimit: 500000 });
         log.info(`卖单交易已发送，等待确认...`);
-        const receipt = await tx.wait();
+        const receipt = await waitForTransaction(tx);
         log.info(`卖单执行成功，交易哈希: ${receipt.hash}`);
 
         return true;
@@ -1085,14 +1087,14 @@ async function createDistribution() {
         log.info(`USDT授权额度不足，正在授权...`);
         // 先清零授权
         const resetTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, 0);
-        await waitForTransaction(resetTx, '清零USDT授权');
+        await waitForTransaction(resetTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         const approveAmount = distributionAmount * BigInt(2); // 授权两倍所需金额
         const approveTx = await usdtContract.approve(REWARD_MANAGER_ADDRESS, approveAmount);
-        await waitForTransaction(approveTx, '设置新USDT授权');
+        await waitForTransaction(approveTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1109,7 +1111,7 @@ async function createDistribution() {
     log.info(`添加USDT到支持的稳定币列表...`);
     try {
         const addTx = await rewardManagerContract.addSupportedStablecoin(USDT_ADDRESS);
-        await waitForTransaction(addTx, '添加USDT到稳定币列表');
+        await waitForTransaction(addTx);
         
         // 等待交易完全确认
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1172,7 +1174,7 @@ async function createDistribution() {
       );
 
       log.info(`收益分配交易已发送，等待确认...`);
-      const receipt = await waitForTransaction(createTx, '收益分配');
+      const receipt = await waitForTransaction(createTx);
       log.info(`收益分配交易已确认，区块号: ${receipt.blockNumber}`);
 
       // 从事件中获取分配ID
@@ -1193,7 +1195,7 @@ async function createDistribution() {
         state.distributionId,
         1 // 1 = Active
       );
-      await waitForTransaction(updateStatusTx, '更新分配状态');
+      await waitForTransaction(updateStatusTx);
       log.info(`分配状态已更新为Active`);
 
     } catch (txError) {
@@ -1309,7 +1311,7 @@ async function claimReward(distributionId) {
             merkleProof
         );
         
-        const receipt = await waitForTransaction(tx, '领取收益');
+        const receipt = await waitForTransaction(tx);
         
         // 获取领取后的余额
         const usdtContract = await getContract('SimpleERC20', USDT_ADDRESS, state.sellerWallet);
