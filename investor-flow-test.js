@@ -1253,7 +1253,81 @@ async function createDistribution() {
     return false;
   }
 }
+// 添加 MerkleTree 辅助类
+class MerkleTree {
+  constructor(elements) {
+    this.elements = elements;
+    this.leaves = elements.map(element => this.hashLeaf(element));
+    this.layers = this.buildLayers(this.leaves);
+  }
 
+  hashLeaf(element) {
+    // Match the contract's leaf format exactly using solidityPacked
+    return ethers.keccak256(
+      ethers.solidityPacked(
+        ['address', 'uint256'],
+        [element.address, element.totalEligible]
+      )
+    );
+  }
+
+  buildLayers(elements) {
+    const layers = [elements];
+    while (layers[layers.length - 1].length > 1) {
+      const layer = [];
+      for (let i = 0; i < layers[layers.length - 1].length; i += 2) {
+        const left = layers[layers.length - 1][i];
+        const right = i + 1 < layers[layers.length - 1].length ? layers[layers.length - 1][i + 1] : left;
+        layer.push(this.hashPair(left, right));
+      }
+      layers.push(layer);
+    }
+    return layers;
+  }
+
+  hashPair(left, right) {
+    // Sort the pair to ensure consistent ordering
+    const [first, second] = [left, right].sort();
+    return ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ['bytes32', 'bytes32'],
+        [first, second]
+      )
+    );
+  }
+
+  getRoot() {
+    return this.layers[this.layers.length - 1][0];
+  }
+
+  getProof(element) {
+    const leaf = this.hashLeaf(element);
+    const index = this.leaves.indexOf(leaf);
+    if (index === -1) throw new Error('Element not found in tree');
+
+    // 如果只有一个叶子节点，返回空数组
+    if (this.leaves.length === 1) {
+      return [];
+    }
+
+    const proof = [];
+    let currentIndex = index;
+
+    for (let i = 0; i < this.layers.length - 1; i++) {
+      const layer = this.layers[i];
+      const isRight = currentIndex % 2 === 1;
+      const siblingIndex = isRight ? currentIndex - 1 : currentIndex + 1;
+
+      if (siblingIndex < layer.length) {
+        proof.push(layer[siblingIndex]);
+      }
+
+      currentIndex = Math.floor(currentIndex / 2);
+    }
+
+    return proof;
+  }
+}
 // 修改领取收益函数
 async function claimReward(distributionId) {
     try {
