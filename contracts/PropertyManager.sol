@@ -15,7 +15,6 @@ import "./PropertyToken.sol";
 contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
     using RoleConstants for bytes32;
     
-    uint8 public version;
     address public usdtAddress;
     uint8 public usdtDecimals;
     RealEstateSystem public system;
@@ -32,17 +31,30 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
     }
     
     mapping(string => Property) private _properties;
-    string[] public allPropertyIds;
     mapping(string => address) public propertyTokens;
     mapping(string => address) public propertyOwners;
     mapping(address => string[]) public ownerProperties;
     
-    event PropertyRegistered(string indexed propertyId, string country, string metadataURI, uint40 registrationTime);
-    event PropertyStatusUpdated(string indexed propertyId, uint8 oldStatus, uint8 newStatus, uint40 updateTime);
-    event PropertyManagerInitialized(address indexed deployer, address indexed system, uint8 version);
+    event PropertyRegistered(string indexed propertyId, uint40 registrationTime);
+    event PropertyStatusUpdated(string indexed propertyId, uint8 oldStatus, uint8 newStatus);
     event TokenRegistered(string indexed propertyId, address indexed tokenAddress);
     event PropertyOwnershipTransferred(string indexed propertyId, address indexed oldOwner, address indexed newOwner);
-    event InitialPropertyTokenPurchased(string indexed propertyId, address indexed buyer, uint256 amount, uint40 purchaseTime);
+    event InitialPropertyTokenPurchased(string indexed propertyId, address indexed buyer, uint256 amount);
+    
+    modifier onlyAdmin() {
+        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+        _;
+    }
+    
+    modifier onlyManager() {
+        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
+        _;
+    }
+    
+    modifier onlyOperator() {
+        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
+        _;
+    }
     
     constructor() { _disableInitializers(); }
     
@@ -53,12 +65,9 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
         __ReentrancyGuard_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
-        version = 1;
-        emit PropertyManagerInitialized(msg.sender, _systemAddress, version);
     }
     
-    function registerProperty(string memory propertyId, string memory country, string memory metadataURI, uint256 initialSupply, string memory tokenName, string memory tokenSymbol) external whenNotPaused returns (address) {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
+    function registerProperty(string memory propertyId, string memory country, string memory metadataURI, uint256 initialSupply, string memory tokenName, string memory tokenSymbol) external whenNotPaused onlyOperator returns (address) {
         require(!_properties[propertyId].exists, "Property already exists");
         
         uint40 registrationTime = uint40(block.timestamp);
@@ -71,11 +80,10 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
             metadataURI: metadataURI
         });
         
-        allPropertyIds.push(propertyId);
         address tokenAddress = _createToken(propertyId, initialSupply, tokenName, tokenSymbol);
         propertyTokens[propertyId] = tokenAddress;
         
-        emit PropertyRegistered(propertyId, country, metadataURI, registrationTime);
+        emit PropertyRegistered(propertyId, registrationTime);
         emit TokenRegistered(propertyId, tokenAddress);
         
         return tokenAddress;
@@ -87,18 +95,16 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
         return address(token);
     }
     
-    function updatePropertyStatus(string memory propertyId, PropertyStatus status) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
+    function updatePropertyStatus(string memory propertyId, PropertyStatus status) external whenNotPaused onlyManager {
         require(_properties[propertyId].exists, "Property not exist");
         
         uint8 oldStatus = _properties[propertyId].status;
         _properties[propertyId].status = uint8(status);
         
-        emit PropertyStatusUpdated(propertyId, oldStatus, uint8(status), uint40(block.timestamp));
+        emit PropertyStatusUpdated(propertyId, oldStatus, uint8(status));
     }
     
-    function updatePropertyMetadata(string memory propertyId, string memory country, string memory metadataURI) external whenNotPaused {
-        system.validateRole(RoleConstants.OPERATOR_ROLE(), msg.sender, "Caller is not an operator");
+    function updatePropertyMetadata(string memory propertyId, string memory country, string memory metadataURI) external whenNotPaused onlyOperator {
         require(_properties[propertyId].exists, "Property not exist");
         _properties[propertyId].country = country;
         _properties[propertyId].metadataURI = metadataURI;
@@ -124,62 +130,19 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
         return _properties[propertyId].status == uint8(PropertyStatus.Approved);
     }
     
-    function getAllPropertyIds() external view returns (string[] memory) {
-        return allPropertyIds;
-    }
-    
-    function getPropertiesPaginated(uint256 offset, uint256 limit) external view returns (uint256 totalCount, string[] memory ids, uint8[] memory statuses, string[] memory countries, address[] memory tokenAddresses) {
-        totalCount = allPropertyIds.length;
-        
-        if (offset >= totalCount) {
-            return (totalCount, new string[](0), new uint8[](0), new string[](0), new address[](0));
-        }
-        
-        uint256 end = offset + limit;
-        if (end > totalCount) {
-            end = totalCount;
-        }
-        
-        uint256 resultCount = end - offset;
-        ids = new string[](resultCount);
-        statuses = new uint8[](resultCount);
-        countries = new string[](resultCount);
-        tokenAddresses = new address[](resultCount);
-        
-        for (uint256 i = 0; i < resultCount; i++) {
-            string memory propertyId = allPropertyIds[offset + i];
-            Property memory property = _properties[propertyId];
-            
-            ids[i] = property.propertyId;
-            statuses[i] = property.status;
-            countries[i] = property.country;
-            tokenAddresses[i] = propertyTokens[propertyId];
-        }
-        
-        return (totalCount, ids, statuses, countries, tokenAddresses);
-    }
-    
-    function pause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+    function pause() external onlyAdmin {
         _pause();
     }
     
-    function unpause() external {
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+    function unpause() external onlyAdmin {
         _unpause();
     }
     
-    function _authorizeUpgrade(address newImplementation) internal override {
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+    function _authorizeUpgrade(address) internal override onlyAdmin {
         require(!system.emergencyMode(), "Emergency mode active");
     }
     
-    function getVersion() external view returns (uint8) {
-        return version;
-    }
-    
-    function transferPropertyOwnership(string memory propertyId, address newOwner) external whenNotPaused {
-        system.validateRole(RoleConstants.MANAGER_ROLE(), msg.sender, "Caller is not a manager");
+    function transferPropertyOwnership(string memory propertyId, address newOwner) external whenNotPaused onlyManager {
         require(_properties[propertyId].exists, "Property not exist");
         require(newOwner != address(0), "Invalid new owner address");
         
@@ -201,16 +164,11 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
         emit PropertyOwnershipTransferred(propertyId, oldOwner, newOwner);
     }
     
-    function getPropertiesByOwner(address owner) external view returns (string[] memory) {
-        return ownerProperties[owner];
-    }
-    
     function isPropertyOwner(string memory propertyId, address owner) external view returns (bool) {
         return propertyOwners[propertyId] == owner;
     }
 
-    function setSystem(address _systemAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+    function setSystem(address _systemAddress) external onlyAdmin {
         require(_systemAddress != address(0), "System address cannot be zero");
         system = RealEstateSystem(_systemAddress);
     }
@@ -243,25 +201,16 @@ contract PropertyManager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgra
         bool success = token.transfer(msg.sender, amount);
         require(success, "Token transfer failed");
         
-        emit InitialPropertyTokenPurchased(propertyId, msg.sender, amount, uint40(block.timestamp));
+        emit InitialPropertyTokenPurchased(propertyId, msg.sender, amount);
         
         return true;
     }
     
-    function setUsdtAddress(address _usdtAddress) external {
-        system.validateRole(RoleConstants.ADMIN_ROLE(), msg.sender, "Caller is not an admin");
+    function setUsdtAddress(address _usdtAddress) external onlyAdmin {
         require(_usdtAddress != address(0), "USDT address cannot be zero");
         usdtAddress = _usdtAddress;
         IERC20MetadataUpgradeable usdt = IERC20MetadataUpgradeable(_usdtAddress);
         usdtDecimals = uint8(usdt.decimals());
-    }
-
-    function getUsdtAddress() external view returns (address) {
-        return usdtAddress;
-    }
-
-    function getUsdtDecimals() external view returns (uint8) {
-        return usdtDecimals;
     }
 
     function getPropertyTokenAddress(string memory propertyId) external view returns (address) {

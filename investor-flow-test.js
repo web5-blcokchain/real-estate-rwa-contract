@@ -18,7 +18,7 @@ require('dotenv').config();
  */
 
 // 配置和常量
-const RPC_URL = process.env.TESTNET_RPC_URL1 || 'http://localhost:8545';
+const RPC_URL = process.env.TESTNET_RPC_URL || 'http://localhost:8545';
 console.log('\n=== 网络配置信息 ===');
 console.log(`RPC URL: ${RPC_URL}`);
 console.log('===================\n');

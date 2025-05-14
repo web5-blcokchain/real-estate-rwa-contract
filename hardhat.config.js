@@ -80,7 +80,6 @@ const getNetworkConfig = (network) => {
       }
       return {
         ...baseConfig,
-        allowUnlimitedContractSize: true,
         url: process.env.TESTNET_RPC_URL,
         chainId: parseInt(process.env.TESTNET_CHAIN_ID || '11155111'),
         loggingEnabled: true,
